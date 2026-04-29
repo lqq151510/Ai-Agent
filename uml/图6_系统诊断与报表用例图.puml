@@ -1,0 +1,22 @@
+@startuml
+left to right direction
+actor "开发者/运维" as Ops
+
+rectangle "系统诊断与报表子系统" {
+  usecase "就绪检查\n/api/system/health/ready" as UC1
+  usecase "获取模型列表\n/api/system/models" as UC2
+  usecase "工具统计\n/api/system/tool-stats" as UC3
+  usecase "导出工具统计\njson/markdown" as UC4
+  usecase "发布报告\n/api/system/release-report" as UC5
+  usecase "导出发布报告\njson/markdown" as UC6
+}
+
+Ops --> UC1
+Ops --> UC2
+Ops --> UC3
+Ops --> UC4
+Ops --> UC5
+Ops --> UC6
+UC4 ..> UC3 : <<extend>>
+UC6 ..> UC5 : <<extend>>
+@enduml

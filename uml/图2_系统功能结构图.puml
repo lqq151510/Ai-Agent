@@ -1,0 +1,32 @@
+@startuml
+left to right direction
+rectangle "AI Agent 多端协同系统" {
+  rectangle "认证与授权\nAuth" as Auth
+  rectangle "会话管理\nSessions" as Sessions
+  rectangle "Agent 对话\nSync/Stream" as Agent
+  rectangle "模型路由\nOpenAI/Ollama" as Model
+  rectangle "工具审计与统计\nTool Stats" as Stats
+  rectangle "系统健康与发布报告\nReadiness/Release" as System
+  rectangle "Web 前端" as Web
+  rectangle "CLI 客户端" as Cli
+  database "PostgreSQL" as Pg
+  cloud "Redis" as Redis
+}
+
+Web --> Auth
+Web --> Sessions
+Web --> Agent
+Web --> Stats
+Cli --> Auth
+Cli --> Sessions
+Cli --> Agent
+Cli --> Stats
+Agent --> Model
+Sessions --> Pg
+Agent --> Pg
+Sessions --> Redis
+Auth --> Redis
+Stats --> Pg
+System --> Pg
+System --> Redis
+@enduml

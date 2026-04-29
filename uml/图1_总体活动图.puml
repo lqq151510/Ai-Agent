@@ -1,0 +1,19 @@
+@startuml
+start
+:用户在 Web/CLI 注册或登录;
+if (登录成功?) then (是)
+  :签发 JWT;
+  :创建/选择会话;
+  :发送 chat 或 stream-chat 请求;
+  :模型路由(OpenAI/Ollama);
+  :返回回答(流式或一次性);
+  :保存消息到 PostgreSQL;
+  :更新 Redis 会话缓存;
+  :记录工具审计与统计;
+  :用户查看/导出报告;
+  stop
+else (否)
+  :返回认证失败或限流提示;
+  stop
+endif
+@enduml

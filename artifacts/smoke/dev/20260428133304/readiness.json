@@ -1,0 +1,1 @@
+{"ready":true,"checks":[{"name":"database","ok":true,"detail":"ok"},{"name":"redis","ok":true,"detail":"ok"},{"name":"model","ok":true,"detail":"OpenAI-compatible endpoint reachable"}],"timestamp":"2026-04-28T05:33:04.490801Z"}

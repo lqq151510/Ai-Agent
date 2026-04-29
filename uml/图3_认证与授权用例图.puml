@@ -1,0 +1,20 @@
+@startuml
+left to right direction
+actor "终端用户" as User
+actor "系统管理员" as Admin
+
+rectangle "认证与授权子系统" {
+  usecase "用户注册" as UC1
+  usecase "用户登录" as UC2
+  usecase "刷新令牌" as UC3
+  usecase "获取当前用户信息" as UC4
+  usecase "登录限流控制" as UC5
+}
+
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+Admin --> UC5
+UC2 ..> UC5 : <<include>>
+@enduml

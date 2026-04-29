@@ -1,0 +1,59 @@
+package com.agent.mvp.infra;
+
+import com.agent.mvp.session.dto.MessageResponse;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Service
+public class RedisSessionCacheService {
+
+    private static final Duration CACHE_TTL = Duration.ofMinutes(5);
+
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+
+    public RedisSessionCacheService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
+    }
+
+    public Optional<List<MessageResponse>> getCachedMessages(UUID sessionId) {
+        String raw = redisTemplate.opsForValue().get(cacheKey(sessionId));
+        if (raw == null || raw.isBlank()) {
+            return Optional.empty();
+        }
+
+        try {
+            JavaType listType = objectMapper.getTypeFactory().constructCollectionType(List.class, MessageResponse.class);
+            return Optional.of(objectMapper.readValue(raw, listType));
+        } catch (JsonProcessingException e) {
+            redisTemplate.delete(cacheKey(sessionId));
+            return Optional.empty();
+        }
+    }
+
+    public void cacheMessages(UUID sessionId, List<MessageResponse> messages) {
+        try {
+            String payload = objectMapper.writeValueAsString(messages);
+            redisTemplate.opsForValue().set(cacheKey(sessionId), payload, CACHE_TTL);
+        } catch (JsonProcessingException ignored) {
+            // Best effort cache
+        }
+    }
+
+    public void evictMessages(UUID sessionId) {
+        redisTemplate.delete(cacheKey(sessionId));
+    }
+
+    private String cacheKey(UUID sessionId) {
+        return "session:messages:" + sessionId;
+    }
+}

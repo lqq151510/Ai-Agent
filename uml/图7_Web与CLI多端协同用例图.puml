@@ -1,0 +1,28 @@
+@startuml
+left to right direction
+actor "Web 用户" as WebUser
+actor "CLI 用户" as CliUser
+
+rectangle "多端协同子系统" {
+  usecase "登录认证" as UC1
+  usecase "创建会话" as UC2
+  usecase "发起对话" as UC3
+  usecase "流式对话" as UC4
+  usecase "查看统计" as UC5
+  usecase "导出报告" as UC6
+}
+
+WebUser --> UC1
+WebUser --> UC2
+WebUser --> UC3
+WebUser --> UC4
+WebUser --> UC5
+WebUser --> UC6
+
+CliUser --> UC1
+CliUser --> UC2
+CliUser --> UC3
+CliUser --> UC4
+CliUser --> UC5
+CliUser --> UC6
+@enduml

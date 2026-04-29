@@ -1,0 +1,69 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parindent}{0pt}
+\begin{document}
+\section*{AI Agent Beta Release Report (dev)}
+\begin{tabular}{p{0.28\linewidth} p{0.64\linewidth}}
+Generated At & 2026-04-28T05:33:18.822515Z \\
+Stats Window & 24h \\
+Session Scope & b9fe1f6b-1bcc-48f8-ac3c-e570b1e64e00 \\
+Ready & Yes \\
+Default Model & OPENAI / qwen/qwen3.5-9b \\
+Tool Success Rate & 100.0\% \\
+Tool Avg / P95 & 142ms / 142ms \\
+\end{tabular}
+
+\section*{Readiness Checks}
+\begin{longtable}{p{0.22\linewidth} p{0.08\linewidth} p{0.60\linewidth}}
+\toprule
+Check & OK & Detail \\
+\midrule
+\endhead
+database & Yes & ok \\
+redis & Yes & ok \\
+model & Yes & OpenAI-compatible endpoint reachable \\
+\bottomrule
+\end{longtable}
+
+\section*{Model Inventory}
+\begin{longtable}{p{0.18\linewidth} p{0.56\linewidth} p{0.14\linewidth}}
+\toprule
+Provider & Model & Default \\
+\midrule
+\endhead
+OPENAI & qwen/qwen3.5-9b & Yes \\
+OPENAI & qwen3-embedding-8b-dwq & No \\
+OPENAI & qwen/qwen3.6-35b-a3b & No \\
+OPENAI & text-embedding-nomic-embed-text-v1.5 & No \\
+\bottomrule
+\end{longtable}
+
+\section*{Tool Duration Buckets}
+\begin{longtable}{p{0.50\linewidth} p{0.20\linewidth}}
+\toprule
+Bucket & Count \\
+\midrule
+\endhead
+<=500ms & 1 \\
+500ms-1s & 0 \\
+1s-3s & 0 \\
+>3s & 0 \\
+\bottomrule
+\end{longtable}
+
+\section*{Top Tools}
+\begin{longtable}{p{0.28\linewidth} p{0.10\linewidth} p{0.14\linewidth} p{0.12\linewidth} p{0.12\linewidth}}
+\toprule
+Tool & Runs & Success Rate & Avg Ms & P95 Ms \\
+\midrule
+\endhead
+searchCode & 1 & 100.0\% & 142 & 142 \\
+\bottomrule
+\end{longtable}
+\end{document}

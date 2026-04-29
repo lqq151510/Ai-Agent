@@ -1,0 +1,23 @@
+event:meta
+data:{"sessionId":"8cc714c9-0613-4460-93f7-69cc5fb3d4c1","provider":"OPENAI","model":"qwen/qwen3.5-9b","toolTraces":[{"toolName":"searchCode","argsJson":"{\"query\":\"请回复 smoke ok\",\"glob\":null,\"maxResults\":40}","status":"ERROR","durationMs":14,"output":"rg: /app/workspace: IO error for operation on /app/workspace: No such file or directory (os error 2)"}]}
+
+event:heartbeat
+data:{"ts":"2026-04-28T05:32:07.362213Z"}
+
+event:chunk
+data:
+data:
+data:
+
+event:chunk
+data:sm
+
+event:chunk
+data:oke
+
+event:chunk
+data: ok
+
+event:done
+data:{"sessionId":"8cc714c9-0613-4460-93f7-69cc5fb3d4c1","provider":"OPENAI","model":"qwen/qwen3.5-9b","reply":"\n\nsmoke ok","latencyMs":11790,"toolTraces":[{"toolName":"searchCode","argsJson":"{\"query\":\"请回复 smoke ok\",\"glob\":null,\"maxResults\":40}","status":"ERROR","durationMs":14,"output":"rg: /app/workspace: IO error for operation on /app/workspace: No such file or directory (os error 2)"}]}
+

@@ -1,0 +1,92 @@
+package com.agent.mvp.auth;
+
+import com.agent.mvp.auth.dto.LoginRequest;
+import com.agent.mvp.auth.dto.RefreshRequest;
+import com.agent.mvp.auth.dto.RegisterRequest;
+import com.agent.mvp.auth.dto.TokenResponse;
+import com.agent.mvp.auth.dto.UserProfileResponse;
+import com.agent.mvp.auth.security.AuthenticatedUser;
+import com.agent.mvp.auth.service.AuthService;
+import com.agent.mvp.common.context.RequestContext;
+import com.agent.mvp.common.exception.TooManyRequestsException;
+import com.agent.mvp.common.exception.UnauthorizedException;
+import com.agent.mvp.config.AppProperties;
+import com.agent.mvp.infra.RedisRateLimiterService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import org.slf4j.MDC;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Duration;
+
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController {
+
+    private final AuthService authService;
+    private final RedisRateLimiterService rateLimiterService;
+    private final AppProperties appProperties;
+
+    public AuthController(AuthService authService,
+                          RedisRateLimiterService rateLimiterService,
+                          AppProperties appProperties) {
+        this.authService = authService;
+        this.rateLimiterService = rateLimiterService;
+        this.appProperties = appProperties;
+    }
+
+    @PostMapping("/register")
+    public UserProfileResponse register(@Valid @RequestBody RegisterRequest request) {
+        return authService.register(request.email(), request.password());
+    }
+
+    @PostMapping("/login")
+    public TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        String ip = resolveClientIp(httpRequest);
+        long limit = Math.max(1, appProperties.getRateLimit().getLoginPerMinute());
+        boolean allowedByIp = rateLimiterService.allow("ratelimit:login:ip:" + ip, limit, Duration.ofMinutes(1));
+        boolean allowedByEmail = rateLimiterService.allow(
+                "ratelimit:login:email:" + request.email().toLowerCase().trim(),
+                limit,
+                Duration.ofMinutes(1)
+        );
+        if (!allowedByIp || !allowedByEmail) {
+            throw new TooManyRequestsException("Too many login attempts");
+        }
+
+        return authService.login(request);
+    }
+
+    @PostMapping("/refresh")
+    public TokenResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return authService.refresh(request.refreshToken());
+    }
+
+    @GetMapping("/me")
+    public UserProfileResponse me(Authentication authentication) {
+        AuthenticatedUser user = requireAuthenticatedUser(authentication);
+        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+            return authService.me(user);
+        }
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+
+    private AuthenticatedUser requireAuthenticatedUser(Authentication authentication) {
+        if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
+            throw new UnauthorizedException("Authentication required");
+        }
+        return principal;
+    }
+}

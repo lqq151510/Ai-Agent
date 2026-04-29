@@ -1,0 +1,18 @@
+@startuml
+left to right direction
+actor "已登录用户" as User
+
+rectangle "会话管理子系统" {
+  usecase "创建会话" as UC1
+  usecase "查询会话列表" as UC2
+  usecase "查询会话消息" as UC3
+  usecase "导出会话\n(json/markdown)" as UC4
+  usecase "模型参数解析与补全" as UC5
+}
+
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+UC1 ..> UC5 : <<include>>
+@enduml

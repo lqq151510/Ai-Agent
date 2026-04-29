@@ -1,0 +1,8 @@
+env=dev
+base_url=http://127.0.0.1:8080
+model_provider=OPENAI
+model=qwen/qwen3.5-9b
+session_id=b9fe1f6b-1bcc-48f8-ac3c-e570b1e64e00
+report_window_hours=24
+render_pdf=false
+generated_at=2026-04-28T05:33:18Z

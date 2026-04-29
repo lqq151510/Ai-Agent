@@ -1,0 +1,109 @@
+name: ai-agent-beta
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-agent-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_agent}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_agent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-agent-redis
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "${REDIS_PASSWORD:-}" ]; then
+          exec redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}"
+        fi
+        exec redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "if [ -n \"${REDIS_PASSWORD:-}\" ]; then redis-cli -a \"${REDIS_PASSWORD}\" ping; else redis-cli ping; fi | grep -q PONG"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ${BACKEND_IMAGE_REPO:-ai-agent-backend}:${APP_IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-agent-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8080
+      JWT_SECRET: ${JWT_SECRET}
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DATABASE: ${POSTGRES_DB:-ai_agent}
+      PG_USERNAME: ${POSTGRES_USER:-postgres}
+      PG_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_USERNAME: ${REDIS_USERNAME:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-OPENAI}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:1234/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-qwen/qwen3.5-9b}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.6:latest}
+      WORKSPACE_ROOT: ${WORKSPACE_ROOT:-/app/workspace}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8088,http://127.0.0.1:8088}
+      MODEL_CONNECT_TIMEOUT_MS: ${MODEL_CONNECT_TIMEOUT_MS:-5000}
+      MODEL_READ_TIMEOUT_MS: ${MODEL_READ_TIMEOUT_MS:-45000}
+      MODEL_TOTAL_TIMEOUT_MS: ${MODEL_TOTAL_TIMEOUT_MS:-300000}
+      MODEL_IDEMPOTENT_RETRIES: ${MODEL_IDEMPOTENT_RETRIES:-1}
+      CHAT_RATE_LIMIT_PER_MIN: ${CHAT_RATE_LIMIT_PER_MIN:-60}
+      CHAT_PREMIUM_RATE_LIMIT_PER_MIN: ${CHAT_PREMIUM_RATE_LIMIT_PER_MIN:-120}
+      LOGIN_RATE_LIMIT_PER_MIN: ${LOGIN_RATE_LIMIT_PER_MIN:-20}
+      STARTUP_VALIDATION_FAIL_FAST: ${STARTUP_VALIDATION_FAIL_FAST:-false}
+      MODEL_PROBE_TIMEOUT_MS: ${MODEL_PROBE_TIMEOUT_MS:-3000}
+      MODEL_PROBE_RETRIES: ${MODEL_PROBE_RETRIES:-1}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - .:/app/workspace
+    restart: unless-stopped
+
+  web:
+    image: ${WEB_IMAGE_REPO:-ai-agent-web}:${APP_IMAGE_TAG:-latest}
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-}
+    container_name: ai-agent-web
+    depends_on:
+      - backend
+    ports:
+      - "${WEB_PORT:-8088}:80"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
