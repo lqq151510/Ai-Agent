@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "workspace": {
+    "name": "AI-agent",
+    "createdAt": 1777523709565,
+    "preset": "starter"
+  },
+  "authorizedRoots": [
+    "/Users/liuyongze/Documents/AI-agent"
+  ]
+}

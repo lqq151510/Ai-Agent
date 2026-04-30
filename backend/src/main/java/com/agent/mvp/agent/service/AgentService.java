@@ -14,6 +14,8 @@ import com.agent.mvp.session.entity.ConversationSession;
 import com.agent.mvp.session.service.SessionService;
 import com.agent.mvp.tooling.service.ToolAuditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,8 +26,9 @@ import java.util.function.Consumer;
 
 @Service
 public class AgentService {
+    private static final Logger log = LoggerFactory.getLogger(AgentService.class);
 
-    private static final int CONTEXT_LIMIT = 20;
+    private static final int MAX_CONTEXT_TOKENS = 6_000;
 
     private final SessionService sessionService;
     private final ModelRoutingService modelRoutingService;
@@ -57,7 +60,7 @@ public class AgentService {
 
         ToolRunBundle toolBundle = toolOrchestrator.runToolsForMessage(request.message());
 
-        List<ModelChatMessage> messages = buildMessages(sessionService.listRecentMessages(userId, session.getId(), CONTEXT_LIMIT), toolBundle.promptContext());
+        List<ModelChatMessage> messages = buildMessages(sessionService.listRecentMessages(userId, session.getId(), 200), toolBundle);
 
         ModelChatResponse modelResponse = modelGateway.chat(
                 resolved.provider(),
@@ -67,8 +70,8 @@ public class AgentService {
         String toolTraceJson = "[]";
         try {
             toolTraceJson = objectMapper.writeValueAsString(toolBundle.traces());
-        } catch (Exception ignored) {
-            // best effort
+        } catch (Exception ex) {
+            log.warn("Failed to serialize tool traces for session {}", session.getId(), ex);
         }
 
         sessionService.saveMessage(
@@ -110,7 +113,7 @@ public class AgentService {
         ToolRunBundle toolBundle = toolOrchestrator.runToolsForMessage(request.message());
         metaConsumer.accept(new ChatStreamMeta(session.getId(), resolved.provider(), resolved.model(), toolBundle.traces()));
 
-        List<ModelChatMessage> messages = buildMessages(sessionService.listRecentMessages(userId, session.getId(), CONTEXT_LIMIT), toolBundle.promptContext());
+        List<ModelChatMessage> messages = buildMessages(sessionService.listRecentMessages(userId, session.getId(), 200), toolBundle);
 
         ModelChatResponse modelResponse = modelGateway.stream(
                 resolved.provider(),
@@ -121,8 +124,8 @@ public class AgentService {
         String toolTraceJson = "[]";
         try {
             toolTraceJson = objectMapper.writeValueAsString(toolBundle.traces());
-        } catch (Exception ignored) {
-            // best effort
+        } catch (Exception ex) {
+            log.warn("Failed to serialize tool traces for stream session {}", session.getId(), ex);
         }
 
         sessionService.saveMessage(
@@ -152,27 +155,52 @@ public class AgentService {
         );
     }
 
-    private List<ModelChatMessage> buildMessages(List<MessageResponse> history, String toolContext) {
+    private List<ModelChatMessage> buildMessages(List<MessageResponse> history, ToolRunBundle toolBundle) {
         List<ModelChatMessage> messages = new ArrayList<>();
-        messages.add(new ModelChatMessage(
+        messages.add(ModelChatMessage.of(
                 "system",
                 "You are a Java AI coding assistant. Use provided tool context as factual repo grounding. " +
                         "If tool context is insufficient, say what extra info is needed."
         ));
 
-        List<MessageResponse> sliced = history.size() <= CONTEXT_LIMIT
-                ? history
-                : history.subList(history.size() - CONTEXT_LIMIT, history.size());
-
-        for (int i = 0; i < sliced.size(); i++) {
-            MessageResponse msg = sliced.get(i);
-            String content = msg.content();
-            if (i == sliced.size() - 1 && "user".equals(msg.role()) && toolContext != null && !toolContext.isBlank()) {
-                content = content + "\n\nTool context:\n" + toolContext;
-            }
-            messages.add(new ModelChatMessage(msg.role(), content));
+        List<ModelChatMessage> historyMessages = sliceByTokenBudget(history, MAX_CONTEXT_TOKENS);
+        messages.addAll(historyMessages);
+        for (var trace : toolBundle.traces()) {
+            messages.add(ModelChatMessage.tool(
+                    trace.toolName(),
+                    trace.output()
+            ));
         }
 
         return messages;
+    }
+
+    private List<ModelChatMessage> sliceByTokenBudget(List<MessageResponse> history, int maxTokens) {
+        List<ModelChatMessage> reversed = new ArrayList<>();
+        int budget = Math.max(500, maxTokens);
+        int used = 0;
+        for (int i = history.size() - 1; i >= 0; i--) {
+            MessageResponse msg = history.get(i);
+            String content = msg.content() == null ? "" : msg.content();
+            int messageTokens = estimateTokens(msg.role()) + estimateTokens(content) + 8;
+            if (used + messageTokens > budget && !reversed.isEmpty()) {
+                break;
+            }
+            used += messageTokens;
+            reversed.add(ModelChatMessage.of(msg.role(), content));
+        }
+        List<ModelChatMessage> sliced = new ArrayList<>(reversed.size());
+        for (int i = reversed.size() - 1; i >= 0; i--) {
+            sliced.add(reversed.get(i));
+        }
+        return sliced;
+    }
+
+    private int estimateTokens(String text) {
+        if (text == null || text.isBlank()) {
+            return 0;
+        }
+        // Lightweight approximation for mixed zh/en code content.
+        return Math.max(1, (text.length() + 3) / 4);
     }
 }

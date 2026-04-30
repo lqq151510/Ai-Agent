@@ -81,6 +81,8 @@ services:
       CHAT_RATE_LIMIT_PER_MIN: ${CHAT_RATE_LIMIT_PER_MIN:-60}
       CHAT_PREMIUM_RATE_LIMIT_PER_MIN: ${CHAT_PREMIUM_RATE_LIMIT_PER_MIN:-120}
       LOGIN_RATE_LIMIT_PER_MIN: ${LOGIN_RATE_LIMIT_PER_MIN:-20}
+      REGISTER_RATE_LIMIT_PER_MIN: ${REGISTER_RATE_LIMIT_PER_MIN:-10}
+      REFRESH_RATE_LIMIT_PER_MIN: ${REFRESH_RATE_LIMIT_PER_MIN:-60}
       STARTUP_VALIDATION_FAIL_FAST: ${STARTUP_VALIDATION_FAIL_FAST:-false}
       MODEL_PROBE_TIMEOUT_MS: ${MODEL_PROBE_TIMEOUT_MS:-3000}
       MODEL_PROBE_RETRIES: ${MODEL_PROBE_RETRIES:-1}
@@ -88,6 +90,12 @@ services:
       - "${BACKEND_PORT:-8080}:8080"
     volumes:
       - .:/app/workspace
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/api/system/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
   web:
@@ -99,9 +107,16 @@ services:
         VITE_API_BASE: ${VITE_API_BASE:-}
     container_name: ai-agent-web
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "${WEB_PORT:-8088}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     restart: unless-stopped
 
 volumes:

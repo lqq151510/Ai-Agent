@@ -56,6 +56,8 @@ app:
     idempotent-retries: ${MODEL_IDEMPOTENT_RETRIES:1}
   rate-limit:
     login-per-minute: ${LOGIN_RATE_LIMIT_PER_MIN:20}
+    register-per-minute: ${REGISTER_RATE_LIMIT_PER_MIN:10}
+    refresh-per-minute: ${REFRESH_RATE_LIMIT_PER_MIN:60}
     chat-per-minute: ${CHAT_RATE_LIMIT_PER_MIN:60}
     chat-premium-per-minute: ${CHAT_PREMIUM_RATE_LIMIT_PER_MIN:120}
     premium-email-suffixes: ${CHAT_PREMIUM_EMAIL_SUFFIXES:}

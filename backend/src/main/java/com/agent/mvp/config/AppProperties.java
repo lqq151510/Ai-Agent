@@ -165,6 +165,8 @@ public class AppProperties {
 
     public static class RateLimit {
         private long loginPerMinute = 20;
+        private long registerPerMinute = 10;
+        private long refreshPerMinute = 60;
         private long chatPerMinute = 60;
         private long chatPremiumPerMinute = 120;
         private List<String> premiumEmailSuffixes = new ArrayList<>();
@@ -191,6 +193,22 @@ public class AppProperties {
 
         public void setChatPremiumPerMinute(long chatPremiumPerMinute) {
             this.chatPremiumPerMinute = chatPremiumPerMinute;
+        }
+
+        public long getRegisterPerMinute() {
+            return registerPerMinute;
+        }
+
+        public void setRegisterPerMinute(long registerPerMinute) {
+            this.registerPerMinute = registerPerMinute;
+        }
+
+        public long getRefreshPerMinute() {
+            return refreshPerMinute;
+        }
+
+        public void setRefreshPerMinute(long refreshPerMinute) {
+            this.refreshPerMinute = refreshPerMinute;
         }
 
         public List<String> getPremiumEmailSuffixes() {

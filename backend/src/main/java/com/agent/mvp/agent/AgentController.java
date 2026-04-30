@@ -12,6 +12,8 @@ import com.agent.mvp.infra.RedisRateLimiterService;
 import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
 import org.slf4j.MDC;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.MediaType;
@@ -39,6 +41,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RestController
 @RequestMapping("/api/agent")
 public class AgentController {
+    private static final Logger log = LoggerFactory.getLogger(AgentController.class);
 
     private static final long STREAM_TIMEOUT_MS = 300_000L;
     private static final Duration CHAT_RATE_LIMIT_WINDOW = Duration.ofMinutes(1);
@@ -106,6 +109,8 @@ public class AgentController {
     public void shutdownStreamExecutor() {
         streamExecutor.shutdown();
         heartbeatExecutor.shutdown();
+        awaitTermination(streamExecutor, "streamExecutor");
+        awaitTermination(heartbeatExecutor, "heartbeatExecutor");
     }
 
     private SseEmitter openStream(ChatRequest request, Authentication authentication) {
@@ -207,8 +212,19 @@ public class AgentController {
         }
         try {
             sendEvent(emitter, "heartbeat", Map.of("ts", Instant.now().toString()));
-        } catch (Exception ignored) {
-            // best effort heartbeat
+        } catch (Exception ex) {
+            log.warn("Failed to send heartbeat event", ex);
+        }
+    }
+
+    private void awaitTermination(java.util.concurrent.ExecutorService executor, String executorName) {
+        try {
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                log.warn("{} did not terminate within timeout", executorName);
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            log.warn("{} termination interrupted", executorName, ex);
         }
     }
 

@@ -23,6 +23,7 @@ import reactor.netty.http.client.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -161,7 +162,13 @@ public class OpenAiModelProvider implements ModelProvider {
     }
 
     private Map<String, Object> toMap(ModelChatMessage message) {
-        return Map.of("role", message.role(), "content", message.content());
+        Map<String, Object> map = new HashMap<>();
+        map.put("role", message.role());
+        map.put("content", message.content());
+        if (message.name() != null && !message.name().isBlank()) {
+            map.put("name", message.name());
+        }
+        return map;
     }
 
     private String truncate(String text) {

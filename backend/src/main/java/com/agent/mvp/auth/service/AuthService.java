@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
+    private static final int MIN_PASSWORD_LENGTH = 8;
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -34,6 +35,7 @@ public class AuthService {
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new BadRequestException("Email already exists");
         }
+        validatePasswordStrength(password);
 
         User user = new User();
         user.setEmail(normalizedEmail);
@@ -41,6 +43,30 @@ public class AuthService {
         User saved = userRepository.save(user);
 
         return new UserProfileResponse(saved.getId(), saved.getEmail(), saved.getCreatedAt());
+    }
+
+    private void validatePasswordStrength(String password) {
+        if (password == null || password.length() < MIN_PASSWORD_LENGTH) {
+            throw new BadRequestException("Password must be at least 8 characters long");
+        }
+        boolean hasUpper = false;
+        boolean hasLower = false;
+        boolean hasDigit = false;
+        boolean hasSpecial = false;
+        for (char c : password.toCharArray()) {
+            if (Character.isUpperCase(c)) {
+                hasUpper = true;
+            } else if (Character.isLowerCase(c)) {
+                hasLower = true;
+            } else if (Character.isDigit(c)) {
+                hasDigit = true;
+            } else if (!Character.isWhitespace(c)) {
+                hasSpecial = true;
+            }
+        }
+        if (!(hasUpper && hasLower && hasDigit && hasSpecial)) {
+            throw new BadRequestException("Password must include upper/lowercase letters, digits and special characters");
+        }
     }
 
     public TokenResponse login(LoginRequest request) {

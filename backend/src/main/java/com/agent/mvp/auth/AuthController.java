@@ -41,7 +41,18 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public UserProfileResponse register(@Valid @RequestBody RegisterRequest request) {
+    public UserProfileResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        String ip = resolveClientIp(httpRequest);
+        long limit = Math.max(1, appProperties.getRateLimit().getRegisterPerMinute());
+        boolean allowedByIp = rateLimiterService.allow("ratelimit:register:ip:" + ip, limit, Duration.ofMinutes(1));
+        boolean allowedByEmail = rateLimiterService.allow(
+                "ratelimit:register:email:" + request.email().toLowerCase().trim(),
+                limit,
+                Duration.ofMinutes(1)
+        );
+        if (!allowedByIp || !allowedByEmail) {
+            throw new TooManyRequestsException("Too many register attempts");
+        }
         return authService.register(request.email(), request.password());
     }
 
@@ -63,7 +74,13 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public TokenResponse refresh(@Valid @RequestBody RefreshRequest request) {
+    public TokenResponse refresh(@Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest) {
+        String ip = resolveClientIp(httpRequest);
+        long limit = Math.max(1, appProperties.getRateLimit().getRefreshPerMinute());
+        boolean allowedByIp = rateLimiterService.allow("ratelimit:refresh:ip:" + ip, limit, Duration.ofMinutes(1));
+        if (!allowedByIp) {
+            throw new TooManyRequestsException("Too many refresh attempts");
+        }
         return authService.refresh(request.refreshToken());
     }
 
