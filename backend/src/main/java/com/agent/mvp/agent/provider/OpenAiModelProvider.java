@@ -4,6 +4,7 @@ import com.agent.mvp.agent.ModelProviderType;
 import com.agent.mvp.agent.dto.ModelChatMessage;
 import com.agent.mvp.agent.dto.ModelChatRequest;
 import com.agent.mvp.agent.dto.ModelChatResponse;
+import com.agent.mvp.agent.tooling.ToolCall;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.config.AppProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -27,6 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 @Component
 public class OpenAiModelProvider implements ModelProvider {
@@ -73,7 +75,9 @@ public class OpenAiModelProvider implements ModelProvider {
         Map<String, Object> body = Map.of(
                 "model", request.model(),
                 "messages", request.messages().stream().map(this::toMap).toList(),
-                "temperature", 0.2
+                "temperature", 0.2,
+                "tools", toToolsPayload(request),
+                "tool_choice", request.toolChoice() == null ? "auto" : request.toolChoice()
         );
 
         Map<String, Object> response;
@@ -107,8 +111,10 @@ public class OpenAiModelProvider implements ModelProvider {
         Map<String, Object> choice = choices.get(0);
         Map<String, Object> message = (Map<String, Object>) choice.get("message");
         String content = message == null ? "" : String.valueOf(message.getOrDefault("content", ""));
+        List<ToolCall> toolCalls = extractToolCalls(message);
+        String finishReason = String.valueOf(choice.getOrDefault("finish_reason", ""));
 
-        return new ModelChatResponse(content, Duration.between(start, Instant.now()).toMillis());
+        return new ModelChatResponse(content, Duration.between(start, Instant.now()).toMillis(), toolCalls, finishReason);
     }
 
     @Override
@@ -125,7 +131,9 @@ public class OpenAiModelProvider implements ModelProvider {
                 "model", request.model(),
                 "messages", request.messages().stream().map(this::toMap).toList(),
                 "temperature", 0.2,
-                "stream", true
+                "stream", true,
+                "tools", toToolsPayload(request),
+                "tool_choice", request.toolChoice() == null ? "auto" : request.toolChoice()
         );
 
         try {
@@ -158,17 +166,49 @@ public class OpenAiModelProvider implements ModelProvider {
                     + truncate(ex.getResponseBodyAsString()));
         }
 
-        return new ModelChatResponse(content.toString(), Duration.between(start, Instant.now()).toMillis());
+        return new ModelChatResponse(content.toString(), Duration.between(start, Instant.now()).toMillis(), List.of(), "stop");
     }
 
     private Map<String, Object> toMap(ModelChatMessage message) {
         Map<String, Object> map = new HashMap<>();
         map.put("role", message.role());
-        map.put("content", message.content());
+        map.put("content", message.content() == null ? "" : message.content());
         if (message.name() != null && !message.name().isBlank()) {
             map.put("name", message.name());
         }
+        if (message.toolCallId() != null && !message.toolCallId().isBlank()) {
+            map.put("tool_call_id", message.toolCallId());
+        }
+        if (message.toolCalls() != null && !message.toolCalls().isEmpty()) {
+            List<Map<String, Object>> toolCalls = message.toolCalls().stream()
+                    .map(call -> Map.of(
+                            "id", call.id(),
+                            "type", "function",
+                            "function", Map.of(
+                                    "name", call.name(),
+                                    "arguments", call.argumentsJson() == null ? "{}" : call.argumentsJson()
+                            )
+                    ))
+                    .collect(Collectors.toList());
+            map.put("tool_calls", toolCalls);
+        }
         return map;
+    }
+
+    private List<Map<String, Object>> toToolsPayload(ModelChatRequest request) {
+        if (request.tools() == null || request.tools().isEmpty()) {
+            return List.of();
+        }
+        return request.tools().stream()
+                .map(spec -> Map.of(
+                        "type", "function",
+                        "function", Map.of(
+                                "name", spec.name(),
+                                "description", spec.description(),
+                                "parameters", spec.inputJsonSchema()
+                        )
+                ))
+                .toList();
     }
 
     private String truncate(String text) {
@@ -176,6 +216,24 @@ public class OpenAiModelProvider implements ModelProvider {
             return "no response body";
         }
         return text.length() > 240 ? text.substring(0, 240) + "..." : text;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ToolCall> extractToolCalls(Map<String, Object> message) {
+        if (message == null) {
+            return List.of();
+        }
+        List<Map<String, Object>> raw = (List<Map<String, Object>>) message.get("tool_calls");
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        return raw.stream().map(item -> {
+            Map<String, Object> function = (Map<String, Object>) item.get("function");
+            String id = String.valueOf(item.getOrDefault("id", ""));
+            String name = function == null ? "" : String.valueOf(function.getOrDefault("name", ""));
+            String args = function == null ? "{}" : String.valueOf(function.getOrDefault("arguments", "{}"));
+            return new ToolCall(id, name, args);
+        }).toList();
     }
 
     private <T> T withIdempotentRetry(Supplier<T> call) {

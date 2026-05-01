@@ -1,39 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { createApiClient } from './api';
-import type {
-  Message,
-  ModelOption,
-  Provider,
-  Session,
-  ToolStatsResponse,
-  Tokens,
-  UserProfile
-} from './types';
+import type { ModelOption, Provider, Session, Tokens } from './types';
 import { defaultModel } from './utils';
 import { AuthPanel } from './components/AuthPanel';
-import { Sidebar } from './components/Sidebar';
-import { ChatWindow } from './components/ChatWindow';
 import { MouseFx } from './components/MouseFx';
+import { ChatList } from './components/ChatList';
+import { MessageContainer } from './components/MessageContainer';
+import { Settings } from './components/Settings';
+import { useAuthStore } from './stores/authStore';
+import { useChatStore, type ErrorKind } from './stores/chatStore';
+import { useUiStore } from './stores/uiStore';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const STORAGE_KEY = 'ai_agent_web_tokens_v1';
 const FX_STORAGE_KEY = 'ai_agent_ui_fx_enabled_v1';
 const RATE_LIMIT_AUTO_RETRY_SECONDS = 6;
 
-type StreamState = 'idle' | 'connecting' | 'streaming' | 'error';
-type ErrorKind = 'rate_limit' | 'auth_expired' | 'model_unreachable' | 'generic';
-type ToolStatsScope = 'session' | 'global';
-
 function readStoredTokens(): Tokens | null {
   const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return null;
-  }
+  if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Tokens;
-    if (!parsed.accessToken || !parsed.refreshToken) {
-      return null;
-    }
+    if (!parsed.accessToken || !parsed.refreshToken) return null;
     return parsed;
   } catch {
     return null;
@@ -49,53 +37,29 @@ function fallbackModelOptions(): ModelOption[] {
 
 function normalizeError(message: string): { message: string; kind: ErrorKind } {
   const raw = message.toLowerCase();
-  if (raw.includes('too many') || raw.includes('429')) {
-    return { message: '请求过于频繁，请稍后重试。', kind: 'rate_limit' };
-  }
-  if (raw.includes('authentication') || raw.includes('unauthorized') || raw.includes('token')) {
-    return { message: '登录状态已失效，请重新登录。', kind: 'auth_expired' };
-  }
-  if (raw.includes('connect') || raw.includes('timeout') || raw.includes('model') || raw.includes('503')) {
-    return { message: '模型服务暂时不可用，请切换模型或稍后重试。', kind: 'model_unreachable' };
-  }
+  if (raw.includes('too many') || raw.includes('429')) return { message: '请求过于频繁，请稍后重试。', kind: 'rate_limit' };
+  if (raw.includes('authentication') || raw.includes('unauthorized') || raw.includes('token')) return { message: '登录状态已失效，请重新登录。', kind: 'auth_expired' };
+  if (raw.includes('connect') || raw.includes('timeout') || raw.includes('model') || raw.includes('503')) return { message: '模型服务暂时不可用，请切换模型或稍后重试。', kind: 'model_unreachable' };
   return { message, kind: 'generic' };
 }
 
 export function App() {
-  const [tokens, setTokensState] = useState<Tokens | null>(() => readStoredTokens());
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [modelOptions, setModelOptions] = useState<ModelOption[]>(fallbackModelOptions());
-  const [toolStats, setToolStats] = useState<ToolStatsResponse | null>(null);
-  const [toolStatsLoading, setToolStatsLoading] = useState(false);
-  const [toolStatsWindowHours, setToolStatsWindowHours] = useState(24);
-  const [toolStatsScope, setToolStatsScope] = useState<ToolStatsScope>('session');
+  const { tokens, user, authMode, email, password, setTokens, setUser, setAuthMode, setEmail, setPassword, clearAuth } = useAuthStore();
+  const chat = useChatStore();
+  const ui = useUiStore();
 
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
-
-  const [prompt, setPrompt] = useState('');
-
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState('');
-  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
-  const [rateLimitRetryInSec, setRateLimitRetryInSec] = useState<number | null>(null);
-  const [rateLimitRetryArmed, setRateLimitRetryArmed] = useState(false);
-  const [streamState, setStreamState] = useState<StreamState>('idle');
-  const [lastFailedMessage, setLastFailedMessage] = useState('');
-  const [effectsEnabled, setEffectsEnabled] = useState(() => {
-    const raw = localStorage.getItem(FX_STORAGE_KEY);
-    return raw === null ? true : raw === '1';
-  });
+  useEffect(() => {
+    if (!tokens) {
+      setTokens(readStoredTokens());
+    }
+    const rawFx = localStorage.getItem(FX_STORAGE_KEY);
+    if (rawFx !== null) {
+      ui.setEffectsEnabled(rawFx === '1');
+    }
+  }, [setTokens, tokens, ui]);
 
   function updateTokens(next: Tokens | null) {
-    setTokensState(next);
+    setTokens(next);
     if (!next) {
       localStorage.removeItem(STORAGE_KEY);
       return;
@@ -103,113 +67,75 @@ export function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  const api = useMemo(
-    () =>
-      createApiClient(API_BASE, {
-        getTokens: () => tokens,
-        setTokens: updateTokens
-      }),
-    [tokens]
-  );
-
-  const activeSession = useMemo(
-    () => sessions.find(s => s.id === activeSessionId) ?? null,
-    [sessions, activeSessionId]
-  );
-
-  function clearError() {
-    setError('');
-    setErrorKind(null);
-    setRateLimitRetryInSec(null);
-    setRateLimitRetryArmed(false);
-  }
+  const api = useMemo(() => createApiClient(API_BASE, { getTokens: () => useAuthStore.getState().tokens, setTokens: updateTokens }), [tokens]);
+  const activeSession = useMemo(() => chat.sessions.find(s => s.id === chat.activeSessionId) ?? null, [chat.sessions, chat.activeSessionId]);
 
   function applyError(raw: unknown): ErrorKind {
     const text = raw instanceof Error ? raw.message : String(raw);
     const parsed = normalizeError(text);
-    setError(parsed.message);
-    setErrorKind(parsed.kind);
+    chat.setError(parsed.message);
+    chat.setErrorKind(parsed.kind);
     return parsed.kind;
   }
 
   function armRateLimitAutoRetry(messageToRetry?: string) {
-    const candidate = messageToRetry || lastFailedMessage;
-    if (!candidate) {
-      return;
-    }
-    setLastFailedMessage(candidate);
-    setRateLimitRetryArmed(true);
-    setRateLimitRetryInSec(RATE_LIMIT_AUTO_RETRY_SECONDS);
+    const candidate = messageToRetry || chat.lastFailedMessage;
+    if (!candidate) return;
+    chat.setLastFailedMessage(candidate);
+    chat.setRateLimitRetryArmed(true);
+    chat.setRateLimitRetryInSec(RATE_LIMIT_AUTO_RETRY_SECONDS);
   }
 
   async function loadModels(client = api) {
     try {
       const res = await client.listModels();
-      if (res.options.length > 0) {
-        setModelOptions(res.options);
-      } else {
-        setModelOptions(fallbackModelOptions());
-      }
+      ui.setModelOptions(res.options.length > 0 ? res.options : fallbackModelOptions());
     } catch {
-      setModelOptions(fallbackModelOptions());
+      ui.setModelOptions(fallbackModelOptions());
     }
   }
 
-  async function loadToolStats(
-    client = api,
-    options: { windowHours?: number; scope?: ToolStatsScope; sessionId?: string } = {}
-  ) {
-    setToolStatsLoading(true);
+  async function loadToolStats(client = api, options: { windowHours?: number; scope?: 'session' | 'global'; sessionId?: string } = {}) {
+    ui.setToolStatsLoading(true);
     try {
-      const windowHours = options.windowHours ?? toolStatsWindowHours;
-      const scope = options.scope ?? toolStatsScope;
-      const rawSessionId = options.sessionId ?? activeSessionId;
+      const windowHours = options.windowHours ?? ui.toolStatsWindowHours;
+      const scope = options.scope ?? ui.toolStatsScope;
+      const rawSessionId = options.sessionId ?? chat.activeSessionId;
       const scopedSessionId = scope === 'session' ? rawSessionId || undefined : undefined;
-      const stats = await client.toolStats(windowHours, scopedSessionId);
-      setToolStats(stats);
+      ui.setToolStats(await client.toolStats(windowHours, scopedSessionId));
     } catch {
-      setToolStats(null);
+      ui.setToolStats(null);
     } finally {
-      setToolStatsLoading(false);
+      ui.setToolStatsLoading(false);
     }
   }
 
   async function bootstrapAuth(client = api) {
-    if (!tokens && client === api) {
-      return;
-    }
-    setLoading(true);
-    clearError();
+    if (!useAuthStore.getState().tokens && client === api) return;
+    chat.setLoading(true);
+    chat.clearError();
     try {
-      const [profile, list] = await Promise.all([
-        client.me(),
-        client.listSessions(),
-        loadModels(client)
-      ]);
-
+      const [profile, list] = await Promise.all([client.me(), client.listSessions(), loadModels(client)]);
       setUser(profile);
-      setSessions(list);
-      const picked = list.find(s => s.id === activeSessionId) ?? list[0] ?? null;
-      if (picked) {
-        setActiveSessionId(picked.id);
-        const msgList = await client.listMessages(picked.id);
-        setMessages(msgList);
-        await loadToolStats(client, { sessionId: picked.id });
-      } else {
-        setActiveSessionId('');
-        setMessages([]);
+      chat.setSessions(list);
+      const picked = list.find(s => s.id === chat.activeSessionId) ?? list[0] ?? null;
+      if (!picked) {
+        chat.setActiveSessionId('');
+        chat.setMessages([]);
         await loadToolStats(client, { sessionId: undefined });
+        return;
       }
+      chat.setActiveSessionId(picked.id);
+      chat.setMessages(await client.listMessages(picked.id));
+      await loadToolStats(client, { sessionId: picked.id });
     } catch (e) {
       updateTokens(null);
-      setUser(null);
-      setSessions([]);
-      setActiveSessionId('');
-      setMessages([]);
-      setToolStats(null);
+      clearAuth();
+      chat.resetChat();
+      ui.setToolStats(null);
       applyError(e);
     } finally {
-      setLoading(false);
+      chat.setLoading(false);
     }
   }
 
@@ -218,218 +144,143 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!rateLimitRetryArmed || errorKind !== 'rate_limit' || !lastFailedMessage) {
+    if (!chat.rateLimitRetryArmed || chat.errorKind !== 'rate_limit' || !chat.lastFailedMessage) return;
+    if (chat.rateLimitRetryInSec === null) {
+      chat.setRateLimitRetryInSec(RATE_LIMIT_AUTO_RETRY_SECONDS);
       return;
     }
-
-    if (rateLimitRetryInSec === null) {
-      setRateLimitRetryInSec(RATE_LIMIT_AUTO_RETRY_SECONDS);
-      return;
-    }
-
-    if (rateLimitRetryInSec <= 0) {
-      setRateLimitRetryArmed(false);
-      setRateLimitRetryInSec(null);
+    if (chat.rateLimitRetryInSec <= 0) {
+      chat.setRateLimitRetryArmed(false);
+      chat.setRateLimitRetryInSec(null);
       void onRetryLast();
       return;
     }
-
-    const timer = window.setTimeout(() => {
-      setRateLimitRetryInSec(prev => (prev === null ? null : prev - 1));
-    }, 1000);
-
+    const timer = window.setTimeout(() => chat.setRateLimitRetryInSec(prev => (prev === null ? null : prev - 1)), 1000);
     return () => window.clearTimeout(timer);
-  }, [rateLimitRetryArmed, rateLimitRetryInSec, errorKind, lastFailedMessage]);
+  }, [chat.rateLimitRetryArmed, chat.rateLimitRetryInSec, chat.errorKind, chat.lastFailedMessage]);
 
   async function onAuthSubmit() {
-    clearError();
-    setLoading(true);
+    chat.clearError();
+    chat.setLoading(true);
     try {
-      if (authMode === 'register') {
-        await api.register({ email: email.trim(), password });
-      }
+      if (authMode === 'register') await api.register({ email: email.trim(), password });
       let mutableTokens: Tokens | null = await api.login({ email: email.trim(), password });
       updateTokens(mutableTokens);
-
-      const authedApi = createApiClient(API_BASE, {
-        getTokens: () => mutableTokens,
-        setTokens: (next) => {
-          mutableTokens = next;
-          updateTokens(next);
-        }
-      });
-
-      const [profile, list] = await Promise.all([
-        authedApi.me(),
-        authedApi.listSessions(),
-        loadModels(authedApi)
-      ]);
-
+      const authedApi = createApiClient(API_BASE, { getTokens: () => mutableTokens, setTokens: next => { mutableTokens = next; updateTokens(next); } });
+      const [profile, list] = await Promise.all([authedApi.me(), authedApi.listSessions(), loadModels(authedApi)]);
       setUser(profile);
-      setSessions(list);
-      if (list.length > 0) {
-        setActiveSessionId(list[0].id);
-        const msgList = await authedApi.listMessages(list[0].id);
-        setMessages(msgList);
-        await loadToolStats(authedApi, { sessionId: list[0].id });
-      } else {
-        setActiveSessionId('');
-        setMessages([]);
+      chat.setSessions(list);
+      if (list.length === 0) {
+        chat.setActiveSessionId('');
+        chat.setMessages([]);
         await loadToolStats(authedApi, { sessionId: undefined });
+      } else {
+        chat.setActiveSessionId(list[0].id);
+        chat.setMessages(await authedApi.listMessages(list[0].id));
+        await loadToolStats(authedApi, { sessionId: list[0].id });
       }
       setPassword('');
-      setStreamState('idle');
+      chat.setStreamState('idle');
     } catch (e) {
       applyError(e);
     } finally {
-      setLoading(false);
+      chat.setLoading(false);
     }
   }
 
   async function reloadSessions(nextActiveId?: string) {
     const list = await api.listSessions();
-    setSessions(list);
-    const picked =
-      (nextActiveId && list.find(s => s.id === nextActiveId)) ||
-      list.find(s => s.id === activeSessionId) ||
-      list[0] ||
-      null;
+    chat.setSessions(list);
+    const picked = (nextActiveId && list.find(s => s.id === nextActiveId)) || list.find(s => s.id === chat.activeSessionId) || list[0] || null;
     if (!picked) {
-      setActiveSessionId('');
-      setMessages([]);
+      chat.setActiveSessionId('');
+      chat.setMessages([]);
       await loadToolStats(api, { sessionId: undefined });
       return;
     }
-    setActiveSessionId(picked.id);
-    const msgList = await api.listMessages(picked.id);
-    setMessages(msgList);
+    chat.setActiveSessionId(picked.id);
+    chat.setMessages(await api.listMessages(picked.id));
     await loadToolStats(api, { sessionId: picked.id });
   }
 
   async function onCreateSession(provider: Provider, model: string, title?: string) {
-    clearError();
-    setLoading(true);
+    chat.clearError();
+    chat.setLoading(true);
     try {
-      const created = await api.createSession({
-        title: title || undefined,
-        provider,
-        model: model || undefined
-      });
+      const created = await api.createSession({ title: title || undefined, provider, model: model || undefined });
       await reloadSessions(created.id);
     } catch (e) {
       applyError(e);
     } finally {
-      setLoading(false);
+      chat.setLoading(false);
     }
   }
 
   async function onSelectSession(sessionId: string) {
-    clearError();
-    setActiveSessionId(sessionId);
-    setLoading(true);
+    chat.clearError();
+    chat.setActiveSessionId(sessionId);
+    chat.setLoading(true);
     try {
-      const msgList = await api.listMessages(sessionId);
-      setMessages(msgList);
+      chat.setMessages(await api.listMessages(sessionId));
       await loadToolStats(api, { sessionId });
     } catch (e) {
       applyError(e);
     } finally {
-      setLoading(false);
+      chat.setLoading(false);
     }
   }
 
   async function sendMessage(outgoing: string) {
-    if (!activeSessionId || !outgoing.trim()) {
-      return;
-    }
+    if (!chat.activeSessionId || !outgoing.trim()) return;
     const content = outgoing.trim();
     const assistantMessageId = `stream-assistant-${Date.now()}`;
     const now = new Date().toISOString();
     let streamedAnyChunk = false;
-
-    setSending(true);
-    clearError();
-    setPrompt('');
-    setStreamState('connecting');
-    setMessages(prev => [
+    chat.setSending(true);
+    chat.clearError();
+    chat.setPrompt('');
+    chat.setStreamState('connecting');
+    chat.setMessages(prev => [
       ...prev,
-      {
-        id: `stream-user-${Date.now()}`,
-        role: 'user',
-        content,
-        provider: activeSession?.provider ?? '',
-        model: activeSession?.model ?? '',
-        createdAt: now
-      },
-      {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: '',
-        toolTrace: '[]',
-        provider: activeSession?.provider ?? '',
-        model: activeSession?.model ?? '',
-        createdAt: now
-      }
+      { id: `stream-user-${Date.now()}`, role: 'user', content, provider: activeSession?.provider ?? '', model: activeSession?.model ?? '', createdAt: now },
+      { id: assistantMessageId, role: 'assistant', content: '', toolTrace: '[]', provider: activeSession?.provider ?? '', model: activeSession?.model ?? '', createdAt: now }
     ]);
-
     try {
-      await api.streamChat(
-        {
-          sessionId: activeSessionId,
-          message: content
-        },
-        {
-          onChunk: chunk => {
-            if (!streamedAnyChunk) {
-              streamedAnyChunk = true;
-              setStreamState('streaming');
-            }
-            setMessages(prev =>
-              prev.map(msg =>
-                msg.id === assistantMessageId
-                  ? { ...msg, content: msg.content + chunk }
-                  : msg
-              )
-            );
-          },
-          onError: message => {
-            const kind = applyError(message);
-            if (kind === 'rate_limit') {
-              armRateLimitAutoRetry(content);
-            }
-            setStreamState('error');
+      await api.streamChat({ sessionId: chat.activeSessionId, message: content }, {
+        onChunk: chunk => {
+          if (!streamedAnyChunk) {
+            streamedAnyChunk = true;
+            chat.setStreamState('streaming');
           }
+          chat.setMessages(prev => prev.map(msg => (msg.id === assistantMessageId ? { ...msg, content: msg.content + chunk } : msg)));
+        },
+        onError: message => {
+          const kind = applyError(message);
+          if (kind === 'rate_limit') armRateLimitAutoRetry(content);
+          chat.setStreamState('error');
         }
-      );
-      setStreamState('idle');
-      setLastFailedMessage('');
-      await reloadSessions(activeSessionId);
+      });
+      chat.setStreamState('idle');
+      chat.setLastFailedMessage('');
+      await reloadSessions(chat.activeSessionId);
     } catch (e) {
-      setStreamState('error');
-      setLastFailedMessage(content);
+      chat.setStreamState('error');
+      chat.setLastFailedMessage(content);
       const kind = applyError(e);
-      if (kind === 'rate_limit') {
-        armRateLimitAutoRetry(content);
-      }
+      if (kind === 'rate_limit') armRateLimitAutoRetry(content);
       try {
-        await reloadSessions(activeSessionId);
+        await reloadSessions(chat.activeSessionId);
       } catch {
         // keep stream failure message.
       }
     } finally {
-      setSending(false);
+      chat.setSending(false);
     }
-  }
-
-  async function onSendMessage() {
-    await sendMessage(prompt);
   }
 
   async function onRetryLast() {
-    if (!lastFailedMessage) {
-      return;
-    }
-    await sendMessage(lastFailedMessage);
+    if (!chat.lastFailedMessage) return;
+    await sendMessage(chat.lastFailedMessage);
   }
 
   function downloadFile(filename: string, content: string, type: string) {
@@ -445,129 +296,98 @@ export function App() {
   }
 
   async function onExportSession(format: 'json' | 'markdown') {
-    if (!activeSessionId) {
-      return;
-    }
-    setExporting(true);
-    clearError();
+    if (!chat.activeSessionId) return;
+    chat.setExporting(true);
+    chat.clearError();
     try {
-      const payload = await api.exportSession(activeSessionId, format);
-      const baseTitle = (activeSession?.title || `session-${activeSessionId}`)
-        .trim()
-        .replace(/[^\w.-]+/g, '_')
-        .slice(0, 48) || `session-${activeSessionId}`;
-
+      const payload = await api.exportSession(chat.activeSessionId, format);
+      const baseTitle = (activeSession?.title || `session-${chat.activeSessionId}`).trim().replace(/[^\w.-]+/g, '_').slice(0, 48) || `session-${chat.activeSessionId}`;
+      const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
       if (format === 'markdown') {
-        const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
         downloadFile(`${baseTitle}.md`, text, 'text/markdown;charset=utf-8');
         return;
       }
-
-      const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
       downloadFile(`${baseTitle}.json`, text, 'application/json;charset=utf-8');
     } catch (e) {
       applyError(e);
     } finally {
-      setExporting(false);
+      chat.setExporting(false);
     }
   }
 
   async function onExportToolStats(format: 'json' | 'markdown') {
-    setExporting(true);
-    clearError();
+    chat.setExporting(true);
+    chat.clearError();
     try {
-      const sessionId = toolStatsScope === 'session' ? activeSessionId || undefined : undefined;
-      const payload = await api.exportToolStats(toolStatsWindowHours, format, sessionId);
+      const sessionId = ui.toolStatsScope === 'session' ? chat.activeSessionId || undefined : undefined;
+      const payload = await api.exportToolStats(ui.toolStatsWindowHours, format, sessionId);
       const scope = sessionId ? 'session' : 'global';
-      const baseName = `tool-stats-${scope}-${toolStatsWindowHours}h`;
-
+      const baseName = `tool-stats-${scope}-${ui.toolStatsWindowHours}h`;
+      const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
       if (format === 'markdown') {
-        const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
         downloadFile(`${baseName}.md`, text, 'text/markdown;charset=utf-8');
         return;
       }
-
-      const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
       downloadFile(`${baseName}.json`, text, 'application/json;charset=utf-8');
     } catch (e) {
       applyError(e);
     } finally {
-      setExporting(false);
+      chat.setExporting(false);
     }
   }
 
   async function onExportReleaseReport(format: 'json' | 'markdown') {
-    setExporting(true);
-    clearError();
+    chat.setExporting(true);
+    chat.clearError();
     try {
-      const sessionId = toolStatsScope === 'session' ? activeSessionId || undefined : undefined;
-      const payload = await api.exportReleaseReport(toolStatsWindowHours, format, sessionId);
+      const sessionId = ui.toolStatsScope === 'session' ? chat.activeSessionId || undefined : undefined;
+      const payload = await api.exportReleaseReport(ui.toolStatsWindowHours, format, sessionId);
       const scope = sessionId ? 'session' : 'global';
-      const baseName = `release-report-${scope}-${toolStatsWindowHours}h`;
-
+      const baseName = `release-report-${scope}-${ui.toolStatsWindowHours}h`;
+      const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
       if (format === 'markdown') {
-        const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
         downloadFile(`${baseName}.md`, text, 'text/markdown;charset=utf-8');
         return;
       }
-
-      const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
       downloadFile(`${baseName}.json`, text, 'application/json;charset=utf-8');
     } catch (e) {
       applyError(e);
     } finally {
-      setExporting(false);
+      chat.setExporting(false);
     }
   }
 
   async function onSwitchFallbackSession() {
-    if (!activeSession) {
-      return;
-    }
+    if (!activeSession) return;
     const fallbackProvider: Provider = activeSession.provider === 'OPENAI' ? 'OLLAMA' : 'OPENAI';
-    const fallbackModel =
-      modelOptions.find(item => item.provider === fallbackProvider && item.isDefault)?.model ||
-      modelOptions.find(item => item.provider === fallbackProvider)?.model ||
-      defaultModel(fallbackProvider);
+    const fallbackModel = ui.modelOptions.find(item => item.provider === fallbackProvider && item.isDefault)?.model || ui.modelOptions.find(item => item.provider === fallbackProvider)?.model || defaultModel(fallbackProvider);
     await onCreateSession(fallbackProvider, fallbackModel, `Fallback ${fallbackProvider}`);
   }
 
   function onLogout() {
     updateTokens(null);
-    setUser(null);
-    setSessions([]);
-    setMessages([]);
-    setToolStats(null);
-    setModelOptions(fallbackModelOptions());
-    setActiveSessionId('');
-    setExporting(false);
-    setPassword('');
-    setLastFailedMessage('');
-    setStreamState('idle');
-    setToolStatsWindowHours(24);
-    setToolStatsScope('session');
-    setRateLimitRetryInSec(null);
-    setRateLimitRetryArmed(false);
-    clearError();
+    clearAuth();
+    chat.resetChat();
+    ui.resetUi();
   }
 
   function toggleEffects() {
-    const next = !effectsEnabled;
-    setEffectsEnabled(next);
+    const next = !ui.effectsEnabled;
+    ui.setEffectsEnabled(next);
     localStorage.setItem(FX_STORAGE_KEY, next ? '1' : '0');
   }
 
   return (
     <div className="app-shell">
-      {effectsEnabled ? <MouseFx /> : null}
+      {ui.effectsEnabled ? <MouseFx /> : null}
       <button className="ghost fx-toggle" type="button" onClick={toggleEffects}>
-        {effectsEnabled ? '动态效果: 开' : '动态效果: 关'}
+        {ui.effectsEnabled ? '动态效果: 开' : '动态效果: 关'}
       </button>
       {!tokens || !user ? (
         <AuthPanel
           tokens={tokens}
-          loading={loading}
-          error={error}
+          loading={chat.loading}
+          error={chat.error}
           authMode={authMode}
           setAuthMode={setAuthMode}
           email={email}
@@ -578,92 +398,66 @@ export function App() {
         />
       ) : (
         <div className="workspace">
-          <Sidebar
-            userEmail={user.email}
-            onLogout={onLogout}
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            modelOptions={modelOptions}
-            toolStats={toolStats}
-            toolStatsLoading={toolStatsLoading}
-            toolStatsWindowHours={toolStatsWindowHours}
-            toolStatsScope={toolStatsScope}
-            hasActiveSession={!!activeSessionId}
-            onRefreshToolStats={() => {
-              void loadToolStats(api, { sessionId: activeSessionId || undefined });
-            }}
-            onChangeToolStatsWindow={(hours) => {
-              setToolStatsWindowHours(hours);
-              void loadToolStats(api, { windowHours: hours, sessionId: activeSessionId || undefined });
-            }}
-            onChangeToolStatsScope={(scope) => {
-              setToolStatsScope(scope);
-              void loadToolStats(api, { scope, sessionId: activeSessionId || undefined });
-            }}
-            onExportToolStatsJson={() => {
-              void onExportToolStats('json');
-            }}
-            onExportToolStatsMarkdown={() => {
-              void onExportToolStats('markdown');
-            }}
-            onExportReleaseReportJson={() => {
-              void onExportReleaseReport('json');
-            }}
-            onExportReleaseReportMarkdown={() => {
-              void onExportReleaseReport('markdown');
-            }}
-            onSelectSession={onSelectSession}
-            onCreateSession={onCreateSession}
-          />
-          <ChatWindow
+          <aside className="sidebar panel">
+            <Settings
+              userEmail={user.email}
+              onLogout={onLogout}
+              modelOptions={ui.modelOptions}
+              toolStats={ui.toolStats}
+              toolStatsLoading={ui.toolStatsLoading}
+              toolStatsWindowHours={ui.toolStatsWindowHours}
+              toolStatsScope={ui.toolStatsScope}
+              hasActiveSession={!!chat.activeSessionId}
+              onRefreshToolStats={() => { void loadToolStats(api, { sessionId: chat.activeSessionId || undefined }); }}
+              onChangeToolStatsWindow={hours => { ui.setToolStatsWindowHours(hours); void loadToolStats(api, { windowHours: hours, sessionId: chat.activeSessionId || undefined }); }}
+              onChangeToolStatsScope={scope => { ui.setToolStatsScope(scope); void loadToolStats(api, { scope, sessionId: chat.activeSessionId || undefined }); }}
+              onExportToolStatsJson={() => { void onExportToolStats('json'); }}
+              onExportToolStatsMarkdown={() => { void onExportToolStats('markdown'); }}
+              onExportReleaseReportJson={() => { void onExportReleaseReport('json'); }}
+              onExportReleaseReportMarkdown={() => { void onExportReleaseReport('markdown'); }}
+              onCreateSession={onCreateSession}
+            />
+            <ChatList sessions={chat.sessions} activeSessionId={chat.activeSessionId} onSelectSession={onSelectSession} />
+          </aside>
+          <MessageContainer
             activeSession={activeSession}
-            messages={messages}
-            prompt={prompt}
-            setPrompt={setPrompt}
-            sending={sending}
-            loading={loading}
-            error={error}
-            streamState={streamState}
-            exporting={exporting}
-            canRetry={!!lastFailedMessage && !sending && errorKind !== 'rate_limit'}
+            messages={chat.messages}
+            prompt={chat.prompt}
+            setPrompt={chat.setPrompt}
+            sending={chat.sending}
+            loading={chat.loading}
+            error={chat.error}
+            streamState={chat.streamState}
+            exporting={chat.exporting}
+            canRetry={!!chat.lastFailedMessage && !chat.sending && chat.errorKind !== 'rate_limit'}
             errorActionLabel={
-              errorKind === 'auth_expired'
+              chat.errorKind === 'auth_expired'
                 ? '重新登录'
-                : errorKind === 'model_unreachable'
+                : chat.errorKind === 'model_unreachable'
                 ? '切换备用模型'
-                : errorKind === 'rate_limit' && !!lastFailedMessage
-                ? rateLimitRetryInSec && rateLimitRetryInSec > 0
-                  ? `${rateLimitRetryInSec}s后自动重试`
+                : chat.errorKind === 'rate_limit' && !!chat.lastFailedMessage
+                ? chat.rateLimitRetryInSec && chat.rateLimitRetryInSec > 0
+                  ? `${chat.rateLimitRetryInSec}s后自动重试`
                   : '立即重试'
                 : undefined
             }
             onErrorAction={
-              errorKind === 'auth_expired'
+              chat.errorKind === 'auth_expired'
                 ? onLogout
-                : errorKind === 'model_unreachable'
-                ? () => {
-                    void onSwitchFallbackSession();
-                  }
-                : errorKind === 'rate_limit' && !!lastFailedMessage
-                ? () => {
-                    setRateLimitRetryArmed(false);
-                    setRateLimitRetryInSec(null);
-                    void onRetryLast();
-                  }
+                : chat.errorKind === 'model_unreachable'
+                ? () => { void onSwitchFallbackSession(); }
+                : chat.errorKind === 'rate_limit' && !!chat.lastFailedMessage
+                ? () => { chat.setRateLimitRetryArmed(false); chat.setRateLimitRetryInSec(null); void onRetryLast(); }
                 : undefined
             }
-            onExportJson={() => {
-              void onExportSession('json');
-            }}
-            onExportMarkdown={() => {
-              void onExportSession('markdown');
-            }}
+            onExportJson={() => { void onExportSession('json'); }}
+            onExportMarkdown={() => { void onExportSession('markdown'); }}
             onRetryLast={onRetryLast}
-            onSendMessage={onSendMessage}
+            onSendMessage={() => { void sendMessage(chat.prompt); }}
           />
         </div>
       )}
-      {error && user ? <div className="toast">{error}</div> : null}
+      {chat.error && user ? <div className="toast">{chat.error}</div> : null}
     </div>
   );
 }

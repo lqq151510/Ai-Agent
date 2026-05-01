@@ -19,6 +19,7 @@ import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
@@ -61,7 +62,8 @@ public class OllamaModelProvider implements ModelProvider {
         Map<String, Object> body = Map.of(
                 "model", request.model(),
                 "messages", request.messages().stream().map(this::toMap).toList(),
-                "stream", false
+                "stream", false,
+                "tools", toToolsPayload(request)
         );
 
         Map<String, Object> response;
@@ -89,7 +91,7 @@ public class OllamaModelProvider implements ModelProvider {
         Map<String, Object> message = (Map<String, Object>) response.get("message");
         String content = message == null ? "" : String.valueOf(message.getOrDefault("content", ""));
 
-        return new ModelChatResponse(content, Duration.between(start, Instant.now()).toMillis());
+        return new ModelChatResponse(content, Duration.between(start, Instant.now()).toMillis(), List.of(), "stop");
     }
 
     @Override
@@ -100,7 +102,8 @@ public class OllamaModelProvider implements ModelProvider {
         Map<String, Object> body = Map.of(
                 "model", request.model(),
                 "messages", request.messages().stream().map(this::toMap).toList(),
-                "stream", true
+                "stream", true,
+                "tools", toToolsPayload(request)
         );
 
         try {
@@ -131,17 +134,52 @@ public class OllamaModelProvider implements ModelProvider {
                     + truncate(ex.getResponseBodyAsString()));
         }
 
-        return new ModelChatResponse(content.toString(), Duration.between(start, Instant.now()).toMillis());
+        return new ModelChatResponse(content.toString(), Duration.between(start, Instant.now()).toMillis(), List.of(), "stop");
     }
 
     private Map<String, Object> toMap(ModelChatMessage message) {
         Map<String, Object> map = new HashMap<>();
         map.put("role", message.role());
-        map.put("content", message.content());
+        map.put("content", message.content() == null ? "" : message.content());
         if (message.name() != null && !message.name().isBlank()) {
             map.put("name", message.name());
         }
+        if (message.toolCallId() != null && !message.toolCallId().isBlank()) {
+            map.put("tool_call_id", message.toolCallId());
+        }
+        if (message.toolCalls() != null && !message.toolCalls().isEmpty()) {
+            List<Map<String, Object>> toolCalls = new ArrayList<>();
+            for (var call : message.toolCalls()) {
+                toolCalls.add(Map.of(
+                        "id", call.id(),
+                        "type", "function",
+                        "function", Map.of(
+                                "name", call.name(),
+                                "arguments", call.argumentsJson() == null ? "{}" : call.argumentsJson()
+                        )
+                ));
+            }
+            map.put("tool_calls", toolCalls);
+        }
         return map;
+    }
+
+    private List<Map<String, Object>> toToolsPayload(ModelChatRequest request) {
+        if (request.tools() == null || request.tools().isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> tools = new ArrayList<>();
+        for (var spec : request.tools()) {
+            tools.add(Map.of(
+                    "type", "function",
+                    "function", Map.of(
+                            "name", spec.name(),
+                            "description", spec.description(),
+                            "parameters", spec.inputJsonSchema()
+                    )
+            ));
+        }
+        return tools;
     }
 
     private String truncate(String text) {

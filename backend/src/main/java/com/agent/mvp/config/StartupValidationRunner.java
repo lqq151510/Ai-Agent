@@ -9,6 +9,8 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
+import java.util.function.Function;
+
 @Component
 public class StartupValidationRunner implements ApplicationRunner {
 
@@ -16,19 +18,38 @@ public class StartupValidationRunner implements ApplicationRunner {
 
     private final AppProperties appProperties;
     private final SystemDiagnosticsService diagnosticsService;
+    private final Function<String, String> envReader;
 
     public StartupValidationRunner(AppProperties appProperties,
                                    SystemDiagnosticsService diagnosticsService) {
+        this(appProperties, diagnosticsService, System::getenv);
+    }
+
+    StartupValidationRunner(AppProperties appProperties,
+                            SystemDiagnosticsService diagnosticsService,
+                            Function<String, String> envReader) {
         this.appProperties = appProperties;
         this.diagnosticsService = diagnosticsService;
+        this.envReader = envReader;
     }
 
     @Override
     public void run(ApplicationArguments args) {
+        validateJwtSecret();
         validateModelConfig();
         validateDatabase();
         validateRedis();
         validateModelEndpoint();
+    }
+
+    private void validateJwtSecret() {
+        String jwtSecret = envReader.apply("JWT_SECRET");
+        if (jwtSecret == null || jwtSecret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET environment variable is required and must be at least 32 characters.");
+        }
+        if (jwtSecret.length() < 32) {
+            throw new IllegalStateException("JWT_SECRET environment variable must be at least 32 characters.");
+        }
     }
 
     private void validateModelConfig() {
