@@ -7,6 +7,7 @@ import { MouseFx } from './components/MouseFx';
 import { ChatList } from './components/ChatList';
 import { MessageContainer } from './components/MessageContainer';
 import { Settings } from './components/Settings';
+import { LoadingSpinner } from './components/LoadingSpinner';
 import { useAuthStore } from './stores/authStore';
 import { useChatStore, type ErrorKind } from './stores/chatStore';
 import { useUiStore } from './stores/uiStore';
@@ -30,8 +31,7 @@ function readStoredTokens(): Tokens | null {
 
 function fallbackModelOptions(): ModelOption[] {
   return [
-    { provider: 'OPENAI', model: defaultModel('OPENAI'), isDefault: true },
-    { provider: 'OLLAMA', model: defaultModel('OLLAMA'), isDefault: true }
+    { provider: 'OPENAI', model: defaultModel('OPENAI'), isDefault: true }
   ];
 }
 
@@ -246,7 +246,7 @@ export function App() {
       { id: assistantMessageId, role: 'assistant', content: '', toolTrace: '[]', provider: activeSession?.provider ?? '', model: activeSession?.model ?? '', createdAt: now }
     ]);
     try {
-      await api.streamChat({ sessionId: chat.activeSessionId, message: content }, {
+      await api.streamChat({ sessionId: chat.activeSessionId, message: content, provider: activeSession?.provider, model: activeSession?.model }, {
         onChunk: chunk => {
           if (!streamedAnyChunk) {
             streamedAnyChunk = true;
@@ -267,7 +267,7 @@ export function App() {
       chat.setStreamState('error');
       chat.setLastFailedMessage(content);
       const kind = applyError(e);
-      if (kind === 'rate_limit') armRateLimitAutoRetry(content);
+      if (kind === 'rate_limit') armRateLimitAutoRetry();
       try {
         await reloadSessions(chat.activeSessionId);
       } catch {
@@ -359,9 +359,8 @@ export function App() {
 
   async function onSwitchFallbackSession() {
     if (!activeSession) return;
-    const fallbackProvider: Provider = activeSession.provider === 'OPENAI' ? 'OLLAMA' : 'OPENAI';
-    const fallbackModel = ui.modelOptions.find(item => item.provider === fallbackProvider && item.isDefault)?.model || ui.modelOptions.find(item => item.provider === fallbackProvider)?.model || defaultModel(fallbackProvider);
-    await onCreateSession(fallbackProvider, fallbackModel, `Fallback ${fallbackProvider}`);
+    const fallbackModel = ui.modelOptions.find(item => item.provider === 'OPENAI' && item.isDefault)?.model || ui.modelOptions.find(item => item.provider === 'OPENAI')?.model || defaultModel('OPENAI');
+    await onCreateSession('OPENAI', fallbackModel, 'Fallback OPENAI');
   }
 
   function onLogout() {

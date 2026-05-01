@@ -2,6 +2,7 @@ import React from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { Message, Session } from '../types';
 import { MessageItem } from './MessageItem';
+import { SkeletonMessage } from './Skeleton';
 import { AlertCircle, Bot, Download, Loader2, MessageSquare, RefreshCw, Send, Sparkles } from 'lucide-react';
 import type { StreamState } from '../stores/chatStore';
 
@@ -49,42 +50,58 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
   };
 
   const statusText = (() => {
-    if (streamState === 'connecting') return 'Connecting';
-    if (streamState === 'streaming') return 'Streaming';
-    if (streamState === 'error') return 'Error';
-    return activeSession ? 'Ready' : 'Idle';
+    if (streamState === 'connecting') return '连接中';
+    if (streamState === 'streaming') return '生成中';
+    if (streamState === 'error') return '错误';
+    return activeSession ? '就绪' : '空闲';
+  })();
+
+  const statusColor = (() => {
+    if (streamState === 'streaming') return 'status-streaming';
+    if (streamState === 'connecting') return 'status-connecting';
+    if (streamState === 'error') return 'status-error';
+    return 'status-idle';
   })();
 
   return (
     <main className="chat panel">
       <header className="chat-header">
-        <div>
-          <p className="badge">Active Session</p>
-          <h2>{activeSession?.title || 'Select a session'}</h2>
-          {activeSession && (
-            <p className="muted">
-              {activeSession.provider} / {activeSession.model}
-            </p>
-          )}
-        </div>
-        <div className={streamState === 'streaming' || streamState === 'connecting' ? 'live-pill active' : 'live-pill'}>
-          <span />
-          {statusText}
+        <div className="chat-header-main">
+          <div className="chat-header-info">
+            <p className="badge">{activeSession ? '当前会话' : '未选择会话'}</p>
+            <h2>{activeSession?.title || '选择或创建会话'}</h2>
+            {activeSession && (
+              <div className="chat-header-meta">
+                <span className="meta-badge">{activeSession.provider}</span>
+                <span className="meta-badge">{activeSession.model}</span>
+              </div>
+            )}
+          </div>
+          <div className={`live-pill ${statusColor}`}>
+            <span className="live-dot" />
+            {statusText}
+          </div>
         </div>
         <div className="chat-header-actions">
-          <button type="button" className="ghost" onClick={onExportJson} disabled={!activeSession || exporting} title="导出 JSON">
+          <button type="button" className="ghost export-btn" onClick={onExportJson} disabled={!activeSession || exporting} title="导出 JSON">
             <Download size={14} />
-            导出 JSON
+            JSON
           </button>
-          <button type="button" className="ghost" onClick={onExportMarkdown} disabled={!activeSession || exporting} title="导出 Markdown">
+          <button type="button" className="ghost export-btn" onClick={onExportMarkdown} disabled={!activeSession || exporting} title="导出 Markdown">
             <Download size={14} />
-            导出 MD
+            MD
           </button>
         </div>
       </header>
 
       <section className="message-list">
-        {messages.length === 0 ? (
+        {loading && messages.length === 0 ? (
+          <div className="skeleton-container">
+            <SkeletonMessage />
+            <SkeletonMessage />
+            <SkeletonMessage />
+          </div>
+        ) : messages.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">
               {activeSession ? <Sparkles size={32} /> : <MessageSquare size={32} />}
@@ -104,10 +121,10 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
             )}
           />
         )}
-        {loading && (
+        {loading && messages.length > 0 && (
           <div className="loading-indicator">
             <Loader2 className="animate-spin" size={20} />
-            <span>Loading messages...</span>
+            <span>加载消息中...</span>
           </div>
         )}
       </section>
@@ -115,20 +132,24 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
       <footer className="composer">
         {error ? (
           <div className="inline-error">
-            <AlertCircle size={16} />
-            <span>{error}</span>
-            {canRetry ? (
-              <button type="button" className="ghost retry-btn" onClick={onRetryLast}>
-                <RefreshCw size={14} />
-                重试
-              </button>
-            ) : null}
-            {errorActionLabel && onErrorAction ? (
-              <button type="button" className="ghost retry-btn" onClick={onErrorAction}>
-                <RefreshCw size={14} />
-                {errorActionLabel}
-              </button>
-            ) : null}
+            <div className="error-content">
+              <AlertCircle size={16} />
+              <span>{error}</span>
+            </div>
+            <div className="error-actions">
+              {canRetry ? (
+                <button type="button" className="ghost retry-btn" onClick={onRetryLast}>
+                  <RefreshCw size={14} />
+                  重试
+                </button>
+              ) : null}
+              {errorActionLabel && onErrorAction ? (
+                <button type="button" className="ghost retry-btn" onClick={onErrorAction}>
+                  <RefreshCw size={14} />
+                  {errorActionLabel}
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : null}
         <div className="composer-inner">
@@ -141,17 +162,17 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
             rows={2}
           />
           <div className="composer-actions">
-            <span className="muted text-xs">Cmd + Enter to send</span>
-            <button className="primary" onClick={onSendMessage} disabled={sending || !activeSession || !prompt.trim()}>
+            <span className="muted text-xs">Cmd + Enter 发送</span>
+            <button className="primary send-btn" onClick={onSendMessage} disabled={sending || !activeSession || !prompt.trim()}>
               {sending ? (
                 <>
                   <Loader2 className="animate-spin" size={16} />
-                  Generating...
+                  生成中...
                 </>
               ) : (
                 <>
                   <Send size={16} />
-                  Send
+                  发送
                 </>
               )}
             </button>

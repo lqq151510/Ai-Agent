@@ -66,16 +66,6 @@ public class StartupValidationRunner implements ApplicationRunner {
             if (model == null || model.isBlank()) {
                 throw new IllegalStateException("OPENAI_MODEL is required when app.default-provider=OPENAI");
             }
-            return;
-        }
-
-        String baseUrl = appProperties.getOllama().getBaseUrl();
-        String model = appProperties.getDefaultOllamaModel();
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw new IllegalStateException("OLLAMA_BASE_URL is required when app.default-provider=OLLAMA");
-        }
-        if (model == null || model.isBlank()) {
-            throw new IllegalStateException("OLLAMA_MODEL is required when app.default-provider=OLLAMA");
         }
     }
 

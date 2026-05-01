@@ -44,9 +44,8 @@ security:
 
 app:
   workspace-root: ${WORKSPACE_ROOT:.}
-  default-provider: ${MODEL_PROVIDER:OLLAMA}
+  default-provider: ${MODEL_PROVIDER:OPENAI}
   default-openai-model: ${OPENAI_MODEL:qwen/qwen3.5-9b}
-  default-ollama-model: ${OLLAMA_MODEL:qwen3.6:latest}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   model-runtime:
@@ -66,7 +65,5 @@ app:
     model-probe-timeout-ms: ${MODEL_PROBE_TIMEOUT_MS:3000}
     model-probe-retries: ${MODEL_PROBE_RETRIES:1}
   openai:
-    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
-    api-key: ${OPENAI_API_KEY:}
-  ollama:
-    base-url: ${OLLAMA_BASE_URL:http://127.0.0.1:11434}
+    base-url: ${OPENAI_BASE_URL:http://10.115.10.220:1234/v1}
+    api-key: ${OPENAI_API_KEY:sk-placeholder}

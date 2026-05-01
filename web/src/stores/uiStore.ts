@@ -21,8 +21,7 @@ interface UiState {
 }
 
 const fallbackModelOptions = (): ModelOption[] => [
-  { provider: 'OPENAI', model: defaultModel('OPENAI'), isDefault: true },
-  { provider: 'OLLAMA', model: defaultModel('OLLAMA'), isDefault: true }
+  { provider: 'OPENAI', model: defaultModel('OPENAI'), isDefault: true }
 ];
 
 const initialState = {

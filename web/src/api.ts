@@ -25,13 +25,15 @@ type LoginInput = RegisterInput;
 
 type CreateSessionInput = {
   title?: string;
-  provider?: 'OPENAI' | 'OLLAMA';
+  provider?: 'OPENAI';
   model?: string;
 };
 
 type ChatInput = {
   sessionId: string;
   message: string;
+  provider?: 'OPENAI';
+  model?: string;
 };
 
 type StreamHandlers = {
@@ -174,6 +176,10 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
 
       if (event === 'chunk') {
         handlers.onChunk?.(data);
+        return;
+      }
+
+      if (event === 'heartbeat') {
         return;
       }
 

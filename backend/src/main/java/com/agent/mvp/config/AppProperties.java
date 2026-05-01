@@ -9,12 +9,10 @@ import java.util.List;
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
 
-    private ModelProviderType defaultProvider = ModelProviderType.OLLAMA;
+    private ModelProviderType defaultProvider = ModelProviderType.OPENAI;
     private String defaultOpenaiModel = "qwen/qwen3.5-9b";
-    private String defaultOllamaModel = "qwen3.6:latest";
     private String workspaceRoot = ".";
     private final Openai openai = new Openai();
-    private final Ollama ollama = new Ollama();
     private final Cors cors = new Cors();
     private final ModelRuntime modelRuntime = new ModelRuntime();
     private final RateLimit rateLimit = new RateLimit();
@@ -36,14 +34,6 @@ public class AppProperties {
         this.defaultOpenaiModel = defaultOpenaiModel;
     }
 
-    public String getDefaultOllamaModel() {
-        return defaultOllamaModel;
-    }
-
-    public void setDefaultOllamaModel(String defaultOllamaModel) {
-        this.defaultOllamaModel = defaultOllamaModel;
-    }
-
     public String getWorkspaceRoot() {
         return workspaceRoot;
     }
@@ -54,10 +44,6 @@ public class AppProperties {
 
     public Openai getOpenai() {
         return openai;
-    }
-
-    public Ollama getOllama() {
-        return ollama;
     }
 
     public Cors getCors() {
@@ -94,18 +80,6 @@ public class AppProperties {
 
         public void setApiKey(String apiKey) {
             this.apiKey = apiKey;
-        }
-    }
-
-    public static class Ollama {
-        private String baseUrl = "http://127.0.0.1:11434";
-
-        public String getBaseUrl() {
-            return baseUrl;
-        }
-
-        public void setBaseUrl(String baseUrl) {
-            this.baseUrl = baseUrl;
         }
     }
 

@@ -1,4 +1,4 @@
-export type Provider = 'OPENAI' | 'OLLAMA';
+export type Provider = 'OPENAI';
 
 export interface ApiError {
   code?: string;
@@ -10,7 +10,7 @@ export interface ApiError {
 export interface Tokens {
   accessToken: string;
   refreshToken: string;
-  expiresInSeconds?: number;
+  expiresInSeconds: number;
 }
 
 export interface UserProfile {
@@ -106,7 +106,7 @@ export interface SessionExportResponse {
 
 export interface ReleaseReportResponse {
   windowHours: number;
-  sessionId?: string;
+  sessionId: string;
   readiness: {
     ready: boolean;
     checks: { name: string; ok: boolean; detail: string }[];

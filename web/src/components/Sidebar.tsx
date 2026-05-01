@@ -58,11 +58,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const optionsByProvider = useMemo(() => {
     const grouped: Record<Provider, ModelOption[]> = {
-      OPENAI: [],
-      OLLAMA: [],
+      OPENAI: []
     };
     for (const option of modelOptions) {
-      grouped[option.provider].push(option);
+      (grouped[option.provider] ??= []).push(option);
     }
     return grouped;
   }, [modelOptions]);
@@ -133,7 +132,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }}
         >
           <option value="OPENAI">OPENAI</option>
-          <option value="OLLAMA">OLLAMA</option>
         </select>
 
         <label htmlFor="model">Model</label>

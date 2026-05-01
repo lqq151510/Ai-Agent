@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Tokens } from '../types';
-import { KeyRound, Loader2, Mail, ShieldCheck } from 'lucide-react';
+import { KeyRound, Loader2, Mail, ShieldCheck, Zap } from 'lucide-react';
 
 interface AuthPanelProps {
   tokens: Tokens | null;
@@ -29,21 +29,30 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
   return (
     <section className="auth-layout animate-rise">
       <div className="auth-intro">
-        <p className="eyebrow">Java AI Agent</p>
-        <h1>Agent Control</h1>
-        <p>统一管理会话、模型路由和工具执行记录，适合本地调试与日常 agent 工作流。</p>
-        <div className="auth-proof">
-          <span><ShieldCheck size={16} /> JWT Session</span>
-          <span>LM Studio (OpenAI Compatible)</span>
-          <span>Tool Trace</span>
+        <div className="auth-brand">
+          <div className="brand-icon">
+            <Zap size={28} />
+          </div>
+          <h1>AI Agent</h1>
+        </div>
+        <p className="auth-tagline">智能会话管理与工具执行平台</p>
+        <div className="auth-features">
+          <div className="feature-item">
+            <ShieldCheck size={18} />
+            <span>安全认证</span>
+          </div>
+          <div className="feature-item">
+            <Zap size={18} />
+            <span>实时对话</span>
+          </div>
         </div>
       </div>
 
       <div className="auth-panel panel">
         <div className="auth-header">
-          <p className="badge">Console Access</p>
-          <h2>{authMode === 'login' ? '登录控制台' : '创建账户'}</h2>
-          <p className="muted">使用后端账号进入会话工作台。</p>
+          <p className="badge">{authMode === 'login' ? '欢迎回来' : '新用户'}</p>
+          <h2>{authMode === 'login' ? '登录账户' : '注册账户'}</h2>
+          <p className="muted">{authMode === 'login' ? '登录以继续您的会话' : '创建账户开始使用'}</p>
         </div>
         <div className="auth-tabs" role="tablist" aria-label="认证模式">
           <button

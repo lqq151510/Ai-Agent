@@ -48,7 +48,6 @@ public class SystemDiagnosticsService {
     public ModelsResponse listModels() {
         List<ModelOption> options = new ArrayList<>();
         Set<String> openaiModels = fetchOpenAiModels();
-        Set<String> ollamaModels = fetchOllamaModels();
 
         for (String model : openaiModels) {
             options.add(new ModelOption(
@@ -56,15 +55,6 @@ public class SystemDiagnosticsService {
                     model,
                     ModelProviderType.OPENAI == appProperties.getDefaultProvider()
                             && model.equals(appProperties.getDefaultOpenaiModel())
-            ));
-        }
-
-        for (String model : ollamaModels) {
-            options.add(new ModelOption(
-                    ModelProviderType.OLLAMA,
-                    model,
-                    ModelProviderType.OLLAMA == appProperties.getDefaultProvider()
-                            && model.equals(appProperties.getDefaultOllamaModel())
             ));
         }
 
@@ -102,13 +92,6 @@ public class SystemDiagnosticsService {
                     yield new ReadinessCheck("model", false, "OpenAI-compatible endpoint unreachable or empty model list");
                 }
                 yield new ReadinessCheck("model", true, "OpenAI-compatible endpoint reachable");
-            }
-            case OLLAMA -> {
-                Set<String> models = fetchOllamaModels();
-                if (models.isEmpty()) {
-                    yield new ReadinessCheck("model", false, "Ollama endpoint unreachable or empty model list");
-                }
-                yield new ReadinessCheck("model", true, "Ollama endpoint reachable");
             }
         };
     }
@@ -170,34 +153,6 @@ public class SystemDiagnosticsService {
         });
     }
 
-    @SuppressWarnings("unchecked")
-    private Set<String> fetchOllamaModels() {
-        String baseUrl = appProperties.getOllama().getBaseUrl();
-        if (baseUrl == null || baseUrl.isBlank()) {
-            return Set.of();
-        }
-        return withRetrySet(() -> {
-            Map<String, Object> payload = buildClient(baseUrl).get()
-                    .uri("/api/tags")
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .timeout(probeTimeout())
-                    .block();
-            if (payload == null || !(payload.get("models") instanceof List<?> list)) {
-                return Set.<String>of();
-            }
-            return list.stream()
-                    .filter(Map.class::isInstance)
-                    .map(Map.class::cast)
-                    .map(item -> item.get("name"))
-                    .filter(Objects::nonNull)
-                    .map(String::valueOf)
-                    .filter(s -> !s.isBlank())
-                    .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        });
-    }
-
     private Set<String> withRetrySet(Supplier<Set<String>> call) {
         int retries = Math.max(0, appProperties.getStartupValidation().getModelProbeRetries());
         RuntimeException last = null;
@@ -230,9 +185,7 @@ public class SystemDiagnosticsService {
     }
 
     private String defaultModelFor(ModelProviderType provider) {
-        return provider == ModelProviderType.OPENAI
-                ? appProperties.getDefaultOpenaiModel()
-                : appProperties.getDefaultOllamaModel();
+        return appProperties.getDefaultOpenaiModel();
     }
 
     private String sanitize(String text) {

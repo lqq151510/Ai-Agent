@@ -31,8 +31,8 @@ import java.util.Map;
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
@@ -56,11 +56,11 @@ class AgentFlowIntegrationTest {
     static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
             .withExposedPorts(6379);
 
-    static final WireMockServer OLLAMA = new WireMockServer(wireMockConfig().dynamicPort());
+    static final WireMockServer OPENAI_MOCK = new WireMockServer(wireMockConfig().dynamicPort());
 
     static {
-        OLLAMA.start();
-        configureOllamaStubs();
+        OPENAI_MOCK.start();
+        configureOpenAiStubs();
     }
 
     @LocalServerPort
@@ -87,15 +87,16 @@ class AgentFlowIntegrationTest {
         registry.add("spring.data.redis.password", () -> "");
 
         registry.add("security.jwt.secret", () -> "01234567890123456789012345678901");
-        registry.add("app.default-provider", () -> "OLLAMA");
-        registry.add("app.default-ollama-model", () -> "qwen3.6:latest");
-        registry.add("app.ollama.base-url", () -> "http://localhost:" + OLLAMA.port());
+        registry.add("app.default-provider", () -> "OPENAI");
+        registry.add("app.default-openai-model", () -> "mock-model");
+        registry.add("app.openai.base-url", () -> "http://localhost:" + OPENAI_MOCK.port());
+        registry.add("app.openai.api-key", () -> "sk-test-key");
     }
 
     @AfterAll
     static void tearDown() {
-        if (OLLAMA.isRunning()) {
-            OLLAMA.stop();
+        if (OPENAI_MOCK.isRunning()) {
+            OPENAI_MOCK.stop();
         }
     }
 
@@ -126,7 +127,7 @@ class AgentFlowIntegrationTest {
 
         ResponseEntity<Map<String, Object>> createSession = postJson(
                 "/api/sessions",
-                Map.of("title", "IT Session", "provider", "OLLAMA", "model", "qwen3.6:latest"),
+                Map.of("title", "IT Session", "provider", "OPENAI", "model", "mock-model"),
                 accessToken,
                 new ParameterizedTypeReference<>() {}
         );
@@ -142,7 +143,7 @@ class AgentFlowIntegrationTest {
         );
         assertStatus(chat, 200);
         assertNotNull(chat.getBody());
-        assertEquals("mock-ollama-sync", String.valueOf(chat.getBody().get("reply")));
+        assertEquals("mock-openai-reply", String.valueOf(chat.getBody().get("reply")));
 
         ResponseEntity<List<Map<String, Object>>> messagesResponse = getJson(
                 "/api/sessions/" + sessionId + "/messages",
@@ -153,7 +154,7 @@ class AgentFlowIntegrationTest {
         assertNotNull(messagesResponse.getBody());
         assertTrue(messagesResponse.getBody().size() >= 2);
         assertTrue(messagesResponse.getBody().stream().anyMatch(m -> "assistant".equals(m.get("role"))));
-        assertTrue(messagesResponse.getBody().stream().anyMatch(m -> "OLLAMA".equals(m.get("provider"))));
+        assertTrue(messagesResponse.getBody().stream().anyMatch(m -> "OPENAI".equals(m.get("provider"))));
 
         List<Message> persisted = messageRepository.findBySessionIdOrderByCreatedAtAsc(UUID.fromString(sessionId));
         assertTrue(persisted.size() >= 2);
@@ -183,7 +184,7 @@ class AgentFlowIntegrationTest {
 
         ResponseEntity<Map<String, Object>> createSession = postJson(
                 "/api/sessions",
-                Map.of("title", "IT Stream Session", "provider", "OLLAMA", "model", "qwen3.6:latest"),
+                Map.of("title", "IT Stream Session", "provider", "OPENAI", "model", "mock-model"),
                 accessToken,
                 new ParameterizedTypeReference<>() {}
         );
@@ -211,27 +212,38 @@ class AgentFlowIntegrationTest {
         assertTrue(body.contains("event:done"));
     }
 
-    private static void configureOllamaStubs() {
-        OLLAMA.stubFor(post(urlEqualTo("/api/chat"))
+    private static void configureOpenAiStubs() {
+        OPENAI_MOCK.stubFor(get(urlEqualTo("/models"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {"object":"list","data":[{"id":"mock-model","object":"model"}]}
+                                """)));
+
+        OPENAI_MOCK.stubFor(post(urlEqualTo("/chat/completions"))
                 .withRequestBody(matchingJsonPath("$.stream", equalTo("false")))
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withHeader("Content-Type", "application/json")
                         .withBody("""
-                                {"message":{"role":"assistant","content":"mock-ollama-sync"}}
+                                {"choices":[{"message":{"role":"assistant","content":"mock-openai-reply"}}],"usage":{"total_tokens":10}}
                                 """)));
 
-        OLLAMA.stubFor(post(urlEqualTo("/api/chat"))
-                .withRequestBody(containing("\"stream\":true"))
+        OPENAI_MOCK.stubFor(post(urlEqualTo("/chat/completions"))
+                .withRequestBody(matchingJsonPath("$.stream", equalTo("true")))
                 .willReturn(aResponse()
                         .withStatus(200)
-                        .withHeader("Content-Type", "application/x-ndjson")
+                        .withHeader("Content-Type", "text/event-stream")
                         .withFixedDelay((int) Duration.ofMillis(80).toMillis())
                         .withBody("""
-                                {"message":{"role":"assistant","content":"mock-"}}
-                                {"message":{"role":"assistant","content":"ollama-"}}
-                                {"message":{"role":"assistant","content":"stream"}}
-                                {"done":true}
+                                data: {"choices":[{"delta":{"role":"assistant","content":"mock-"}}]}
+
+                                data: {"choices":[{"delta":{"content":"openai-"}}]}
+
+                                data: {"choices":[{"delta":{"content":"stream"}}]}
+
+                                data: [DONE]
                                 """)));
     }
 

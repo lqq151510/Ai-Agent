@@ -55,9 +55,7 @@ public class SessionService {
         ModelProviderType provider = request.provider() != null ? request.provider() : appProperties.getDefaultProvider();
         String model = request.model();
         if (model == null || model.isBlank()) {
-            model = provider == ModelProviderType.OPENAI
-                    ? appProperties.getDefaultOpenaiModel()
-                    : appProperties.getDefaultOllamaModel();
+            model = appProperties.getDefaultOpenaiModel();
         }
 
         String title = request.title();

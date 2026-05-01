@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { Session } from '../types';
-import { RadioTower, Search } from 'lucide-react';
+import { RadioTower, Search, MessageSquare, Clock } from 'lucide-react';
+import { Card, CardContent } from './Card';
 
 interface ChatListProps {
   sessions: Session[];
@@ -22,6 +23,11 @@ export const ChatList: React.FC<ChatListProps> = ({ sessions, activeSessionId, o
     });
   }, [sessionQuery, sessions]);
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  };
+
   return (
     <section className="section sessions">
       <div className="section-heading">
@@ -40,20 +46,32 @@ export const ChatList: React.FC<ChatListProps> = ({ sessions, activeSessionId, o
       </div>
       <div className="session-list">
         {filteredSessions.length === 0 ? (
-          <p className="muted empty-copy">没有匹配会话，换个关键词试试。</p>
+          <div className="empty-sessions">
+            <MessageSquare size={24} />
+            <p className="muted">{sessionQuery ? '没有匹配会话' : '暂无会话'}</p>
+          </div>
         ) : (
           filteredSessions.map(s => (
-            <button
+            <Card
               key={s.id}
+              hover
               className={activeSessionId === s.id ? 'session-card active' : 'session-card'}
               onClick={() => onSelectSession(s.id)}
             >
-              <span className="title">{s.title}</span>
-              <span className="meta">
-                <span>{s.provider}</span>
-                <span>{s.model}</span>
-              </span>
-            </button>
+              <CardContent className="session-card-content">
+                <div className="session-card-header">
+                  <span className="session-title">{s.title}</span>
+                  <span className="session-date">
+                    <Clock size={10} />
+                    {formatDate(s.updatedAt)}
+                  </span>
+                </div>
+                <div className="session-card-meta">
+                  <span className="meta-tag provider-tag">{s.provider}</span>
+                  <span className="meta-tag model-tag">{s.model}</span>
+                </div>
+              </CardContent>
+            </Card>
           ))
         )}
       </div>

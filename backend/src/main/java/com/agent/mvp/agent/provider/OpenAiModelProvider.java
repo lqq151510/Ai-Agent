@@ -283,10 +283,18 @@ public class OpenAiModelProvider implements ModelProvider {
                 return "";
             }
             Map<String, Object> delta = (Map<String, Object>) choices.get(0).get("delta");
-            if (delta == null || delta.get("content") == null) {
+            if (delta == null) {
                 return "";
             }
-            return String.valueOf(delta.get("content"));
+            Object content = delta.get("content");
+            if (content != null && !content.toString().isEmpty()) {
+                return content.toString();
+            }
+            Object reasoning = delta.get("reasoning_content");
+            if (reasoning != null && !reasoning.toString().isEmpty()) {
+                return reasoning.toString();
+            }
+            return "";
         } catch (Exception ex) {
             return "";
         }

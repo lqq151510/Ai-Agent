@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import type { ModelOption, Provider, ToolStatsResponse } from '../types';
 import { defaultModel } from '../utils';
-import { Activity, Download, LogOut, MessageSquarePlus, Plus, RefreshCw } from 'lucide-react';
+import { Activity, Download, LogOut, MessageSquarePlus, Plus, RefreshCw, TrendingUp, Clock, Zap } from 'lucide-react';
+import { Card, CardContent, StatCard } from './Card';
 
 interface SettingsProps {
   userEmail: string;
@@ -51,11 +52,10 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const optionsByProvider = useMemo(() => {
     const grouped: Record<Provider, ModelOption[]> = {
-      OPENAI: [],
-      OLLAMA: []
+      OPENAI: []
     };
     for (const option of modelOptions) {
-      grouped[option.provider].push(option);
+      (grouped[option.provider] ??= []).push(option);
     }
     return grouped;
   }, [modelOptions]);
@@ -91,11 +91,16 @@ export const Settings: React.FC<SettingsProps> = ({
   return (
     <>
       <header className="sidebar-top">
-        <div>
-          <p className="badge">已登录</p>
-          <h2>{userEmail}</h2>
+        <div className="user-info">
+          <div className="user-avatar">
+            {userEmail.charAt(0).toUpperCase()}
+          </div>
+          <div className="user-details">
+            <p className="badge">已登录</p>
+            <h2>{userEmail}</h2>
+          </div>
         </div>
-        <button className="icon-button" onClick={onLogout} aria-label="退出登录" title="退出登录">
+        <button className="icon-button logout-btn" onClick={onLogout} aria-label="退出登录" title="退出登录">
           <LogOut size={17} />
         </button>
       </header>
@@ -115,7 +120,6 @@ export const Settings: React.FC<SettingsProps> = ({
           }}
         >
           <option value="OPENAI">OPENAI</option>
-          <option value="OLLAMA">OLLAMA</option>
         </select>
         <label htmlFor="model">Model</label>
         <input
@@ -132,7 +136,7 @@ export const Settings: React.FC<SettingsProps> = ({
         </datalist>
         <label htmlFor="title">Title（可选）</label>
         <input id="title" value={createTitle} onChange={e => setCreateTitle(e.target.value)} placeholder="例如：仓库结构分析" />
-        <button className="primary" onClick={handleCreate}>
+        <button className="primary create-btn" onClick={handleCreate}>
           <Plus size={16} />
           创建会话
         </button>
@@ -149,25 +153,21 @@ export const Settings: React.FC<SettingsProps> = ({
           <div className="stats-export-row">
             <button type="button" className="ghost stat-export-btn" onClick={onExportToolStatsJson} disabled={toolStatsLoading}>
               <Download size={13} />
-              导出 JSON
+              JSON
             </button>
             <button type="button" className="ghost stat-export-btn" onClick={onExportToolStatsMarkdown} disabled={toolStatsLoading}>
               <Download size={13} />
-              导出 MD
+              MD
             </button>
             <button type="button" className="ghost stat-export-btn" onClick={onExportReleaseReportJson} disabled={toolStatsLoading}>
               <Download size={13} />
-              巡检 JSON
-            </button>
-            <button type="button" className="ghost stat-export-btn" onClick={onExportReleaseReportMarkdown} disabled={toolStatsLoading}>
-              <Download size={13} />
-              巡检 MD
+              巡检
             </button>
           </div>
           <div className="stats-segment">
             {[1, 24, 168].map(hours => (
               <button key={hours} type="button" className={toolStatsWindowHours === hours ? 'segment-btn active' : 'segment-btn'} onClick={() => onChangeToolStatsWindow(hours)} disabled={toolStatsLoading}>
-                {hours === 168 ? '7d' : `${hours}h`}
+                {hours === 168 ? '7天' : `${hours}小时`}
               </button>
             ))}
           </div>
@@ -181,44 +181,66 @@ export const Settings: React.FC<SettingsProps> = ({
           </div>
         </div>
         {!toolStats || toolStats.totalRuns === 0 ? (
-          <p className="muted empty-copy">最近 {toolStats?.windowHours ?? 24} 小时暂无工具调用数据。</p>
+          <div className="empty-stats">
+            <Zap size={24} />
+            <p className="muted">最近 {toolStats?.windowHours ?? 24} 小时暂无工具调用数据</p>
+          </div>
         ) : (
           <div className="tool-stats-panel">
             <div className="stats-kpis">
-              <div>
-                <span>总调用</span>
-                <strong>{toolStats.totalRuns}</strong>
-              </div>
-              <div>
-                <span>成功率</span>
-                <strong>{toolStats.successRate}%</strong>
-              </div>
-              <div>
-                <span>P95</span>
-                <strong>{toolStats.p95DurationMs}ms</strong>
-              </div>
+              <StatCard
+                label="总调用"
+                value={toolStats.totalRuns}
+                icon={<TrendingUp size={16} />}
+              />
+              <StatCard
+                label="成功率"
+                value={`${toolStats.successRate}%`}
+                icon={<Activity size={16} />}
+                trend={toolStats.successRate >= 90 ? 'up' : 'neutral'}
+                trendValue={toolStats.successRate >= 90 ? '良好' : '一般'}
+              />
+              <StatCard
+                label="P95延迟"
+                value={`${toolStats.p95DurationMs}ms`}
+                icon={<Clock size={16} />}
+              />
             </div>
-            <div className="bucket-list">
-              {toolStats.durationBuckets.map(bucket => (
-                <div key={bucket.label} className="bucket-item">
-                  <div className="bucket-label">
-                    <span>{bucket.label}</span>
-                    <span>{bucket.count}</span>
-                  </div>
-                  <div className="bucket-track">
-                    <i style={{ width: `${Math.max(6, (bucket.count / maxBucketCount) * 100)}%` }} />
-                  </div>
+            <Card className="stats-chart-card">
+              <CardContent>
+                <h4 className="chart-title">执行时长分布</h4>
+                <div className="bucket-list">
+                  {toolStats.durationBuckets.map(bucket => (
+                    <div key={bucket.label} className="bucket-item">
+                      <div className="bucket-label">
+                        <span>{bucket.label}</span>
+                        <span>{bucket.count}</span>
+                      </div>
+                      <div className="bucket-track">
+                        <i style={{ width: `${Math.max(6, (bucket.count / maxBucketCount) * 100)}%` }} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="tool-top-list">
-              {toolStats.topTools.slice(0, 5).map(tool => (
-                <div key={tool.toolName} className="tool-top-item">
-                  <span className="tool-name">{tool.toolName}</span>
-                  <span className="tool-meta">{tool.runs}次 / {tool.successRate}%</span>
+              </CardContent>
+            </Card>
+            <Card className="stats-tools-card">
+              <CardContent>
+                <h4 className="chart-title">热门工具 TOP5</h4>
+                <div className="tool-top-list">
+                  {toolStats.topTools.slice(0, 5).map((tool, index) => (
+                    <div key={tool.toolName} className="tool-top-item">
+                      <div className="tool-rank">{index + 1}</div>
+                      <span className="tool-name">{tool.toolName}</span>
+                      <div className="tool-stats">
+                        <span className="tool-runs">{tool.runs}次</span>
+                        <span className="tool-success">{tool.successRate}%</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </CardContent>
+            </Card>
           </div>
         )}
       </section>
