@@ -27,7 +27,7 @@ public class ModelRoutingService {
             if (session != null && session.getModel() != null && !session.getModel().isBlank()) {
                 model = session.getModel();
             } else {
-                model = appProperties.getDefaultOpenaiModel();
+                model = appProperties.getDefaultModel(provider);
             }
         }
 

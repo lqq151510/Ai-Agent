@@ -4,6 +4,7 @@ import com.agent.mvp.session.dto.MessageResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -13,7 +14,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
-public class RedisSessionCacheService {
+@Profile("!desktop")
+public class RedisSessionCacheService implements SessionCacheService {
 
     private static final Duration CACHE_TTL = Duration.ofMinutes(5);
 
@@ -25,6 +27,7 @@ public class RedisSessionCacheService {
         this.objectMapper = objectMapper;
     }
 
+    @Override
     public Optional<List<MessageResponse>> getCachedMessages(UUID sessionId) {
         String raw = redisTemplate.opsForValue().get(cacheKey(sessionId));
         if (raw == null || raw.isBlank()) {

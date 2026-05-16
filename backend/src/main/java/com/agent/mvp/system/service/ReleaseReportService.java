@@ -45,11 +45,13 @@ public class ReleaseReportService {
 
         out.append("## Readiness\n\n");
         out.append("- Ready: ").append(report.readiness().ready()).append("\n\n");
-        out.append("| Check | OK | Detail |\n");
-        out.append("| --- | :---: | --- |\n");
+        out.append("| Check | OK | Code | Latency Ms | Detail |\n");
+        out.append("| --- | :---: | --- | ---: | --- |\n");
         for (ReadinessCheck check : report.readiness().checks()) {
             out.append("| ").append(check.name())
                     .append(" | ").append(check.ok())
+                    .append(" | ").append(safeMd(check.code()))
+                    .append(" | ").append(check.latencyMs() == null ? "" : check.latencyMs())
                     .append(" | ").append(safeMd(check.detail()))
                     .append(" |\n");
         }
@@ -58,12 +60,19 @@ public class ReleaseReportService {
         out.append("## Models\n\n");
         out.append("- Default Provider: ").append(report.models().defaultProvider()).append("\n");
         out.append("- Default Model: ").append(report.models().defaultModel()).append("\n\n");
-        out.append("| Provider | Model | Default |\n");
-        out.append("| --- | --- | :---: |\n");
+        out.append("- Catalog Detail: ").append(safeMd(report.models().detail())).append("\n\n");
+        out.append("| Provider | Provider Id | API Style | Model | Available | Default |\n");
+        out.append("| --- | --- | --- | --- | :---: | :---: |\n");
         report.models().options().forEach(option -> out.append("| ")
                 .append(option.provider())
                 .append(" | ")
+                .append(safeMd(option.providerId()))
+                .append(" | ")
+                .append(safeMd(option.apiStyle()))
+                .append(" | ")
                 .append(safeMd(option.model()))
+                .append(" | ")
+                .append(option.available())
                 .append(" | ")
                 .append(option.isDefault())
                 .append(" |\n"));

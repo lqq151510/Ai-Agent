@@ -10,6 +10,8 @@ public record ChatStreamMeta(
         UUID sessionId,
         ModelProviderType provider,
         String model,
-        List<ToolExecutionResult> toolTraces
+        List<ToolExecutionResult> toolTraces,
+        String phase,
+        AgentExecutionDiagnostics execution
 ) {
 }

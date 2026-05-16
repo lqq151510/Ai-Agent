@@ -1,0 +1,104 @@
+server:
+  port: ${SERVER_PORT:18080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,logfile
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+    logfile:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 10s
+  datasource:
+    url: jdbc:h2:file:${app.data-dir:${user.home}/.ai-agent-desktop}/db;AUTO_SERVER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+    hikari:
+      maximum-pool-size: ${DESKTOP_DB_MAX_POOL_SIZE:4}
+      minimum-idle: ${DESKTOP_DB_MIN_IDLE:1}
+      connection-timeout: ${DESKTOP_DB_CONNECTION_TIMEOUT_MS:5000}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+  cache:
+    type: caffeine
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  h2:
+    console:
+      enabled: true
+      settings:
+        web-allow-others: false
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:desktop-local-secret-change-me-in-production}
+    access-exp-seconds: ${JWT_ACCESS_EXP_SECONDS:86400}
+    refresh-exp-seconds: ${JWT_REFRESH_EXP_SECONDS:2592000}
+
+app:
+  data-dir: ${app.data-dir:${user.home}/.ai-agent-desktop}
+  workspace-root: ${WORKSPACE_ROOT:${user.home}/.ai-agent-desktop/workspace}
+  desktop:
+    cache:
+      rate-limiter:
+        idle-ttl-minutes: ${DESKTOP_RATE_LIMITER_IDLE_TTL_MINUTES:2}
+        max-keys: ${DESKTOP_RATE_LIMITER_MAX_KEYS:10000}
+      session:
+        ttl-minutes: ${DESKTOP_SESSION_CACHE_TTL_MINUTES:5}
+        max-sessions: ${DESKTOP_SESSION_CACHE_MAX_SESSIONS:1000}
+  default-provider: ${MODEL_PROVIDER:OPENAI}
+  default-openai-model: ${OPENAI_MODEL:qwen/qwen3.5-9b}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:18080,http://127.0.0.1:18080}
+  model-runtime:
+    connect-timeout-ms: ${MODEL_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${MODEL_READ_TIMEOUT_MS:45000}
+    total-timeout-ms: ${MODEL_TOTAL_TIMEOUT_MS:300000}
+    idempotent-retries: ${MODEL_IDEMPOTENT_RETRIES:1}
+  rate-limit:
+    login-per-minute: ${LOGIN_RATE_LIMIT_PER_MIN:200}
+    register-per-minute: ${REGISTER_RATE_LIMIT_PER_MIN:100}
+    refresh-per-minute: ${REFRESH_RATE_LIMIT_PER_MIN:600}
+    chat-per-minute: ${CHAT_RATE_LIMIT_PER_MIN:600}
+    chat-premium-per-minute: ${CHAT_PREMIUM_RATE_LIMIT_PER_MIN:600}
+  startup-validation:
+    fail-fast: false
+    model-probe-timeout-ms: ${MODEL_PROBE_TIMEOUT_MS:3000}
+    model-probe-retries: ${MODEL_PROBE_RETRIES:1}
+  openai:
+    base-url: ${OPENAI_BASE_URL:http://10.115.10.220:1234/v1}
+    api-key: ${OPENAI_API_KEY:sk-placeholder}
+
+logging:
+  file:
+    name: ${LOG_FILE:${app.data-dir:${user.home}/.ai-agent-desktop}/logs/backend-desktop.log}
+  logback:
+    rollingpolicy:
+      max-file-size: ${LOG_MAX_FILE_SIZE:10MB}
+      max-history: ${LOG_MAX_HISTORY:5}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

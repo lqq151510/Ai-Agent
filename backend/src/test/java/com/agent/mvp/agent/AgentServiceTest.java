@@ -11,6 +11,7 @@ import com.agent.mvp.agent.tooling.AgentToolOrchestrator;
 import com.agent.mvp.agent.tooling.ToolCall;
 import com.agent.mvp.agent.tooling.ToolResult;
 import com.agent.mvp.agent.tooling.ToolSpec;
+import com.agent.mvp.config.AppProperties;
 import com.agent.mvp.session.dto.MessageResponse;
 import com.agent.mvp.session.entity.ConversationSession;
 import com.agent.mvp.session.service.SessionService;
@@ -49,6 +50,7 @@ class AgentServiceTest {
 
         assertEquals("final answer", response.reply());
         assertEquals(1, response.toolTraces().size());
+        assertEquals("completed", response.execution().stopReason());
         verify(f.modelGateway, times(2)).chat(eq(ModelProviderType.OPENAI), any());
         verify(f.sessionService, times(1)).saveMessage(eq(f.session), eq("tool"), eq("match"), any(), eq("OPENAI"), eq("gpt-test"));
     }
@@ -68,6 +70,7 @@ class AgentServiceTest {
         ChatResponse response = f.service.chat(f.userId, new ChatRequest(f.session.getId(), "loop", null, null));
 
         assertEquals("Stopped safely: reached max tool steps (4).", response.reply());
+        assertEquals("max_tool_steps_reached", response.execution().stopReason());
         verify(f.modelGateway, times(4)).chat(eq(ModelProviderType.OPENAI), any());
     }
 
@@ -85,8 +88,27 @@ class AgentServiceTest {
         assertEquals("Stopped safely: tool execution returned error.", response.reply());
         assertEquals(1, response.toolTraces().size());
         assertEquals("ERROR", response.toolTraces().get(0).status());
+        assertEquals("tool_error", response.execution().stopReason());
         verify(f.modelGateway, times(1)).chat(eq(ModelProviderType.OPENAI), any());
         verify(f.modelGateway, never()).stream(any(), any(), any());
+    }
+
+    @Test
+    void chatShouldUseConfiguredMaxToolSteps() {
+        Fixture f = new Fixture();
+        f.appProperties.getAgent().setMaxToolSteps(2);
+        ToolCall call = new ToolCall("call_overflow", "searchCode", "{\"query\":\"x\"}");
+        when(f.modelGateway.chat(eq(ModelProviderType.OPENAI), any()))
+                .thenReturn(new ModelChatResponse("", 8, List.of(call), "tool_calls"))
+                .thenReturn(new ModelChatResponse("", 8, List.of(call), "tool_calls"));
+        when(f.toolOrchestrator.execute(call))
+                .thenReturn(new ToolResult("call_overflow", "searchCode", "{\"query\":\"x\"}", "SUCCESS", 3, "ok"));
+
+        ChatResponse response = f.service.chat(f.userId, new ChatRequest(f.session.getId(), "loop", null, null));
+
+        assertEquals("Stopped safely: reached max tool steps (2).", response.reply());
+        assertEquals(2, response.execution().maxToolSteps());
+        verify(f.modelGateway, times(2)).chat(eq(ModelProviderType.OPENAI), any());
     }
 
     private static final class Fixture {
@@ -95,12 +117,14 @@ class AgentServiceTest {
         final ModelGateway modelGateway = mock(ModelGateway.class);
         final AgentToolOrchestrator toolOrchestrator = mock(AgentToolOrchestrator.class);
         final ToolAuditService toolAuditService = mock(ToolAuditService.class);
+        final AppProperties appProperties = new AppProperties();
         final AgentService service = new AgentService(
                 sessionService,
                 modelRoutingService,
                 modelGateway,
                 toolOrchestrator,
                 toolAuditService,
+                appProperties,
                 new ObjectMapper()
         );
         final UUID userId = UUID.randomUUID();

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { Session } from '../types';
-import { RadioTower, Search, MessageSquare, Clock } from 'lucide-react';
+import { RadioTower, Search, MessageSquare, Clock, Hash, Sparkles } from 'lucide-react';
 import { Card, CardContent } from './Card';
 
 interface ChatListProps {
@@ -26,6 +26,11 @@ export const ChatList: React.FC<ChatListProps> = ({ sessions, activeSessionId, o
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -66,9 +71,23 @@ export const ChatList: React.FC<ChatListProps> = ({ sessions, activeSessionId, o
                     {formatDate(s.updatedAt)}
                   </span>
                 </div>
+                <div className="session-card-subline">
+                  <span className="session-inline-meta">
+                    <Hash size={10} />
+                    {s.id.slice(0, 8)}
+                  </span>
+                  <span className="session-inline-meta">
+                    <Sparkles size={10} />
+                    {formatTime(s.updatedAt)}
+                  </span>
+                </div>
+                {s.summary || s.lastMessagePreview ? (
+                  <p className="session-summary">{s.summary || s.lastMessagePreview}</p>
+                ) : null}
                 <div className="session-card-meta">
                   <span className="meta-tag provider-tag">{s.provider}</span>
                   <span className="meta-tag model-tag">{s.model}</span>
+                  {s.taskCount ? <span className="meta-tag">{s.taskCount} tasks</span> : null}
                 </div>
               </CardContent>
             </Card>

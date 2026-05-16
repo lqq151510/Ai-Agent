@@ -26,6 +26,12 @@ export interface Session {
   model: string;
   createdAt: string;
   updatedAt: string;
+  summary?: string;
+  status?: string;
+  taskCount?: number;
+  lastMessagePreview?: string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface Message {
@@ -36,6 +42,10 @@ export interface Message {
   provider: string;
   model: string;
   createdAt: string;
+  status?: string;
+  requestId?: string;
+  latencyMs?: number;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ToolExecutionResult {
@@ -59,6 +69,21 @@ export interface ModelOption {
   provider: Provider;
   model: string;
   isDefault: boolean;
+  label?: string;
+  displayName?: string;
+  description?: string;
+  owner?: string;
+  family?: string;
+  endpoint?: string;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsTools?: boolean;
+  supportsStreaming?: boolean;
+  supportsReasoning?: boolean;
+  supportsVision?: boolean;
+  capabilities?: string[];
+  tags?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface ModelsResponse {
@@ -115,4 +140,6 @@ export interface ReleaseReportResponse {
   models: ModelsResponse;
   toolStats: ToolStatsResponse;
   generatedAt: string;
+  summary?: string;
+  metadata?: Record<string, unknown>;
 }

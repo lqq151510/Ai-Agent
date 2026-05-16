@@ -3,6 +3,7 @@ package com.agent.mvp.system.service;
 import com.agent.mvp.agent.ModelProviderType;
 import com.agent.mvp.system.dto.ModelOption;
 import com.agent.mvp.system.dto.ModelsResponse;
+import com.agent.mvp.system.dto.ProviderOption;
 import com.agent.mvp.system.dto.ReadinessCheck;
 import com.agent.mvp.system.dto.ReadinessResponse;
 import com.agent.mvp.system.dto.ReleaseReportResponse;
@@ -42,13 +43,17 @@ class ReleaseReportServiceTest {
 
         ReadinessResponse readiness = new ReadinessResponse(
                 true,
-                List.of(new ReadinessCheck("database", true, "ok")),
+                List.of(new ReadinessCheck("database", true, "ok", "OK", 12L, java.util.Map.of("query", "SELECT 1"))),
                 Instant.now()
         );
         ModelsResponse models = new ModelsResponse(
                 ModelProviderType.OPENAI,
                 "qwen/qwen3.5-9b",
-                List.of(new ModelOption(ModelProviderType.OPENAI, "qwen/qwen3.5-9b", true)),
+                List.of(new ProviderOption(ModelProviderType.OPENAI, "openai", "OpenAI Compatible", "chat.completions", true, true)),
+                List.of(new ModelOption(ModelProviderType.OPENAI, "qwen/qwen3.5-9b", true, "openai", "OpenAI Compatible", "chat.completions", true, true)),
+                1,
+                false,
+                "OpenAI-compatible endpoint reachable: discovered 1 model(s)",
                 Instant.now()
         );
         ToolStatsResponse stats = new ToolStatsResponse(
@@ -84,13 +89,17 @@ class ReleaseReportServiceTest {
 
         ReadinessResponse readiness = new ReadinessResponse(
                 true,
-                List.of(new ReadinessCheck("model", true, "ok")),
+                List.of(new ReadinessCheck("model", true, "ok", "OK", 8L, java.util.Map.of("provider", "openai"))),
                 Instant.now()
         );
         ModelsResponse models = new ModelsResponse(
                 ModelProviderType.OPENAI,
                 "qwen/qwen3.5-9b",
-                List.of(new ModelOption(ModelProviderType.OPENAI, "qwen/qwen3.5-9b", true)),
+                List.of(new ProviderOption(ModelProviderType.OPENAI, "openai", "OpenAI Compatible", "chat.completions", true, true)),
+                List.of(new ModelOption(ModelProviderType.OPENAI, "qwen/qwen3.5-9b", true, "openai", "OpenAI Compatible", "chat.completions", true, true)),
+                1,
+                false,
+                "OpenAI-compatible endpoint reachable: discovered 1 model(s)",
                 Instant.now()
         );
         ToolStatsResponse stats = new ToolStatsResponse(
@@ -118,5 +127,7 @@ class ReleaseReportServiceTest {
         assertTrue(markdown.contains("## Readiness"));
         assertTrue(markdown.contains("## Models"));
         assertTrue(markdown.contains("## Tool Stats"));
+        assertTrue(markdown.contains("Catalog Detail"));
+        assertTrue(markdown.contains("Latency Ms"));
     }
 }

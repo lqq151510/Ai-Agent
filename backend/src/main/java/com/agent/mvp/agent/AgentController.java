@@ -8,7 +8,7 @@ import com.agent.mvp.common.context.RequestContext;
 import com.agent.mvp.common.exception.TooManyRequestsException;
 import com.agent.mvp.common.exception.UnauthorizedException;
 import com.agent.mvp.config.AppProperties;
-import com.agent.mvp.infra.RedisRateLimiterService;
+import com.agent.mvp.infra.RateLimiterService;
 import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
 import org.slf4j.MDC;
@@ -43,47 +43,57 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class AgentController {
     private static final Logger log = LoggerFactory.getLogger(AgentController.class);
 
-    private static final long STREAM_TIMEOUT_MS = 300_000L;
     private static final Duration CHAT_RATE_LIMIT_WINDOW = Duration.ofMinutes(1);
-    private static final Duration HEARTBEAT_INTERVAL = Duration.ofSeconds(10);
 
     private final AgentService agentService;
-    private final RedisRateLimiterService rateLimiterService;
+    private final RateLimiterService rateLimiterService;
     private final AppProperties appProperties;
     private final AtomicInteger streamThreadCounter = new AtomicInteger();
-    private final ThreadPoolExecutor streamExecutor = new ThreadPoolExecutor(
-            4,
-            16,
-            60,
-            TimeUnit.SECONDS,
-            new ArrayBlockingQueue<>(64),
-            runnable -> {
-                Thread thread = new Thread(runnable, "agent-stream-" + streamThreadCounter.incrementAndGet());
-                thread.setDaemon(true);
-                return thread;
-            }
-    );
-    private final ScheduledExecutorService heartbeatExecutor = Executors.newScheduledThreadPool(
-            2,
-            runnable -> {
-                Thread thread = new Thread(runnable, "agent-heartbeat");
-                thread.setDaemon(true);
-                return thread;
-            }
-    );
+    private final AtomicInteger inFlightStreams = new AtomicInteger();
+    private final AtomicInteger rejectedStreams = new AtomicInteger();
+    private final ThreadPoolExecutor streamExecutor;
+    private final ScheduledExecutorService heartbeatExecutor;
 
     public AgentController(AgentService agentService,
-                           RedisRateLimiterService rateLimiterService,
+                           RateLimiterService rateLimiterService,
                            AppProperties appProperties,
                            MeterRegistry meterRegistry) {
         this.agentService = agentService;
         this.rateLimiterService = rateLimiterService;
         this.appProperties = appProperties;
+        int corePoolSize = Math.max(1, appProperties.getAgent().getStreamExecutorCorePoolSize());
+        int maxPoolSize = Math.max(corePoolSize, appProperties.getAgent().getStreamExecutorMaxPoolSize());
+        int queueCapacity = Math.max(1, appProperties.getAgent().getStreamExecutorQueueCapacity());
+        int heartbeatThreads = Math.max(1, appProperties.getAgent().getHeartbeatThreads());
+        this.streamExecutor = new ThreadPoolExecutor(
+                corePoolSize,
+                maxPoolSize,
+                60,
+                TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(queueCapacity),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "agent-stream-" + streamThreadCounter.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                }
+        );
+        this.heartbeatExecutor = Executors.newScheduledThreadPool(
+                heartbeatThreads,
+                runnable -> {
+                    Thread thread = new Thread(runnable, "agent-heartbeat");
+                    thread.setDaemon(true);
+                    return thread;
+                }
+        );
         Gauge.builder("agent.stream.executor.active", streamExecutor, ThreadPoolExecutor::getActiveCount)
                 .register(meterRegistry);
         Gauge.builder("agent.stream.executor.queue.size", streamExecutor, executor -> executor.getQueue().size())
                 .register(meterRegistry);
         Gauge.builder("agent.stream.executor.pool.size", streamExecutor, ThreadPoolExecutor::getPoolSize)
+                .register(meterRegistry);
+        Gauge.builder("agent.stream.inflight", inFlightStreams, AtomicInteger::get)
+                .register(meterRegistry);
+        Gauge.builder("agent.stream.rejected.total", rejectedStreams, AtomicInteger::get)
                 .register(meterRegistry);
     }
 
@@ -118,13 +128,14 @@ public class AgentController {
         MDC.put(RequestContext.USER_ID_KEY, user.userId().toString());
         MDC.put(RequestContext.SESSION_ID_KEY, request.sessionId().toString());
         enforceChatRateLimit(user);
-        SseEmitter emitter = new SseEmitter(STREAM_TIMEOUT_MS);
+        SseEmitter emitter = new SseEmitter(Math.max(30_000L, appProperties.getAgent().getStreamTimeoutMs()));
         AtomicBoolean done = new AtomicBoolean(false);
+        Duration heartbeatInterval = Duration.ofMillis(Math.max(1_000L, appProperties.getAgent().getHeartbeatIntervalMs()));
         ScheduledFuture<?> heartbeat = heartbeatExecutor.scheduleAtFixedRate(
                 () -> sendHeartbeat(emitter, done),
-                HEARTBEAT_INTERVAL.toSeconds(),
-                HEARTBEAT_INTERVAL.toSeconds(),
-                TimeUnit.SECONDS
+                heartbeatInterval.toMillis(),
+                heartbeatInterval.toMillis(),
+                TimeUnit.MILLISECONDS
         );
         emitter.onCompletion(() -> {
             done.set(true);
@@ -140,10 +151,13 @@ public class AgentController {
         });
 
         try {
+            inFlightStreams.incrementAndGet();
             streamExecutor.execute(() -> runStream(user, request, emitter, done, heartbeat));
         } catch (RejectedExecutionException ex) {
             done.set(true);
             heartbeat.cancel(true);
+            rejectedStreams.incrementAndGet();
+            inFlightStreams.decrementAndGet();
             throw new TooManyRequestsException("Too many concurrent stream requests");
         } finally {
             MDC.remove(RequestContext.USER_ID_KEY);
@@ -184,6 +198,7 @@ public class AgentController {
         } finally {
             done.set(true);
             heartbeat.cancel(true);
+            inFlightStreams.decrementAndGet();
         }
     }
 

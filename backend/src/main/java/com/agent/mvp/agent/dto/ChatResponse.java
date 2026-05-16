@@ -12,6 +12,7 @@ public record ChatResponse(
         String model,
         String reply,
         long latencyMs,
-        List<ToolExecutionResult> toolTraces
+        List<ToolExecutionResult> toolTraces,
+        AgentExecutionDiagnostics execution
 ) {
 }

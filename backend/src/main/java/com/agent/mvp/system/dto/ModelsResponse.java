@@ -8,8 +8,11 @@ import java.util.List;
 public record ModelsResponse(
         ModelProviderType defaultProvider,
         String defaultModel,
+        java.util.List<ProviderOption> providers,
         List<ModelOption> options,
+        int availableCount,
+        boolean fallbackUsed,
+        String detail,
         Instant timestamp
 ) {
 }
-

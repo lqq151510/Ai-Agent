@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import type { ModelOption, Provider, ToolStatsResponse } from '../types';
+import type { ModelOption, Provider, ReleaseReportResponse, Session, ToolStatsResponse } from '../types';
 import { defaultModel } from '../utils';
-import { Activity, Download, LogOut, MessageSquarePlus, Plus, RefreshCw, TrendingUp, Clock, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, Clock, Download, LogOut, MessageSquarePlus, Plus, RefreshCw, TrendingUp, Zap } from 'lucide-react';
 import { Card, CardContent, StatCard } from './Card';
 
 interface SettingsProps {
@@ -10,9 +10,13 @@ interface SettingsProps {
   modelOptions: ModelOption[];
   toolStats: ToolStatsResponse | null;
   toolStatsLoading: boolean;
+  releaseReport: ReleaseReportResponse | null;
+  releaseReportLoading: boolean;
   toolStatsWindowHours: number;
   toolStatsScope: 'session' | 'global';
   hasActiveSession: boolean;
+  activeSession: Session | null;
+  currentModelOption: ModelOption | null;
   onRefreshToolStats: () => void;
   onChangeToolStatsWindow: (hours: number) => void;
   onChangeToolStatsScope: (scope: 'session' | 'global') => void;
@@ -35,9 +39,13 @@ export const Settings: React.FC<SettingsProps> = ({
   modelOptions,
   toolStats,
   toolStatsLoading,
+  releaseReport,
+  releaseReportLoading,
   toolStatsWindowHours,
   toolStatsScope,
   hasActiveSession,
+  activeSession,
+  currentModelOption,
   onRefreshToolStats,
   onChangeToolStatsWindow,
   onChangeToolStatsScope,
@@ -72,6 +80,8 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const [createModel, setCreateModel] = useState(pickModel('OPENAI'));
   const providerModels = optionsByProvider[createProvider];
+  const failedChecks = releaseReport?.readiness.checks.filter(check => !check.ok) ?? [];
+  const sessionSummary = activeSession?.summary || activeSession?.lastMessagePreview || '当前会话的任务概览会显示在这里。';
 
   const maxBucketCount = useMemo(() => {
     if (!toolStats || toolStats.durationBuckets.length === 0) {
@@ -140,6 +150,36 @@ export const Settings: React.FC<SettingsProps> = ({
           <Plus size={16} />
           创建会话
         </button>
+      </section>
+      <section className="section workspace-context">
+        <div className="section-heading">
+          <CheckCircle2 size={16} />
+          <h3>工作区上下文</h3>
+        </div>
+        <Card className="workspace-context-card">
+          <CardContent>
+            <div className="workspace-context-head">
+              <span className={`scope-badge ${toolStatsScope === 'session' ? 'is-session' : 'is-global'}`}>
+                {toolStatsScope === 'session' ? 'Session Scope' : 'Global Scope'}
+              </span>
+              {activeSession ? <span className="context-session-id">#{activeSession.id.slice(0, 8)}</span> : null}
+            </div>
+            <h4>{activeSession?.title || '尚未选择会话'}</h4>
+            <p>{sessionSummary}</p>
+            <div className="workspace-context-meta">
+              <span>{activeSession?.provider || 'OPENAI'}</span>
+              <span>{activeSession?.model || currentModelOption?.displayName || '等待会话'}</span>
+              <span>{activeSession?.taskCount ? `${activeSession.taskCount} tasks` : hasActiveSession ? '1 active session' : '0 session'}</span>
+            </div>
+            {currentModelOption?.capabilities?.length ? (
+              <div className="context-capability-list">
+                {currentModelOption.capabilities.slice(0, 4).map(capability => (
+                  <span key={capability} className="capability-chip">{capability}</span>
+                ))}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
       </section>
       <section className="section tool-stats">
         <div className="section-heading">
@@ -243,6 +283,60 @@ export const Settings: React.FC<SettingsProps> = ({
             </Card>
           </div>
         )}
+        <Card className="diagnostics-card">
+          <CardContent>
+            <div className="diagnostics-card-head">
+              <h4 className="chart-title">诊断巡检</h4>
+              {releaseReportLoading ? (
+                <span className="diagnostics-state muted">更新中</span>
+              ) : releaseReport?.readiness.ready ? (
+                <span className="diagnostics-state diagnostics-ok">
+                  <CheckCircle2 size={13} />
+                  Ready
+                </span>
+              ) : (
+                <span className="diagnostics-state diagnostics-warn">
+                  <AlertTriangle size={13} />
+                  {releaseReport ? 'Needs Attention' : 'Unavailable'}
+                </span>
+              )}
+            </div>
+            <div className="diagnostics-copy">
+              <strong>
+                {releaseReport
+                  ? releaseReport.readiness.ready
+                    ? '当前巡检全部通过'
+                    : `${failedChecks.length} 项检查待处理`
+                  : '后端未返回巡检摘要，仍可继续聊天与导出。'}
+              </strong>
+              <p>
+                {releaseReport?.summary
+                  || failedChecks[0]?.detail
+                  || '使用右上导出按钮可获得完整 release report。'}
+              </p>
+            </div>
+            {releaseReport?.readiness.checks?.length ? (
+              <div className="diagnostics-check-list">
+                {releaseReport.readiness.checks.slice(0, 3).map(check => (
+                  <div key={check.name} className={`diagnostics-check ${check.ok ? 'ok' : 'warn'}`}>
+                    {check.ok ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+                    <span>{check.name}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="stats-export-row diagnostics-export-row">
+              <button type="button" className="ghost stat-export-btn" onClick={onExportReleaseReportJson} disabled={toolStatsLoading}>
+                <Download size={13} />
+                巡检 JSON
+              </button>
+              <button type="button" className="ghost stat-export-btn" onClick={onExportReleaseReportMarkdown} disabled={toolStatsLoading}>
+                <Download size={13} />
+                巡检 MD
+              </button>
+            </div>
+          </CardContent>
+        </Card>
       </section>
     </>
   );

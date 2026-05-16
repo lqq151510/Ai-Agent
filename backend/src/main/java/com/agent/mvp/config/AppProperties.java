@@ -15,6 +15,7 @@ public class AppProperties {
     private final Openai openai = new Openai();
     private final Cors cors = new Cors();
     private final ModelRuntime modelRuntime = new ModelRuntime();
+    private final Agent agent = new Agent();
     private final RateLimit rateLimit = new RateLimit();
     private final StartupValidation startupValidation = new StartupValidation();
 
@@ -54,12 +55,25 @@ public class AppProperties {
         return modelRuntime;
     }
 
+    public Agent getAgent() {
+        return agent;
+    }
+
     public RateLimit getRateLimit() {
         return rateLimit;
     }
 
     public StartupValidation getStartupValidation() {
         return startupValidation;
+    }
+
+    public String getDefaultModel(ModelProviderType provider) {
+        if (provider == null) {
+            return defaultOpenaiModel;
+        }
+        return switch (provider) {
+            case OPENAI -> defaultOpenaiModel;
+        };
     }
 
     public static class Openai {
@@ -134,6 +148,90 @@ public class AppProperties {
 
         public void setIdempotentRetries(int idempotentRetries) {
             this.idempotentRetries = idempotentRetries;
+        }
+    }
+
+    public static class Agent {
+        private int maxContextTokens = 6_000;
+        private int maxToolSteps = 4;
+        private boolean stopOnToolError = true;
+        private long streamTimeoutMs = 300_000;
+        private long heartbeatIntervalMs = 10_000;
+        private int streamExecutorCorePoolSize = 4;
+        private int streamExecutorMaxPoolSize = 16;
+        private int streamExecutorQueueCapacity = 64;
+        private int heartbeatThreads = 2;
+
+        public int getMaxContextTokens() {
+            return maxContextTokens;
+        }
+
+        public void setMaxContextTokens(int maxContextTokens) {
+            this.maxContextTokens = maxContextTokens;
+        }
+
+        public int getMaxToolSteps() {
+            return maxToolSteps;
+        }
+
+        public void setMaxToolSteps(int maxToolSteps) {
+            this.maxToolSteps = maxToolSteps;
+        }
+
+        public boolean isStopOnToolError() {
+            return stopOnToolError;
+        }
+
+        public void setStopOnToolError(boolean stopOnToolError) {
+            this.stopOnToolError = stopOnToolError;
+        }
+
+        public long getStreamTimeoutMs() {
+            return streamTimeoutMs;
+        }
+
+        public void setStreamTimeoutMs(long streamTimeoutMs) {
+            this.streamTimeoutMs = streamTimeoutMs;
+        }
+
+        public long getHeartbeatIntervalMs() {
+            return heartbeatIntervalMs;
+        }
+
+        public void setHeartbeatIntervalMs(long heartbeatIntervalMs) {
+            this.heartbeatIntervalMs = heartbeatIntervalMs;
+        }
+
+        public int getStreamExecutorCorePoolSize() {
+            return streamExecutorCorePoolSize;
+        }
+
+        public void setStreamExecutorCorePoolSize(int streamExecutorCorePoolSize) {
+            this.streamExecutorCorePoolSize = streamExecutorCorePoolSize;
+        }
+
+        public int getStreamExecutorMaxPoolSize() {
+            return streamExecutorMaxPoolSize;
+        }
+
+        public void setStreamExecutorMaxPoolSize(int streamExecutorMaxPoolSize) {
+            this.streamExecutorMaxPoolSize = streamExecutorMaxPoolSize;
+        }
+
+        public int getStreamExecutorQueueCapacity() {
+            return streamExecutorQueueCapacity;
+        }
+
+        public void setStreamExecutorQueueCapacity(int streamExecutorQueueCapacity) {
+            this.streamExecutorQueueCapacity = streamExecutorQueueCapacity;
+        }
+
+        public int getHeartbeatThreads() {
+            return heartbeatThreads;
+        }
+
+        public void setHeartbeatThreads(int heartbeatThreads) {
+            this.heartbeatThreads = heartbeatThreads;
         }
     }
 

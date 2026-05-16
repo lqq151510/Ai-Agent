@@ -7,7 +7,6 @@ import { MouseFx } from './components/MouseFx';
 import { ChatList } from './components/ChatList';
 import { MessageContainer } from './components/MessageContainer';
 import { Settings } from './components/Settings';
-import { LoadingSpinner } from './components/LoadingSpinner';
 import { useAuthStore } from './stores/authStore';
 import { useChatStore, type ErrorKind } from './stores/chatStore';
 import { useUiStore } from './stores/uiStore';
@@ -69,6 +68,13 @@ export function App() {
 
   const api = useMemo(() => createApiClient(API_BASE, { getTokens: () => useAuthStore.getState().tokens, setTokens: updateTokens }), [tokens]);
   const activeSession = useMemo(() => chat.sessions.find(s => s.id === chat.activeSessionId) ?? null, [chat.sessions, chat.activeSessionId]);
+  const currentModelOption = useMemo(
+    () =>
+      activeSession
+        ? ui.modelOptions.find(option => option.provider === activeSession.provider && option.model === activeSession.model) ?? null
+        : null,
+    [activeSession, ui.modelOptions]
+  );
 
   function applyError(raw: unknown): ErrorKind {
     const text = raw instanceof Error ? raw.message : String(raw);
@@ -110,6 +116,28 @@ export function App() {
     }
   }
 
+  async function loadReleaseReport(client = api, options: { windowHours?: number; scope?: 'session' | 'global'; sessionId?: string } = {}) {
+    ui.setReleaseReportLoading(true);
+    try {
+      const windowHours = options.windowHours ?? ui.toolStatsWindowHours;
+      const scope = options.scope ?? ui.toolStatsScope;
+      const rawSessionId = options.sessionId ?? chat.activeSessionId;
+      const scopedSessionId = scope === 'session' ? rawSessionId || undefined : undefined;
+      ui.setReleaseReport(await client.releaseReport(windowHours, scopedSessionId));
+    } catch {
+      ui.setReleaseReport(null);
+    } finally {
+      ui.setReleaseReportLoading(false);
+    }
+  }
+
+  async function refreshWorkspaceDiagnostics(client = api, options: { windowHours?: number; scope?: 'session' | 'global'; sessionId?: string } = {}) {
+    await Promise.allSettled([
+      loadToolStats(client, options),
+      loadReleaseReport(client, options)
+    ]);
+  }
+
   async function bootstrapAuth(client = api) {
     if (!useAuthStore.getState().tokens && client === api) return;
     chat.setLoading(true);
@@ -122,17 +150,18 @@ export function App() {
       if (!picked) {
         chat.setActiveSessionId('');
         chat.setMessages([]);
-        await loadToolStats(client, { sessionId: undefined });
+        await refreshWorkspaceDiagnostics(client, { sessionId: undefined });
         return;
       }
       chat.setActiveSessionId(picked.id);
       chat.setMessages(await client.listMessages(picked.id));
-      await loadToolStats(client, { sessionId: picked.id });
+      await refreshWorkspaceDiagnostics(client, { sessionId: picked.id });
     } catch (e) {
       updateTokens(null);
       clearAuth();
       chat.resetChat();
       ui.setToolStats(null);
+      ui.setReleaseReport(null);
       applyError(e);
     } finally {
       chat.setLoading(false);
@@ -173,11 +202,11 @@ export function App() {
       if (list.length === 0) {
         chat.setActiveSessionId('');
         chat.setMessages([]);
-        await loadToolStats(authedApi, { sessionId: undefined });
+        await refreshWorkspaceDiagnostics(authedApi, { sessionId: undefined });
       } else {
         chat.setActiveSessionId(list[0].id);
         chat.setMessages(await authedApi.listMessages(list[0].id));
-        await loadToolStats(authedApi, { sessionId: list[0].id });
+        await refreshWorkspaceDiagnostics(authedApi, { sessionId: list[0].id });
       }
       setPassword('');
       chat.setStreamState('idle');
@@ -195,12 +224,12 @@ export function App() {
     if (!picked) {
       chat.setActiveSessionId('');
       chat.setMessages([]);
-      await loadToolStats(api, { sessionId: undefined });
+      await refreshWorkspaceDiagnostics(api, { sessionId: undefined });
       return;
     }
     chat.setActiveSessionId(picked.id);
     chat.setMessages(await api.listMessages(picked.id));
-    await loadToolStats(api, { sessionId: picked.id });
+    await refreshWorkspaceDiagnostics(api, { sessionId: picked.id });
   }
 
   async function onCreateSession(provider: Provider, model: string, title?: string) {
@@ -222,7 +251,7 @@ export function App() {
     chat.setLoading(true);
     try {
       chat.setMessages(await api.listMessages(sessionId));
-      await loadToolStats(api, { sessionId });
+      await refreshWorkspaceDiagnostics(api, { sessionId });
     } catch (e) {
       applyError(e);
     } finally {
@@ -404,12 +433,16 @@ export function App() {
               modelOptions={ui.modelOptions}
               toolStats={ui.toolStats}
               toolStatsLoading={ui.toolStatsLoading}
+              releaseReport={ui.releaseReport}
+              releaseReportLoading={ui.releaseReportLoading}
               toolStatsWindowHours={ui.toolStatsWindowHours}
               toolStatsScope={ui.toolStatsScope}
               hasActiveSession={!!chat.activeSessionId}
-              onRefreshToolStats={() => { void loadToolStats(api, { sessionId: chat.activeSessionId || undefined }); }}
-              onChangeToolStatsWindow={hours => { ui.setToolStatsWindowHours(hours); void loadToolStats(api, { windowHours: hours, sessionId: chat.activeSessionId || undefined }); }}
-              onChangeToolStatsScope={scope => { ui.setToolStatsScope(scope); void loadToolStats(api, { scope, sessionId: chat.activeSessionId || undefined }); }}
+              activeSession={activeSession}
+              currentModelOption={currentModelOption}
+              onRefreshToolStats={() => { void refreshWorkspaceDiagnostics(api, { sessionId: chat.activeSessionId || undefined }); }}
+              onChangeToolStatsWindow={hours => { ui.setToolStatsWindowHours(hours); void refreshWorkspaceDiagnostics(api, { windowHours: hours, sessionId: chat.activeSessionId || undefined }); }}
+              onChangeToolStatsScope={scope => { ui.setToolStatsScope(scope); void refreshWorkspaceDiagnostics(api, { scope, sessionId: chat.activeSessionId || undefined }); }}
               onExportToolStatsJson={() => { void onExportToolStats('json'); }}
               onExportToolStatsMarkdown={() => { void onExportToolStats('markdown'); }}
               onExportReleaseReportJson={() => { void onExportReleaseReport('json'); }}
@@ -428,6 +461,12 @@ export function App() {
             error={chat.error}
             streamState={chat.streamState}
             exporting={chat.exporting}
+            currentModelOption={currentModelOption}
+            toolStats={ui.toolStats}
+            toolStatsScope={ui.toolStatsScope}
+            toolStatsLoading={ui.toolStatsLoading}
+            releaseReport={ui.releaseReport}
+            diagnosticsLoading={ui.releaseReportLoading}
             canRetry={!!chat.lastFailedMessage && !chat.sending && chat.errorKind !== 'rate_limit'}
             errorActionLabel={
               chat.errorKind === 'auth_expired'
