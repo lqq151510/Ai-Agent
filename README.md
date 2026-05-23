@@ -6,6 +6,23 @@ This repo delivers a runnable Beta stack:
 - `cli`: Java Picocli client (`chat` and `stream-chat`)
 - `docker-compose`: one-command single-host deployment with PostgreSQL + Redis
 
+## AI + Java Dev Coach MVP
+
+The product now includes a first-pass "AI + Java development cockpit" for students and Java AI developers:
+
+- Requirement breakdown: turns a raw feature idea into goal, modules, data structures, APIs, risks, and test points.
+- Java AI scaffold generator: creates deterministic Spring Boot starter ZIPs with previewable file trees.
+- Log diagnosis: turns logs into symptom, root cause, trigger condition, minimal fix, and verification steps.
+- Coach history: stores recent coach runs so solved problems become searchable engineering memory.
+
+Scaffold presets:
+
+- `spring-ai-rag-starter`
+- `langchain4j-agent-starter`
+- `spring-boot-agent-basic`
+
+Generated ZIP artifacts are stored under `var/coach-artifacts/` and are ignored by git.
+
 ## Beta One-Command Delivery
 
 ### 1) Prepare environment
@@ -125,6 +142,13 @@ SMOKE_RENDER_PDF=true ./scripts/smoke.sh dev
 ### Agent
 - `POST /api/agent/chat`
 - `POST /api/agent/chat/stream` (SSE, includes `event: heartbeat`)
+
+### Dev Coach
+- `POST /api/coach/requirements/breakdown`
+- `POST /api/coach/scaffolds`
+- `GET /api/coach/scaffolds/{id}/download`
+- `POST /api/coach/logs/diagnose`
+- `GET /api/coach/runs`
 
 ### System
 - `GET /api/system/models`

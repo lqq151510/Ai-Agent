@@ -1,9 +1,13 @@
 import type {
   ApiError,
   ChatResponse,
+  CoachRunResponse,
+  LogDiagnosisResponse,
   Message,
   ModelsResponse,
+  RequirementBreakdownResponse,
   ReleaseReportResponse,
+  ScaffoldResponse,
   SessionExportResponse,
   Session,
   ToolStatsResponse,
@@ -34,6 +38,26 @@ type ChatInput = {
   message: string;
   provider?: 'OPENAI';
   model?: string;
+};
+
+type RequirementBreakdownInput = {
+  requirement: string;
+  provider?: 'OPENAI';
+  model?: string;
+};
+
+type LogDiagnosisInput = {
+  logContent: string;
+  context?: string;
+  provider?: 'OPENAI';
+  model?: string;
+};
+
+type ScaffoldInput = {
+  preset: string;
+  projectName: string;
+  basePackage: string;
+  description?: string;
 };
 
 type StreamHandlers = {
@@ -155,6 +179,30 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     }
 
     return payload as T;
+  }
+
+  async function downloadBlob(path: string, allowRetry = true): Promise<Blob> {
+    const headers = new Headers();
+    const accessToken = tokenAccessor.getTokens()?.accessToken;
+    if (accessToken) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
+    }
+
+    const response = await fetch(`${safeBaseUrl}${path}`, { headers });
+
+    if (response.status === 401 && allowRetry) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        return downloadBlob(path, false);
+      }
+    }
+
+    if (!response.ok) {
+      const payload = await parseBody(response);
+      throw new Error(toErrorMessage(payload, response.status));
+    }
+
+    return response.blob();
   }
 
   async function parseSseStream(body: ReadableStream<Uint8Array>, handlers: StreamHandlers) {
@@ -358,6 +406,37 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
 
     streamChat(input: ChatInput, handlers: StreamHandlers) {
       return streamChatRequest(input, handlers);
+    },
+
+    breakdownRequirement(input: RequirementBreakdownInput) {
+      return request<RequirementBreakdownResponse>('/api/v1/coach/requirements/breakdown', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }, true);
+    },
+
+    diagnoseLog(input: LogDiagnosisInput) {
+      return request<LogDiagnosisResponse>('/api/v1/coach/logs/diagnose', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }, true);
+    },
+
+    createScaffold(input: ScaffoldInput) {
+      return request<ScaffoldResponse>('/api/v1/coach/scaffolds', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }, true);
+    },
+
+    listCoachRuns(limit = 20) {
+      return request<CoachRunResponse[]>(`/api/v1/coach/runs?limit=${limit}`, { method: 'GET' }, true);
+    },
+
+    downloadScaffold(runId: string) {
+      return downloadBlob(`/api/v1/coach/scaffolds/${runId}/download`);
     }
   };
 }
+
+export type ApiClient = ReturnType<typeof createApiClient>;

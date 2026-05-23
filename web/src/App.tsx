@@ -1,11 +1,12 @@
 import { useEffect, useMemo } from 'react';
-import { Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useParams, Navigate, useLocation } from 'react-router-dom';
 import { createApiClient } from './api';
 import type { ModelOption, Provider, Session, Tokens } from './types';
 import { defaultModel } from './utils';
 import { AuthPanel } from './components/AuthPanel';
 import { MouseFx } from './components/MouseFx';
 import { ChatList } from './components/ChatList';
+import { CoachWorkspace } from './components/CoachWorkspace';
 import { MessageContainer } from './components/MessageContainer';
 import { Settings } from './components/Settings';
 import { useAuthStore } from './stores/authStore';
@@ -48,6 +49,7 @@ export function App() {
   const chat = useChatStore();
   const ui = useUiStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const { urlSessionId } = useParams<{ urlSessionId: string }>();
 
   useEffect(() => {
@@ -278,6 +280,7 @@ export function App() {
 
   useEffect(() => {
     if (!tokens || !user) return;
+    if (location.pathname.startsWith('/coach') || location.pathname === '/login') return;
     if (urlSessionId) {
       if (urlSessionId !== chat.activeSessionId) {
         void selectSession(urlSessionId);
@@ -288,7 +291,7 @@ export function App() {
         navigate(`/chat/sessions/${targetId}`, { replace: true });
       }
     }
-  }, [urlSessionId, chat.sessions, tokens, user]);
+  }, [urlSessionId, chat.sessions, tokens, user, location.pathname]);
 
   async function sendMessage(outgoing: string) {
     if (!chat.activeSessionId || !outgoing.trim()) return;
@@ -524,6 +527,11 @@ export function App() {
       <button className="ghost fx-toggle" type="button" onClick={toggleEffects}>
         {ui.effectsEnabled ? '动态效果: 开' : '动态效果: 关'}
       </button>
+      {tokens && user ? (
+        <button className="ghost coach-launch" type="button" onClick={() => navigate('/coach')}>
+          开发陪跑
+        </button>
+      ) : null}
       <Routes>
         <Route path="/login" element={
           !tokens || !user ? (
@@ -548,6 +556,9 @@ export function App() {
         } />
         <Route path="/chat/sessions/:urlSessionId" element={
           tokens && user ? renderWorkspace() : <Navigate to="/login" replace />
+        } />
+        <Route path="/coach" element={
+          tokens && user ? <CoachWorkspace api={api} onBack={() => navigate('/')} /> : <Navigate to="/login" replace />
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
