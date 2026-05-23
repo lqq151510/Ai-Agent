@@ -1,15 +1,25 @@
 package com.agent.mvp;
 
-import com.agent.mvp.config.AppProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
-@EnableConfigurationProperties(AppProperties.class)
+@ConfigurationPropertiesScan
 public class AgentBackendApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(AgentBackendApplication.class, args);
+        SpringApplication app = new SpringApplication(AgentBackendApplication.class);
+
+        for (int i = 0; i < args.length; i++) {
+            if ("--port".equals(args[i]) && i + 1 < args.length) {
+                app.setDefaultProperties(java.util.Map.of("server.port", args[i + 1]));
+            }
+            if ("--data-dir".equals(args[i]) && i + 1 < args.length) {
+                app.setDefaultProperties(java.util.Map.of("app.data-dir", args[i + 1]));
+            }
+        }
+
+        app.run(args);
     }
 }

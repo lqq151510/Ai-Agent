@@ -2,6 +2,7 @@ package com.agent.mvp.auth;
 
 import com.agent.mvp.auth.dto.LoginRequest;
 import com.agent.mvp.auth.dto.RefreshRequest;
+import com.agent.mvp.auth.dto.LogoutRequest;
 import com.agent.mvp.auth.dto.RegisterRequest;
 import com.agent.mvp.auth.dto.TokenResponse;
 import com.agent.mvp.auth.dto.UserProfileResponse;
@@ -11,10 +12,12 @@ import com.agent.mvp.common.context.RequestContext;
 import com.agent.mvp.common.exception.TooManyRequestsException;
 import com.agent.mvp.common.exception.UnauthorizedException;
 import com.agent.mvp.config.AppProperties;
-import com.agent.mvp.infra.RedisRateLimiterService;
+import com.agent.mvp.infra.RateLimiterService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.MDC;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,15 +28,15 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Duration;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 public class AuthController {
 
     private final AuthService authService;
-    private final RedisRateLimiterService rateLimiterService;
+    private final RateLimiterService rateLimiterService;
     private final AppProperties appProperties;
 
     public AuthController(AuthService authService,
-                          RedisRateLimiterService rateLimiterService,
+                          RateLimiterService rateLimiterService,
                           AppProperties appProperties) {
         this.authService = authService;
         this.rateLimiterService = rateLimiterService;
@@ -82,6 +85,17 @@ public class AuthController {
             throw new TooManyRequestsException("Too many refresh attempts");
         }
         return authService.refresh(request.refreshToken());
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@Valid @RequestBody LogoutRequest request, HttpServletRequest httpRequest) {
+        String authorization = httpRequest.getHeader(HttpHeaders.AUTHORIZATION);
+        String accessToken = null;
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            accessToken = authorization.substring(7);
+        }
+        authService.logout(accessToken, request.refreshToken());
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/me")

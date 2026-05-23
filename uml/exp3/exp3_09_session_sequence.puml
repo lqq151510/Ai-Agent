@@ -1,0 +1,17 @@
+@startuml
+autonumber
+actor "用户" as User
+participant "SessionController" as C
+participant "SessionService" as S
+participant "ConversationSessionRepository" as R
+participant "MessageRepository" as M
+
+User -> C : createSession()/listSessions()/exportSession()
+C -> S : validate request
+S -> R : save/find sessions
+S -> M : load or export messages
+R --> S : session data
+M --> S : message data
+S --> C : SessionResponse / export file
+C --> User : 会话列表 / 导出结果
+@enduml

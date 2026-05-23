@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/system")
+@RequestMapping("/api/v1/system")
 public class ReleaseReportController {
 
     private final ReleaseReportService releaseReportService;

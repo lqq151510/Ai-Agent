@@ -36,7 +36,7 @@ public class CreateSessionCommand implements Runnable {
             payload.put("model", model);
         }
 
-        Map<String, Object> res = root.apiClient().postAuthenticated("/api/sessions", payload, state, store);
+        Map<String, Object> res = root.apiClient().postAuthenticated("/api/v1/sessions", payload, state, store);
 
         String sessionId = String.valueOf(res.get("id"));
         state.setActiveSessionId(sessionId);

@@ -209,7 +209,7 @@ public class ApiClient {
         }
 
         HttpResponse<String> response = sendPostString(
-                "/api/auth/refresh",
+                "/api/v1/auth/refresh",
                 Map.of("refreshToken", state.getRefreshToken()),
                 null
         );

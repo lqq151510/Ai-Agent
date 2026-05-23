@@ -1,0 +1,33 @@
+@startuml
+left to right direction
+skinparam componentStyle rectangle
+
+rectangle "Web 前端" as Web
+rectangle "CLI 客户端" as Cli
+rectangle "Spring Boot Backend" as Backend {
+  [Auth / Session] as Auth
+  [Agent Service] as Agent
+  [System Diagnostics] as Sys
+  [Tool Audit] as Audit
+  [Model Gateway] as Model
+}
+database "PostgreSQL" as Pg
+cloud "Redis" as Redis
+cloud "OpenAI Compatible / Local Model" as Llm
+
+Web --> Auth
+Web --> Agent
+Web --> Sys
+Cli --> Auth
+Cli --> Agent
+Cli --> Sys
+Auth --> Pg
+Auth --> Redis
+Agent --> Pg
+Agent --> Redis
+Agent --> Model
+Sys --> Pg
+Sys --> Redis
+Audit --> Pg
+Model --> Llm
+@enduml

@@ -1,0 +1,34 @@
+@startuml
+autonumber
+actor "用户" as User
+participant "Web/CLI 页面" as UI
+participant "AgentController" as C
+participant "AgentService" as S
+participant "SessionService" as Sess
+participant "ModelGateway" as M
+participant "AgentToolOrchestrator" as T
+participant "ToolAuditService" as A
+database "PostgreSQL" as Pg
+
+User -> UI : 输入问题并发送
+UI -> C : POST /api/agent/chat 或 /stream
+C -> S : chat()/streamChat()
+S -> Sess : findOwnedSession()
+S -> Sess : listRecentMessages()
+S -> M : 调用模型并附带工具定义
+M --> S : 文本回复/工具调用
+alt 需要工具调用
+  S -> T : execute(toolCall)
+  T --> S : tool result
+  S -> Sess : saveMessage(assistant/tool)
+  S -> A : saveAll(traces)
+  A -> Pg : insert tool_audits
+else 纯文本回复
+  S -> Sess : saveMessage(assistant)
+end
+S -> Sess : save最终回复
+Sess -> Pg : insert messages / update sessions
+S --> C : ChatResponse
+C --> UI : 返回或流式输出
+UI --> User : 展示回答
+@enduml

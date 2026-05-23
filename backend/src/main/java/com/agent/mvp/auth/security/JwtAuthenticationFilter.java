@@ -20,9 +20,11 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService) {
         this.jwtService = jwtService;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Override
@@ -37,13 +39,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return true;
         }
 
-        if (!path.startsWith("/api/auth")) {
+        if (!path.startsWith("/api/v1/auth")) {
             return false;
         }
 
-        return path.equals("/api/auth/login")
-                || path.equals("/api/auth/register")
-                || path.equals("/api/auth/refresh");
+        return path.equals("/api/v1/auth/login")
+                || path.equals("/api/v1/auth/register")
+                || path.equals("/api/v1/auth/refresh")
+                || path.equals("/api/v1/auth/logout");
     }
 
     @Override
@@ -59,6 +62,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authorization.substring(7);
 
         try {
+            if (tokenBlacklistService.isBlacklisted(token)) {
+                throw new UnauthorizedException("Token has been revoked");
+            }
+
             if (!jwtService.isAccessToken(token)) {
                 throw new UnauthorizedException("Access token required");
             }

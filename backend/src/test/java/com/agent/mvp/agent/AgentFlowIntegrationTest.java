@@ -106,7 +106,7 @@ class AgentFlowIntegrationTest {
         String password = "Passw0rd123";
 
         ResponseEntity<Map<String, Object>> register = postJson(
-                "/api/auth/register",
+                "/api/v1/auth/register",
                 Map.of("email", email, "password", password),
                 null,
                 new ParameterizedTypeReference<>() {}
@@ -115,7 +115,7 @@ class AgentFlowIntegrationTest {
         assertNotNull(register.getBody());
 
         ResponseEntity<Map<String, Object>> login = postJson(
-                "/api/auth/login",
+                "/api/v1/auth/login",
                 Map.of("email", email, "password", password),
                 null,
                 new ParameterizedTypeReference<>() {}
@@ -126,7 +126,7 @@ class AgentFlowIntegrationTest {
         assertFalse(accessToken.isBlank());
 
         ResponseEntity<Map<String, Object>> createSession = postJson(
-                "/api/sessions",
+                "/api/v1/sessions",
                 Map.of("title", "IT Session", "provider", "OPENAI", "model", "mock-model"),
                 accessToken,
                 new ParameterizedTypeReference<>() {}
@@ -136,7 +136,7 @@ class AgentFlowIntegrationTest {
         String sessionId = String.valueOf(createSession.getBody().get("id"));
 
         ResponseEntity<Map<String, Object>> chat = postJson(
-                "/api/agent/chat",
+                "/api/v1/agent/chat",
                 Map.of("sessionId", sessionId, "message", "hello integration"),
                 accessToken,
                 new ParameterizedTypeReference<>() {}
@@ -146,7 +146,7 @@ class AgentFlowIntegrationTest {
         assertEquals("mock-openai-reply", String.valueOf(chat.getBody().get("reply")));
 
         ResponseEntity<List<Map<String, Object>>> messagesResponse = getJson(
-                "/api/sessions/" + sessionId + "/messages",
+                "/api/v1/sessions/" + sessionId + "/messages",
                 accessToken,
                 new ParameterizedTypeReference<>() {}
         );
@@ -168,14 +168,14 @@ class AgentFlowIntegrationTest {
         String password = "Passw0rd123";
 
         postJson(
-                "/api/auth/register",
+                "/api/v1/auth/register",
                 Map.of("email", email, "password", password),
                 null,
                 new ParameterizedTypeReference<>() {}
         );
 
         ResponseEntity<Map<String, Object>> login = postJson(
-                "/api/auth/login",
+                "/api/v1/auth/login",
                 Map.of("email", email, "password", password),
                 null,
                 new ParameterizedTypeReference<>() {}
@@ -183,7 +183,7 @@ class AgentFlowIntegrationTest {
         String accessToken = String.valueOf(login.getBody().get("accessToken"));
 
         ResponseEntity<Map<String, Object>> createSession = postJson(
-                "/api/sessions",
+                "/api/v1/sessions",
                 Map.of("title", "IT Stream Session", "provider", "OPENAI", "model", "mock-model"),
                 accessToken,
                 new ParameterizedTypeReference<>() {}
@@ -199,7 +199,7 @@ class AgentFlowIntegrationTest {
         );
 
         ResponseEntity<String> streamResponse = restTemplate.exchange(
-                url("/api/agent/chat/stream"),
+                url("/api/v1/agent/chat/stream"),
                 HttpMethod.POST,
                 request,
                 String.class

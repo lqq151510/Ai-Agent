@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @RestController
-@RequestMapping("/api/agent")
+@RequestMapping("/api/v1/agent")
 public class AgentController {
     private static final Logger log = LoggerFactory.getLogger(AgentController.class);
 

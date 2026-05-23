@@ -32,14 +32,15 @@ spring:
       connection-timeout: ${DESKTOP_DB_CONNECTION_TIMEOUT_MS:5000}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
         format_sql: false
         dialect: org.hibernate.dialect.H2Dialect
   flyway:
-    enabled: false
+    enabled: true
+    locations: classpath:db/h2
   cache:
     type: caffeine
   autoconfigure:

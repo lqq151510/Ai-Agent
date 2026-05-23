@@ -20,3 +20,9 @@ env/*.env
 
 # CLI local state
 .cli-state/
+
+# Desktop build artifacts
+desktop/node_modules/
+desktop/dist/
+desktop/release/
+desktop/backend-jre/

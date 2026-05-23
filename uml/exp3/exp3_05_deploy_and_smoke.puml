@@ -1,0 +1,18 @@
+@startuml
+start
+:准备 env/dev.env;
+:执行 deploy.sh;
+:启动 backend / web / redis / postgres;
+:检查 /api/system/health/ready;
+if (ready?) then (yes)
+  :执行 smoke.sh;
+  :注册 -> 登录 -> 创建会话;
+  :调用 stream-chat;
+  :导出 session / tool-stats / release-report;
+  :保存 artifacts/smoke/;
+  stop
+else (no)
+  :查看 readiness / 模型 / 数据库 / Redis 错误;
+  stop
+endif
+@enduml

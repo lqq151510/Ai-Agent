@@ -48,7 +48,7 @@ public class ToolStatsCommand implements Runnable {
 
         if (markdown) {
             String payload = root.apiClient().getStringAuthenticated(
-                    "/api/system/tool-stats/export?" + query + "&format=markdown",
+                    "/api/v1/system/tool-stats/export?" + query + "&format=markdown",
                     state,
                     store
             );
@@ -57,7 +57,7 @@ public class ToolStatsCommand implements Runnable {
         }
 
         Map<String, Object> stats = root.apiClient().getAuthenticated(
-                "/api/system/tool-stats?" + query,
+                "/api/v1/system/tool-stats?" + query,
                 state,
                 store
         );

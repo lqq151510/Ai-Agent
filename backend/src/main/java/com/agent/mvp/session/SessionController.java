@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/sessions")
+@RequestMapping("/api/v1/sessions")
 public class SessionController {
 
     private final SessionService sessionService;
@@ -45,10 +45,13 @@ public class SessionController {
     }
 
     @GetMapping
-    public List<SessionResponse> listSessions(Authentication authentication) {
+    public List<SessionResponse> listSessions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         AuthenticatedUser user = requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
-            return sessionService.listSessions(user.userId());
+            return sessionService.listSessions(user.userId(), page, size);
         }
     }
 

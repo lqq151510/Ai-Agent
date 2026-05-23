@@ -1,0 +1,20 @@
+@startuml
+autonumber
+actor "用户" as User
+participant "ToolStatsController" as C
+participant "ToolStatsService" as S
+participant "ToolAuditRepository" as R
+participant "SystemDiagnosticsService" as D
+
+User -> C : GET /api/system/tool-stats
+C -> S : aggregate stats
+S -> R : query tool_audits
+R --> S : audit rows
+S --> C : tool stats
+C --> User : statistics view
+
+User -> C : GET /api/system/health/ready
+C -> D : check ready state
+D --> C : database / redis / model status
+C --> User : health result
+@enduml

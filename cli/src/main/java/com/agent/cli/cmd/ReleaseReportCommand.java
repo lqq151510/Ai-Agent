@@ -48,7 +48,7 @@ public class ReleaseReportCommand implements Runnable {
 
         if (markdown) {
             String payload = root.apiClient().getStringAuthenticated(
-                    "/api/system/release-report/export?" + query + "&format=markdown",
+                    "/api/v1/system/release-report/export?" + query + "&format=markdown",
                     state,
                     store
             );
@@ -57,7 +57,7 @@ public class ReleaseReportCommand implements Runnable {
         }
 
         Map<String, Object> report = root.apiClient().getAuthenticated(
-                "/api/system/release-report?" + query,
+                "/api/v1/system/release-report?" + query,
                 state,
                 store
         );

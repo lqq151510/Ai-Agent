@@ -6,7 +6,7 @@ import com.agent.mvp.auth.repo.UserRepository;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.config.AppProperties;
-import com.agent.mvp.infra.RedisSessionCacheService;
+import com.agent.mvp.infra.SessionCacheService;
 import com.agent.mvp.session.dto.CreateSessionRequest;
 import com.agent.mvp.session.dto.MessageResponse;
 import com.agent.mvp.session.dto.SessionExportResponse;
@@ -33,13 +33,13 @@ public class SessionService {
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final AppProperties appProperties;
-    private final RedisSessionCacheService cacheService;
+    private final SessionCacheService cacheService;
 
     public SessionService(ConversationSessionRepository sessionRepository,
                           MessageRepository messageRepository,
                           UserRepository userRepository,
                           AppProperties appProperties,
-                          RedisSessionCacheService cacheService) {
+                          SessionCacheService cacheService) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
@@ -73,8 +73,8 @@ public class SessionService {
     }
 
     @Transactional(readOnly = true)
-    public List<SessionResponse> listSessions(UUID userId) {
-        return sessionRepository.findByUser_IdOrderByUpdatedAtDesc(userId)
+    public List<SessionResponse> listSessions(UUID userId, int page, int size) {
+        return sessionRepository.findByUser_IdOrderByUpdatedAtDesc(userId, PageRequest.of(Math.max(0, page), Math.max(1, size)))
                 .stream()
                 .map(this::toResponse)
                 .toList();

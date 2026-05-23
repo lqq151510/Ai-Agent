@@ -2,8 +2,10 @@ package com.agent.mvp.config;
 
 import com.agent.mvp.infra.CaffeineRateLimiterService;
 import com.agent.mvp.infra.CaffeineSessionCacheService;
+import com.agent.mvp.infra.CaffeineTokenBlacklistService;
 import com.agent.mvp.infra.RateLimiterService;
 import com.agent.mvp.infra.SessionCacheService;
+import com.agent.mvp.infra.TokenBlacklistService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -43,5 +45,12 @@ public class DesktopCacheConfig {
             @Value("${app.desktop.cache.session.max-sessions:1000}") long maxSessions
     ) {
         return new CaffeineSessionCacheService(desktopSessionCacheTtl, maxSessions);
+    }
+
+    @Bean
+    public TokenBlacklistService tokenBlacklistService(
+            @Value("${app.desktop.cache.blacklist.max-keys:10000}") long maxKeys
+    ) {
+        return new CaffeineTokenBlacklistService(maxKeys);
     }
 }

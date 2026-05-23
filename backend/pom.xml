@@ -158,10 +158,6 @@
                                 </exclude>
                                 <exclude>
                                     <groupId>org.flywaydb</groupId>
-                                    <artifactId>flyway-core</artifactId>
-                                </exclude>
-                                <exclude>
-                                    <groupId>org.flywaydb</groupId>
                                     <artifactId>flyway-database-postgresql</artifactId>
                                 </exclude>
                                 <exclude>

@@ -63,7 +63,7 @@ public class StreamChatCommand implements Runnable {
         System.out.println("[status] connecting stream...");
 
         try {
-            root.apiClient().streamAuthenticated("/api/agent/chat/stream", payload, state, store, (event, data) -> {
+            root.apiClient().streamAuthenticated("/api/v1/agent/chat/stream", payload, state, store, (event, data) -> {
                 switch (event) {
                     case "meta" -> printMeta(data);
                     case "chunk" -> {

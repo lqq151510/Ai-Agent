@@ -1,0 +1,20 @@
+@startuml
+autonumber
+actor "用户" as User
+participant "ReleaseReportController" as C
+participant "ReleaseReportService" as S
+participant "SystemDiagnosticsService" as D
+participant "ToolStatsService" as T
+participant "ModelGateway" as M
+
+User -> C : GET /api/system/release-report
+C -> S : build report
+S -> D : collect readiness and model checks
+S -> T : collect tool stats
+S -> M : collect provider/model info
+D --> S : diagnostics
+T --> S : statistics
+M --> S : model summary
+S --> C : ReleaseReportResponse
+C --> User : report / export data
+@enduml

@@ -1,0 +1,51 @@
+@startuml
+hide methods
+skinparam classAttributeIconSize 0
+
+class users {
+  +id: UUID
+  +email: VARCHAR(255)
+  +password_hash: VARCHAR(255)
+  +token_version: INTEGER
+  +created_at: TIMESTAMPTZ
+}
+
+class conversation_sessions {
+  +id: UUID
+  +user_id: UUID
+  +title: VARCHAR(120)
+  +provider: VARCHAR(32)
+  +model: VARCHAR(128)
+  +created_at: TIMESTAMPTZ
+  +updated_at: TIMESTAMPTZ
+}
+
+class messages {
+  +id: UUID
+  +session_id: UUID
+  +role: VARCHAR(32)
+  +content: TEXT
+  +tool_trace: TEXT
+  +provider: VARCHAR(32)
+  +model: VARCHAR(128)
+  +created_at: TIMESTAMPTZ
+}
+
+class tool_audits {
+  +id: UUID
+  +user_id: UUID
+  +session_id: UUID
+  +tool_name: VARCHAR(120)
+  +args_json: TEXT
+  +status: VARCHAR(32)
+  +duration_ms: BIGINT
+  +provider: VARCHAR(32)
+  +model: VARCHAR(128)
+  +created_at: TIMESTAMPTZ
+}
+
+users "1" -- "0..*" conversation_sessions : owns
+conversation_sessions "1" -- "0..*" messages : contains
+users "1" -- "0..*" tool_audits : generates
+conversation_sessions "1" -- "0..*" tool_audits : traces
+@enduml

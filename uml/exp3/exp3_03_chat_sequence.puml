@@ -1,0 +1,22 @@
+@startuml
+autonumber
+actor "Web/CLI 用户" as User
+participant "AgentController" as C
+participant "AgentService" as S
+participant "SessionService" as Sess
+participant "ModelGateway" as M
+participant "AgentToolOrchestrator" as T
+participant "ToolAuditService" as A
+
+User -> C : POST /api/agent/chat[stream]
+C -> S : chat()/streamChat()
+S -> Sess : load session history / save user msg
+S -> M : chat(model request)
+M --> S : model response / tool calls
+S -> T : execute(tool call)
+T --> S : tool result
+S -> Sess : save assistant/tool messages
+S -> A : save audit traces
+S --> C : ChatResponse
+C --> User : reply / SSE chunks
+@enduml

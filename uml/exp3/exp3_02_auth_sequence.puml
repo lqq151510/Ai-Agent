@@ -1,0 +1,16 @@
+@startuml
+autonumber
+actor "用户" as User
+participant "AuthController" as C
+participant "AuthService" as S
+participant "UserRepository" as R
+participant "JwtService" as J
+
+User -> C : register/login/refresh
+C -> S : validate request
+S -> R : check user / save user
+S -> J : issue or rotate tokens
+J --> S : accessToken + refreshToken
+S --> C : TokenResponse
+C --> User : success / failure
+@enduml

@@ -22,7 +22,7 @@ public class LoginCommand implements Runnable {
     @Override
     public void run() {
         Map<String, Object> res = root.apiClient().post(
-                "/api/auth/login",
+                "/api/v1/auth/login",
                 Map.of("email", email, "password", password),
                 null
         );

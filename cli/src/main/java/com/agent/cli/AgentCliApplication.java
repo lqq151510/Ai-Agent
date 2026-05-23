@@ -5,6 +5,7 @@ import com.agent.cli.cmd.CreateSessionCommand;
 import com.agent.cli.cmd.LoginCommand;
 import com.agent.cli.cmd.ReleaseReportCommand;
 import com.agent.cli.cmd.StreamChatCommand;
+import com.agent.cli.cmd.ReplCommand;
 import com.agent.cli.cmd.SessionsCommand;
 import com.agent.cli.cmd.ToolStatsCommand;
 import com.agent.cli.client.ApiClient;
@@ -25,7 +26,8 @@ import picocli.CommandLine.Option;
                 ChatCommand.class,
                 StreamChatCommand.class,
                 ToolStatsCommand.class,
-                ReleaseReportCommand.class
+                ReleaseReportCommand.class,
+                ReplCommand.class
         }
 )
 public class AgentCliApplication implements Runnable {

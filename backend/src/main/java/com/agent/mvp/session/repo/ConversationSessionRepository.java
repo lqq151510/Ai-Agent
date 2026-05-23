@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public interface ConversationSessionRepository extends JpaRepository<ConversationSession, UUID> {
 
-    List<ConversationSession> findByUser_IdOrderByUpdatedAtDesc(UUID userId);
+    List<ConversationSession> findByUser_IdOrderByUpdatedAtDesc(UUID userId, org.springframework.data.domain.Pageable pageable);
 
     Optional<ConversationSession> findByIdAndUser_Id(UUID id, UUID userId);
 }

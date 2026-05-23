@@ -20,13 +20,41 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
-                       JwtService jwtService) {
+                       JwtService jwtService,
+                       com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.tokenBlacklistService = tokenBlacklistService;
+    }
+
+    public void logout(String accessToken, String refreshToken) {
+        if (accessToken != null && !accessToken.isBlank()) {
+            try {
+                io.jsonwebtoken.Claims claims = jwtService.parseToken(accessToken).getBody();
+                java.util.Date expiration = claims.getExpiration();
+                long diffSeconds = (expiration.getTime() - System.currentTimeMillis()) / 1000;
+                if (diffSeconds > 0) {
+                    tokenBlacklistService.blacklistToken(accessToken, java.time.Duration.ofSeconds(diffSeconds));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            try {
+                io.jsonwebtoken.Claims claims = jwtService.parseToken(refreshToken).getBody();
+                java.util.Date expiration = claims.getExpiration();
+                long diffSeconds = (expiration.getTime() - System.currentTimeMillis()) / 1000;
+                if (diffSeconds > 0) {
+                    tokenBlacklistService.blacklistToken(refreshToken, java.time.Duration.ofSeconds(diffSeconds));
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     @Transactional

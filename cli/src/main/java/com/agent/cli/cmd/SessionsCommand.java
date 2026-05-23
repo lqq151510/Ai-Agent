@@ -20,7 +20,7 @@ public class SessionsCommand implements Runnable {
         AuthState state = store.read();
         ensureLoggedIn(state);
 
-        List<Map<String, Object>> sessions = root.apiClient().getListAuthenticated("/api/sessions", state, store);
+        List<Map<String, Object>> sessions = root.apiClient().getListAuthenticated("/api/v1/sessions", state, store);
         if (sessions.isEmpty()) {
             System.out.println("No sessions.");
             return;

@@ -55,7 +55,7 @@ export class BackendManager {
     this.dataDir = dataDir;
     this.port = port;
     this.logPath = path.join(this.dataDir, 'logs', 'desktop-runtime.log');
-    this.healthUrl = `http://127.0.0.1:${this.port}/api/system/health/ready`;
+    this.healthUrl = `http://127.0.0.1:${this.port}/api/v1/system/health/ready`;
     this.startupTimeoutMs = options.startupTimeoutMs ?? 60_000;
     this.healthCheckIntervalMs = options.healthCheckIntervalMs ?? 1_000;
     this.maxLogSize = options.logTailSize ?? 500;

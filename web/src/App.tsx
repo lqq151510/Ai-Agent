@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
 import { createApiClient } from './api';
 import type { ModelOption, Provider, Session, Tokens } from './types';
 import { defaultModel } from './utils';
@@ -46,6 +47,8 @@ export function App() {
   const { tokens, user, authMode, email, password, setTokens, setUser, setAuthMode, setEmail, setPassword, clearAuth } = useAuthStore();
   const chat = useChatStore();
   const ui = useUiStore();
+  const navigate = useNavigate();
+  const { urlSessionId } = useParams<{ urlSessionId: string }>();
 
   useEffect(() => {
     if (!tokens) {
@@ -139,7 +142,10 @@ export function App() {
   }
 
   async function bootstrapAuth(client = api) {
-    if (!useAuthStore.getState().tokens && client === api) return;
+    if (!useAuthStore.getState().tokens && client === api) {
+      navigate('/login');
+      return;
+    }
     chat.setLoading(true);
     chat.clearError();
     try {
@@ -151,11 +157,10 @@ export function App() {
         chat.setActiveSessionId('');
         chat.setMessages([]);
         await refreshWorkspaceDiagnostics(client, { sessionId: undefined });
-        return;
+        navigate('/');
+      } else {
+        navigate(`/chat/sessions/${picked.id}`, { replace: true });
       }
-      chat.setActiveSessionId(picked.id);
-      chat.setMessages(await client.listMessages(picked.id));
-      await refreshWorkspaceDiagnostics(client, { sessionId: picked.id });
     } catch (e) {
       updateTokens(null);
       clearAuth();
@@ -163,13 +168,19 @@ export function App() {
       ui.setToolStats(null);
       ui.setReleaseReport(null);
       applyError(e);
+      navigate('/login');
     } finally {
       chat.setLoading(false);
     }
   }
 
   useEffect(() => {
-    void bootstrapAuth();
+    const stored = readStoredTokens();
+    if (!stored) {
+      navigate('/login');
+    } else {
+      void bootstrapAuth();
+    }
   }, []);
 
   useEffect(() => {
@@ -203,10 +214,10 @@ export function App() {
         chat.setActiveSessionId('');
         chat.setMessages([]);
         await refreshWorkspaceDiagnostics(authedApi, { sessionId: undefined });
+        navigate('/');
       } else {
-        chat.setActiveSessionId(list[0].id);
-        chat.setMessages(await authedApi.listMessages(list[0].id));
-        await refreshWorkspaceDiagnostics(authedApi, { sessionId: list[0].id });
+        const targetId = list[0].id;
+        navigate(`/chat/sessions/${targetId}`);
       }
       setPassword('');
       chat.setStreamState('idle');
@@ -237,7 +248,9 @@ export function App() {
     chat.setLoading(true);
     try {
       const created = await api.createSession({ title: title || undefined, provider, model: model || undefined });
-      await reloadSessions(created.id);
+      const list = await api.listSessions();
+      chat.setSessions(list);
+      navigate(`/chat/sessions/${created.id}`);
     } catch (e) {
       applyError(e);
     } finally {
@@ -245,7 +258,11 @@ export function App() {
     }
   }
 
-  async function onSelectSession(sessionId: string) {
+  function onSelectSession(sessionId: string) {
+    navigate(`/chat/sessions/${sessionId}`);
+  }
+
+  async function selectSession(sessionId: string) {
     chat.clearError();
     chat.setActiveSessionId(sessionId);
     chat.setLoading(true);
@@ -258,6 +275,20 @@ export function App() {
       chat.setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!tokens || !user) return;
+    if (urlSessionId) {
+      if (urlSessionId !== chat.activeSessionId) {
+        void selectSession(urlSessionId);
+      }
+    } else {
+      if (chat.sessions.length > 0) {
+        const targetId = chat.activeSessionId || chat.sessions[0].id;
+        navigate(`/chat/sessions/${targetId}`, { replace: true });
+      }
+    }
+  }, [urlSessionId, chat.sessions, tokens, user]);
 
   async function sendMessage(outgoing: string) {
     if (!chat.activeSessionId || !outgoing.trim()) return;
@@ -392,11 +423,19 @@ export function App() {
     await onCreateSession('OPENAI', fallbackModel, 'Fallback OPENAI');
   }
 
-  function onLogout() {
+  async function onLogout() {
+    try {
+      if (tokens?.refreshToken) {
+        await api.logout({ refreshToken: tokens.refreshToken });
+      }
+    } catch {
+      // Best effort logout API call
+    }
     updateTokens(null);
     clearAuth();
     chat.resetChat();
     ui.resetUi();
+    navigate('/login');
   }
 
   function toggleEffects() {
@@ -405,96 +444,113 @@ export function App() {
     localStorage.setItem(FX_STORAGE_KEY, next ? '1' : '0');
   }
 
+  function renderWorkspace() {
+    return (
+      <div className="workspace">
+        <aside className="sidebar panel">
+          <Settings
+            userEmail={user!.email}
+            onLogout={onLogout}
+            modelOptions={ui.modelOptions}
+            toolStats={ui.toolStats}
+            toolStatsLoading={ui.toolStatsLoading}
+            releaseReport={ui.releaseReport}
+            releaseReportLoading={ui.releaseReportLoading}
+            toolStatsWindowHours={ui.toolStatsWindowHours}
+            toolStatsScope={ui.toolStatsScope}
+            hasActiveSession={!!chat.activeSessionId}
+            activeSession={activeSession}
+            currentModelOption={currentModelOption}
+            onRefreshToolStats={() => { void refreshWorkspaceDiagnostics(api, { sessionId: chat.activeSessionId || undefined }); }}
+            onChangeToolStatsWindow={hours => { ui.setToolStatsWindowHours(hours); void refreshWorkspaceDiagnostics(api, { windowHours: hours, sessionId: chat.activeSessionId || undefined }); }}
+            onChangeToolStatsScope={scope => { ui.setToolStatsScope(scope); void refreshWorkspaceDiagnostics(api, { scope, sessionId: chat.activeSessionId || undefined }); }}
+            onExportToolStatsJson={() => { void onExportToolStats('json'); }}
+            onExportToolStatsMarkdown={() => { void onExportToolStats('markdown'); }}
+            onExportReleaseReportJson={() => { void onExportReleaseReport('json'); }}
+            onExportReleaseReportMarkdown={() => { void onExportReleaseReport('markdown'); }}
+            onCreateSession={onCreateSession}
+          />
+          <ChatList sessions={chat.sessions} activeSessionId={chat.activeSessionId} onSelectSession={onSelectSession} />
+        </aside>
+        <MessageContainer
+          activeSession={activeSession}
+          messages={chat.messages}
+          prompt={chat.prompt}
+          setPrompt={chat.setPrompt}
+          sending={chat.sending}
+          loading={chat.loading}
+          error={chat.error}
+          streamState={chat.streamState}
+          exporting={chat.exporting}
+          currentModelOption={currentModelOption}
+          toolStats={ui.toolStats}
+          toolStatsScope={ui.toolStatsScope}
+          toolStatsLoading={ui.toolStatsLoading}
+          releaseReport={ui.releaseReport}
+          diagnosticsLoading={ui.releaseReportLoading}
+          canRetry={!!chat.lastFailedMessage && !chat.sending && chat.errorKind !== 'rate_limit'}
+          errorActionLabel={
+            chat.errorKind === 'auth_expired'
+              ? '重新登录'
+              : chat.errorKind === 'model_unreachable'
+              ? '切换备用模型'
+              : chat.errorKind === 'rate_limit' && !!chat.lastFailedMessage
+              ? chat.rateLimitRetryInSec && chat.rateLimitRetryInSec > 0
+                ? `${chat.rateLimitRetryInSec}s后自动重试`
+                : '立即重试'
+              : undefined
+          }
+          onErrorAction={
+            chat.errorKind === 'auth_expired'
+              ? onLogout
+              : chat.errorKind === 'model_unreachable'
+              ? () => { void onSwitchFallbackSession(); }
+              : chat.errorKind === 'rate_limit' && !!chat.lastFailedMessage
+              ? () => { chat.setRateLimitRetryArmed(false); chat.setRateLimitRetryInSec(null); void onRetryLast(); }
+              : undefined
+          }
+          onExportJson={() => { void onExportSession('json'); }}
+          onExportMarkdown={() => { void onExportSession('markdown'); }}
+          onRetryLast={onRetryLast}
+          onSendMessage={() => { void sendMessage(chat.prompt); }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       {ui.effectsEnabled ? <MouseFx /> : null}
       <button className="ghost fx-toggle" type="button" onClick={toggleEffects}>
         {ui.effectsEnabled ? '动态效果: 开' : '动态效果: 关'}
       </button>
-      {!tokens || !user ? (
-        <AuthPanel
-          tokens={tokens}
-          loading={chat.loading}
-          error={chat.error}
-          authMode={authMode}
-          setAuthMode={setAuthMode}
-          email={email}
-          setEmail={setEmail}
-          password={password}
-          setPassword={setPassword}
-          onAuthSubmit={onAuthSubmit}
-        />
-      ) : (
-        <div className="workspace">
-          <aside className="sidebar panel">
-            <Settings
-              userEmail={user.email}
-              onLogout={onLogout}
-              modelOptions={ui.modelOptions}
-              toolStats={ui.toolStats}
-              toolStatsLoading={ui.toolStatsLoading}
-              releaseReport={ui.releaseReport}
-              releaseReportLoading={ui.releaseReportLoading}
-              toolStatsWindowHours={ui.toolStatsWindowHours}
-              toolStatsScope={ui.toolStatsScope}
-              hasActiveSession={!!chat.activeSessionId}
-              activeSession={activeSession}
-              currentModelOption={currentModelOption}
-              onRefreshToolStats={() => { void refreshWorkspaceDiagnostics(api, { sessionId: chat.activeSessionId || undefined }); }}
-              onChangeToolStatsWindow={hours => { ui.setToolStatsWindowHours(hours); void refreshWorkspaceDiagnostics(api, { windowHours: hours, sessionId: chat.activeSessionId || undefined }); }}
-              onChangeToolStatsScope={scope => { ui.setToolStatsScope(scope); void refreshWorkspaceDiagnostics(api, { scope, sessionId: chat.activeSessionId || undefined }); }}
-              onExportToolStatsJson={() => { void onExportToolStats('json'); }}
-              onExportToolStatsMarkdown={() => { void onExportToolStats('markdown'); }}
-              onExportReleaseReportJson={() => { void onExportReleaseReport('json'); }}
-              onExportReleaseReportMarkdown={() => { void onExportReleaseReport('markdown'); }}
-              onCreateSession={onCreateSession}
+      <Routes>
+        <Route path="/login" element={
+          !tokens || !user ? (
+            <AuthPanel
+              tokens={tokens}
+              loading={chat.loading}
+              error={chat.error}
+              authMode={authMode}
+              setAuthMode={setAuthMode}
+              email={email}
+              setEmail={setEmail}
+              password={password}
+              setPassword={setPassword}
+              onAuthSubmit={onAuthSubmit}
             />
-            <ChatList sessions={chat.sessions} activeSessionId={chat.activeSessionId} onSelectSession={onSelectSession} />
-          </aside>
-          <MessageContainer
-            activeSession={activeSession}
-            messages={chat.messages}
-            prompt={chat.prompt}
-            setPrompt={chat.setPrompt}
-            sending={chat.sending}
-            loading={chat.loading}
-            error={chat.error}
-            streamState={chat.streamState}
-            exporting={chat.exporting}
-            currentModelOption={currentModelOption}
-            toolStats={ui.toolStats}
-            toolStatsScope={ui.toolStatsScope}
-            toolStatsLoading={ui.toolStatsLoading}
-            releaseReport={ui.releaseReport}
-            diagnosticsLoading={ui.releaseReportLoading}
-            canRetry={!!chat.lastFailedMessage && !chat.sending && chat.errorKind !== 'rate_limit'}
-            errorActionLabel={
-              chat.errorKind === 'auth_expired'
-                ? '重新登录'
-                : chat.errorKind === 'model_unreachable'
-                ? '切换备用模型'
-                : chat.errorKind === 'rate_limit' && !!chat.lastFailedMessage
-                ? chat.rateLimitRetryInSec && chat.rateLimitRetryInSec > 0
-                  ? `${chat.rateLimitRetryInSec}s后自动重试`
-                  : '立即重试'
-                : undefined
-            }
-            onErrorAction={
-              chat.errorKind === 'auth_expired'
-                ? onLogout
-                : chat.errorKind === 'model_unreachable'
-                ? () => { void onSwitchFallbackSession(); }
-                : chat.errorKind === 'rate_limit' && !!chat.lastFailedMessage
-                ? () => { chat.setRateLimitRetryArmed(false); chat.setRateLimitRetryInSec(null); void onRetryLast(); }
-                : undefined
-            }
-            onExportJson={() => { void onExportSession('json'); }}
-            onExportMarkdown={() => { void onExportSession('markdown'); }}
-            onRetryLast={onRetryLast}
-            onSendMessage={() => { void sendMessage(chat.prompt); }}
-          />
-        </div>
-      )}
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } />
+        <Route path="/" element={
+          tokens && user ? renderWorkspace() : <Navigate to="/login" replace />
+        } />
+        <Route path="/chat/sessions/:urlSessionId" element={
+          tokens && user ? renderWorkspace() : <Navigate to="/login" replace />
+        } />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
       {chat.error && user ? <div className="toast">{chat.error}</div> : null}
     </div>
   );

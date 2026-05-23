@@ -47,7 +47,7 @@ public class ChatCommand implements Runnable {
             payload.put("model", model);
         }
 
-        Map<String, Object> res = root.apiClient().postAuthenticated("/api/agent/chat", payload, state, store);
+        Map<String, Object> res = root.apiClient().postAuthenticated("/api/v1/agent/chat", payload, state, store);
         System.out.println("assistant> " + res.get("reply"));
     }
 

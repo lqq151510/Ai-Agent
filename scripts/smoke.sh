@@ -59,7 +59,7 @@ echo "[smoke] artifacts=${RUN_DIR}"
 echo "[smoke] checking health endpoints"
 
 fetch_to_file "${BASE_URL}/actuator/health" "${RUN_DIR}/actuator-health.json"
-READY_PAYLOAD="$(curl -fsS "${BASE_URL}/api/system/health/ready")"
+READY_PAYLOAD="$(curl -fsS "${BASE_URL}/api/v1/system/health/ready")"
 printf '%s\n' "${READY_PAYLOAD}" > "${RUN_DIR}/readiness.json"
 if ! echo "${READY_PAYLOAD}" | grep -q '"ready":true'; then
   echo "[smoke] readiness is not true: ${READY_PAYLOAD}" >&2
@@ -70,11 +70,11 @@ echo "[smoke] running register -> login -> create-session -> stream-chat"
 EMAIL="smoke.$(date +%s)@example.com"
 PASSWORD="Passw0rd!123"
 
-curl -fsS -X POST "${BASE_URL}/api/auth/register" \
+curl -fsS -X POST "${BASE_URL}/api/v1/auth/register" \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\"}" >/dev/null
 
-LOGIN_PAYLOAD="$(curl -fsS -X POST "${BASE_URL}/api/auth/login" \
+LOGIN_PAYLOAD="$(curl -fsS -X POST "${BASE_URL}/api/v1/auth/login" \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\"}")"
 ACCESS_TOKEN="$(echo "${LOGIN_PAYLOAD}" | json_get accessToken)"
@@ -83,7 +83,7 @@ if [[ -z "${ACCESS_TOKEN}" ]]; then
   exit 1
 fi
 
-CREATE_PAYLOAD="$(curl -fsS -X POST "${BASE_URL}/api/sessions" \
+CREATE_PAYLOAD="$(curl -fsS -X POST "${BASE_URL}/api/v1/sessions" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{\"title\":\"smoke-session\",\"provider\":\"${MODEL_PROVIDER}\",\"model\":\"${TARGET_MODEL}\"}")"
@@ -94,12 +94,12 @@ if [[ -z "${SESSION_ID}" ]]; then
 fi
 
 printf '%s\n' "${SESSION_ID}" > "${RUN_DIR}/session-id.txt"
-fetch_to_file "${BASE_URL}/api/system/models" "${RUN_DIR}/models.json" "${ACCESS_TOKEN}"
+fetch_to_file "${BASE_URL}/api/v1/system/models" "${RUN_DIR}/models.json" "${ACCESS_TOKEN}"
 
 STREAM_FILE="${RUN_DIR}/stream.sse"
 HTTP_CODE="$({
   curl -sS -N --max-time "${SMOKE_STREAM_TIMEOUT_SECONDS:-90}" \
-    -X POST "${BASE_URL}/api/agent/chat/stream" \
+    -X POST "${BASE_URL}/api/v1/agent/chat/stream" \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H "Accept: text/event-stream" \
     -H "Content-Type: application/json" \
@@ -126,12 +126,12 @@ if ! grep -Eq "event:[[:space:]]*(chunk|done)" "${STREAM_FILE}"; then
   exit 1
 fi
 
-fetch_to_file "${BASE_URL}/api/sessions/${SESSION_ID}/export?format=json" "${RUN_DIR}/session-export.json" "${ACCESS_TOKEN}"
-fetch_to_file "${BASE_URL}/api/sessions/${SESSION_ID}/export?format=markdown" "${RUN_DIR}/session-export.md" "${ACCESS_TOKEN}"
-fetch_to_file "${BASE_URL}/api/system/tool-stats?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}" "${RUN_DIR}/tool-stats.json" "${ACCESS_TOKEN}"
-fetch_to_file "${BASE_URL}/api/system/tool-stats/export?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}&format=markdown" "${RUN_DIR}/tool-stats.md" "${ACCESS_TOKEN}"
-fetch_to_file "${BASE_URL}/api/system/release-report?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}" "${RUN_DIR}/release-report.json" "${ACCESS_TOKEN}"
-fetch_to_file "${BASE_URL}/api/system/release-report/export?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}&format=markdown" "${RUN_DIR}/release-report.md" "${ACCESS_TOKEN}"
+fetch_to_file "${BASE_URL}/api/v1/sessions/${SESSION_ID}/export?format=json" "${RUN_DIR}/session-export.json" "${ACCESS_TOKEN}"
+fetch_to_file "${BASE_URL}/api/v1/sessions/${SESSION_ID}/export?format=markdown" "${RUN_DIR}/session-export.md" "${ACCESS_TOKEN}"
+fetch_to_file "${BASE_URL}/api/v1/system/tool-stats?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}" "${RUN_DIR}/tool-stats.json" "${ACCESS_TOKEN}"
+fetch_to_file "${BASE_URL}/api/v1/system/tool-stats/export?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}&format=markdown" "${RUN_DIR}/tool-stats.md" "${ACCESS_TOKEN}"
+fetch_to_file "${BASE_URL}/api/v1/system/release-report?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}" "${RUN_DIR}/release-report.json" "${ACCESS_TOKEN}"
+fetch_to_file "${BASE_URL}/api/v1/system/release-report/export?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}&format=markdown" "${RUN_DIR}/release-report.md" "${ACCESS_TOKEN}"
 
 REPORT_ARGS=(
   --input-json "${RUN_DIR}/release-report.json"

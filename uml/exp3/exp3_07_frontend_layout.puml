@@ -1,0 +1,21 @@
+@startuml
+skinparam componentStyle rectangle
+left to right direction
+
+rectangle "AI Agent 前端页面" {
+  [左侧栏\nSidebar] as Sidebar
+  [会话列表\nChatList] as List
+  [主聊天区\nChatWindow] as Chat
+  [消息容器\nMessageContainer] as Msg
+  [设置面板\nSettings] as Settings
+}
+
+rectangle "API Client" as Api
+
+Sidebar --> List
+Chat --> Msg
+Chat --> Api
+Sidebar --> Api
+Settings --> Api
+List --> Api
+@enduml

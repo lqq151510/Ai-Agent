@@ -94,7 +94,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       return false;
     }
 
-    const response = await fetch(`${safeBaseUrl}/api/auth/refresh`, {
+    const response = await fetch(`${safeBaseUrl}/api/v1/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: current.refreshToken })
@@ -233,7 +233,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       headers.set('Authorization', `Bearer ${accessToken}`);
     }
 
-    const response = await fetch(`${safeBaseUrl}/api/agent/chat/stream`, {
+    const response = await fetch(`${safeBaseUrl}/api/v1/agent/chat/stream`, {
       method: 'POST',
       headers,
       body: JSON.stringify(input)
@@ -260,29 +260,36 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
 
   return {
     register(input: RegisterInput) {
-      return request<UserProfile>('/api/auth/register', {
+      return request<UserProfile>('/api/v1/auth/register', {
         method: 'POST',
         body: JSON.stringify(input)
       }, false);
     },
 
     login(input: LoginInput) {
-      return request<Tokens>('/api/auth/login', {
+      return request<Tokens>('/api/v1/auth/login', {
         method: 'POST',
         body: JSON.stringify(input)
       }, false);
     },
 
+    logout(input: { refreshToken: string }) {
+      return request<void>('/api/v1/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify(input)
+      }, true);
+    },
+
     me() {
-      return request<UserProfile>('/api/auth/me', { method: 'GET' }, true);
+      return request<UserProfile>('/api/v1/auth/me', { method: 'GET' }, true);
     },
 
     listSessions() {
-      return request<Session[]>('/api/sessions', { method: 'GET' }, true);
+      return request<Session[]>('/api/v1/sessions', { method: 'GET' }, true);
     },
 
     listModels() {
-      return request<ModelsResponse>('/api/system/models', { method: 'GET' }, true);
+      return request<ModelsResponse>('/api/v1/system/models', { method: 'GET' }, true);
     },
 
     toolStats(windowHours = 24, sessionId?: string) {
@@ -290,7 +297,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       if (sessionId) {
         query.set('sessionId', sessionId);
       }
-      return request<ToolStatsResponse>(`/api/system/tool-stats?${query.toString()}`, { method: 'GET' }, true);
+      return request<ToolStatsResponse>(`/api/v1/system/tool-stats?${query.toString()}`, { method: 'GET' }, true);
     },
 
     exportToolStats(windowHours = 24, format: 'json' | 'markdown' = 'json', sessionId?: string) {
@@ -301,7 +308,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       if (sessionId) {
         query.set('sessionId', sessionId);
       }
-      return request<ToolStatsResponse | string>(`/api/system/tool-stats/export?${query.toString()}`, { method: 'GET' }, true);
+      return request<ToolStatsResponse | string>(`/api/v1/system/tool-stats/export?${query.toString()}`, { method: 'GET' }, true);
     },
 
     releaseReport(windowHours = 24, sessionId?: string) {
@@ -309,7 +316,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       if (sessionId) {
         query.set('sessionId', sessionId);
       }
-      return request<ReleaseReportResponse>(`/api/system/release-report?${query.toString()}`, { method: 'GET' }, true);
+      return request<ReleaseReportResponse>(`/api/v1/system/release-report?${query.toString()}`, { method: 'GET' }, true);
     },
 
     exportReleaseReport(windowHours = 24, format: 'json' | 'markdown' = 'markdown', sessionId?: string) {
@@ -320,30 +327,30 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       if (sessionId) {
         query.set('sessionId', sessionId);
       }
-      return request<ReleaseReportResponse | string>(`/api/system/release-report/export?${query.toString()}`, { method: 'GET' }, true);
+      return request<ReleaseReportResponse | string>(`/api/v1/system/release-report/export?${query.toString()}`, { method: 'GET' }, true);
     },
 
     createSession(input: CreateSessionInput) {
-      return request<Session>('/api/sessions', {
+      return request<Session>('/api/v1/sessions', {
         method: 'POST',
         body: JSON.stringify(input)
       }, true);
     },
 
     listMessages(sessionId: string) {
-      return request<Message[]>(`/api/sessions/${sessionId}/messages`, { method: 'GET' }, true);
+      return request<Message[]>(`/api/v1/sessions/${sessionId}/messages`, { method: 'GET' }, true);
     },
 
     exportSession(sessionId: string, format: 'json' | 'markdown') {
       return request<SessionExportResponse | string>(
-        `/api/sessions/${sessionId}/export?format=${format}`,
+        `/api/v1/sessions/${sessionId}/export?format=${format}`,
         { method: 'GET' },
         true
       );
     },
 
     chat(input: ChatInput) {
-      return request<ChatResponse>('/api/agent/chat', {
+      return request<ChatResponse>('/api/v1/agent/chat', {
         method: 'POST',
         body: JSON.stringify(input)
       }, true);

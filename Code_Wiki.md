@@ -5,8 +5,8 @@
 | 项目 | 内容 |
 |------|------|
 | 适用分支 | `main`（默认） |
-| 校验日期 | `2026-05-01` |
-| 校验方式 | 以当前仓库源码与配置文件为准，抽样核对常量、配置、SSE 事件与接口说明 |
+| 校验日期 | `2026-05-14` |
+| 校验方式 | 以当前仓库源码与配置文件为准，全量核对所有模块、常量、配置、SSE 事件与接口说明 |
 | 维护约定 | 新增/变更功能时同步更新对应章节，并在文末“变更记录”追加条目 |
 
 ## 目录
@@ -16,15 +16,16 @@
 3. [后端模块详解](#3-后端模块详解)
 4. [前端模块详解](#4-前端模块详解)
 5. [CLI 模块详解](#5-cli-模块详解)
-6. [关键类与函数说明](#6-关键类与函数说明)
-7. [数据模型与数据库](#7-数据模型与数据库)
-8. [REST API 接口](#8-rest-api-接口)
-9. [依赖关系](#9-依赖关系)
-10. [配置参数](#10-配置参数)
-11. [部署与运行](#11-部署与运行)
-12. [开发指南](#12-开发指南)
-13. [术语表](#13-术语表)
-14. [变更记录](#14-变更记录)
+6. [Desktop 桌面客户端模块详解](#6-desktop-桌面客户端模块详解)
+7. [关键类与函数说明](#7-关键类与函数说明)
+8. [数据模型与数据库](#8-数据模型与数据库)
+9. [REST API 接口](#9-rest-api-接口)
+10. [依赖关系](#10-依赖关系)
+11. [配置参数](#11-配置参数)
+12. [部署与运行](#12-部署与运行)
+13. [开发指南](#13-开发指南)
+14. [术语表](#14-术语表)
+15. [变更记录](#15-变更记录)
 
 ---
 
@@ -58,6 +59,7 @@ Java AI Agent MVP 是一个完整的 AI 智能助手应用，采用前后端分�
 | 认证 | JWT (jjwt) | 0.12.6 |
 | 数据库迁移 | Flyway | 10.22.0 |
 | CLI 框架 | Picocli | 4.7.6 |
+| 桌面框架 | Electron + TypeScript | Electron 33 / TS 5.5 |
 | 响应式 HTTP | Spring WebFlux + Reactor Netty | - |
 
 ### 1.3 项目结构
@@ -100,6 +102,17 @@ AI-agent/
 ├── cli/                        # Java CLI 工具
 │   ├── src/main/java/          # CLI 源码
 │   └── pom.xml                 # Maven 配置
+├── desktop/                    # Electron 桌面客户端
+│   ├── src/main/               # Electron 主进程
+│   │   ├── index.ts            # 应用入口（窗口/托盘/IPC）
+│   │   ├── backend-manager.ts  # 后端进程管理
+│   │   └── cli-manager.ts      # CLI 进程管理
+│   ├── src/preload/            # 预加载脚本（contextBridge）
+│   ├── scripts/                # 构建脚本（JRE/后端/全量）
+│   ├── resources/              # 资源文件（图标/签名）
+│   ├── package.json            # NPM 配置
+│   ├── electron-builder.yml    # Electron 打包配置
+│   └── tsconfig.main.json      # TypeScript 配置
 ├── env/                        # 环境配置模板
 │   ├── dev.env.example
 │   ├── staging.env.example
@@ -128,17 +141,17 @@ AI-agent/
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                          客户端层                                 │
-│  ┌──────────────────┐  ┌──────────────────┐                      │
-│  │     Web UI       │  │     CLI 工具      │                      │
-│  │  React + Vite    │  │  Picocli + Java   │                      │
-│  └────────┬─────────┘  └────────┬─────────┘                      │
-└───────────┼──────────────────────┼────────────────────────────────┘
-            │                      │
-            │   HTTP / SSE         │  HTTP / SSE
-            │                      │
-┌───────────┼──────────────────────┼────────────────────────────────┐
-│           │    Nginx 反向代理     │                                 │
-│  ┌────────▼──────────────────────▼─────────────────────────────┐ │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌───────────────┐  │
+│  │     Web UI       │  │     CLI 工具      │  │  Desktop App  │  │
+│  │  React + Vite    │  │  Picocli + Java   │  │  Electron     │  │
+│  └────────┬─────────┘  └────────┬─────────┘  └───────┬───────┘  │
+└───────────┼──────────────────────┼───────────────────┼───────────┘
+            │                      │                   │
+            │   HTTP / SSE         │  HTTP / SSE       │ IPC + HTTP
+            │                      │                   │
+┌───────────┼──────────────────────┼───────────────────┼───────────┐
+│           │    Nginx 反向代理     │                   │            │
+│  ┌────────▼──────────────────────▼───────────────────▼──────────┐ │
 │  │                    Spring Boot Backend                       │ │
 │  │                                                              │ │
 │  │  ┌──────────────────────────────────────────────────────┐   │ │
@@ -667,12 +680,226 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 
 ---
 
-## 6. 关键类与函数说明
+## 6. Desktop 桌面客户端模块详解
+
+> 当前实现：本节基于 `desktop/` 模块的 Electron 主进程、预加载脚本与打包配置的当前实现。
+> 设计说明：Desktop 模块是独立于 Docker 部署的本地桌面方案，通过 Electron 打包内嵌 JRE + 后端 JAR，实现一键启动。
+
+### 6.1 概述
+
+Desktop 模块是一个基于 **Electron 33** 的桌面客户端，它将 Spring Boot 后端内嵌到 Electron 应用中，提供原生桌面体验。主要能力包括：
+
+- **内嵌后端**：Electron 主进程通过 `child_process.spawn()` 启动 Java 后端 JAR
+- **内嵌 CLI**：可通过 IPC 调用 CLI JAR 执行命令
+- **系统托盘**：提供快捷菜单（显示窗口/重启后端/退出）
+- **单实例锁**：`app.requestSingleInstanceLock()` 防止重复启动
+- **上下文隔离**：通过 `contextBridge` 暴露安全的 API 给渲染进程
+- **跨平台打包**：支持 macOS（dmg/zip）和 Windows（nsis/portable）
+
+### 6.2 技术架构
+
+| 层级 | 技术选型 | 版本 |
+|------|----------|------|
+| 桌面框架 | Electron | 33.2.0 |
+| 打包工具 | electron-builder | 25.1.8 |
+| 后端进程管理 | Node.js child_process (spawn) | - |
+| IPC 通信 | Electron ipcMain / ipcRenderer | - |
+| 本地存储 | electron-store | 8.2.0 |
+| 编程语言 | TypeScript | 5.5.4 |
+
+### 6.3 核心文件结构
+
+```
+desktop/
+├── src/
+│   ├── main/
+│   │   ├── index.ts              # 应用入口，管理窗口/托盘/IPC
+│   │   ├── backend-manager.ts    # Java 后端进程生命周期管理
+│   │   └── cli-manager.ts        # CLI 命令执行管理
+│   └── preload/
+│       └── index.ts              # contextBridge 安全暴露 API
+├── scripts/
+│   ├── build-all.sh              # 全量构建（JRE + 后端 + CLI + Web）
+│   ├── build-backend.sh          # 构建后端 JAR
+│   └── build-jre.sh              # 使用 jlink 裁剪 JRE
+├── resources/
+│   └── entitlements.mac.plist    # macOS 签名权限配置
+├── package.json                  # NPM 配置与脚本
+├── electron-builder.yml          # Electron 打包配置
+└── tsconfig.main.json            # TypeScript 编译配置
+```
+
+### 6.4 核心类详解
+
+#### 6.4.1 index.ts — 应用入口
+
+**文件**: [index.ts](desktop/src/main/index.ts)
+
+**职责**: Electron 应用生命周期管理、窗口创建、系统托盘、IPC 通道注册。
+
+| 功能 | 说明 |
+|------|------|
+| `createMainWindow()` | 创建 BrowserWindow（1280×800，最小 900×600），启用 contextIsolation |
+| `createTray()` | 创建系统托盘菜单（显示窗口/打开数据目录/重启后端/退出） |
+| `setupIpc()` | 注册 6 个 IPC 通道（backend:status, backend:restart, app:version, app:data-dir, app:open-data-dir, cli:execute, cli:input） |
+| 单实例锁 | `app.requestSingleInstanceLock()` 确保只有一个实例运行 |
+| 生命周期 | `before-quit` 时自动停止后端进程和 CLI 进程 |
+
+**关键常量**:
+- `DESKTOP_PORT = 18080` — 内嵌后端监听端口（区别于 Docker 部署的 8080）
+- 资源路径解析：`getResourcePath()` → `getJrePath()` → `getBackendJarPath()` → `getCliJarPath()`
+- 数据目录：`app.getPath('userData') + '/data'`
+
+**开发模式 vs 生产模式**:
+- 开发模式 (`!app.isPackaged`)：加载 `http://localhost:5173`（Vite 开发服务器），打开 DevTools
+- 生产模式：加载 `dist/renderer/index.html`（Web 构建产物）
+
+#### 6.4.2 BackendManager — 后端进程管理
+
+**文件**: [backend-manager.ts](desktop/src/main/backend-manager.ts)
+
+**职责**: 管理 Java 后端进程的启动、停止、重启和健康检查。
+
+| 方法 | 说明 |
+|------|------|
+| `start()` | 使用 `spawn(jrePath, ['-jar', jarPath, '--spring.profiles.active=desktop', ...])` 启动后端，激活 `desktop` profile，等待就绪（最多 60s） |
+| `stop()` | 先发送 SIGTERM，10s 超时后强制 SIGKILL |
+| `restart()` | `stop()` → `start()` |
+| `getStatus()` | 返回 `{ status, port, logs }`（含最近 500 条日志） |
+| `waitForReady(timeoutMs)` | 轮询 `/api/system/health/ready`（每秒一次，3s 超时），直到返回 200 |
+
+**后端启动参数**:
+```
+-jar backend.jar
+--spring.profiles.active=desktop
+--server.port=18080
+--app.data-dir=<userData>/data
+```
+
+**状态机**: `stopped` → `starting` → `running` / `error` → `stopped`
+
+#### 6.4.3 CliManager — CLI 进程管理
+
+**文件**: [cli-manager.ts](desktop/src/main/cli-manager.ts)
+
+**职责**: 管理 CLI JAR 的执行，支持并发控制和 stdin 输入。
+
+| 方法 | 说明 |
+|------|------|
+| `execute(jrePath, cliJarPath, args)` | 执行 CLI 命令，收集 stdout/stderr 输出，返回 `{ exitCode, output }` |
+| `sendInput(input)` | 向活跃的 CLI 进程发送 stdin 输入（用于交互式命令） |
+| `killAll()` | 终止所有活跃的 CLI 进程 |
+
+**并发控制**: 同一时间只允许一个 CLI 命令执行，重复调用返回错误。
+
+#### 6.4.4 preload/index.ts — 预加载脚本
+
+**文件**: [preload/index.ts](desktop/src/preload/index.ts)
+
+**职责**: 通过 `contextBridge.exposeInMainWorld` 向渲染进程暴露安全的 API。
+
+暴露的 API（挂载到 `window.electronAPI`）:
+- `getBackendStatus()` — 获取后端状态
+- `restartBackend()` — 重启后端
+- `getAppVersion()` — 获取应用版本
+- `getDataDir()` — 获取数据目录路径
+- `openDataDir()` — 打开数据目录
+- `executeCli(args)` — 执行 CLI 命令
+- `sendCliInput(input)` — 向 CLI 发送输入
+- `onBackendStatusChanged(callback)` — 监听后端状态变化
+
+### 6.5 打包与分发
+
+**配置文件**: [electron-builder.yml](desktop/electron-builder.yml)
+
+| 配置项 | 值 | 说明 |
+|--------|-----|------|
+| `appId` | `com.ai-agent.desktop` | 应用唯一标识 |
+| `productName` | `AI Agent` | 产品名称 |
+| `directories.output` | `release` | 构建输出目录 |
+| `asar` | `true` | 启用 asar 打包 |
+| `extraResources` | `backend-jre/**/*` | 将 JRE + JAR 作为额外资源打包 |
+
+**平台支持**:
+| 平台 | 格式 | 说明 |
+|------|------|------|
+| macOS | dmg, zip | `hardenedRuntime: true`，需签名权限 |
+| Windows | nsis, portable | x64 架构，支持自定义安装目录 |
+| Linux | AppImage | - |
+
+**构建命令**:
+```bash
+cd desktop
+
+# 开发模式
+npm run dev
+
+# 构建主进程 TypeScript
+npm run build:main
+
+# 构建 Web 前端并复制到 renderer
+npm run build:web
+
+# 全量构建
+npm run build
+
+# 打包（不压缩）
+npm run pack
+
+# 分发生成安装包
+npm run dist          # 当前平台
+npm run dist:mac      # macOS
+npm run dist:win      # Windows
+```
+
+**构建脚本**:
+| 脚本 | 用途 |
+|------|------|
+| [build-jre.sh](desktop/scripts/build-jre.sh) | 使用 `jlink` 裁剪 JRE（仅包含必要模块） |
+| [build-backend.sh](desktop/scripts/build-backend.sh) | 构建 backend.jar 和 cli.jar |
+| [build-all.sh](desktop/scripts/build-all.sh) | 串联 JRE + 后端 + Web + Electron 全量构建 |
+
+### 6.6 Desktop 启动流程
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  Electron App 启动                     │
+│                                                      │
+│  1. app.requestSingleInstanceLock()                  │
+│  2. app.whenReady()                                  │
+│  3. createMainWindow()  → BrowserWindow 创建          │
+│  4. createTray()        → 系统托盘菜单                 │
+│  5. setupIpc()          → IPC 通道注册                │
+│  6. backendManager.start()                           │
+│     ├─ spawn JRE + backend.jar (port 18080)           │
+│     ├─ 激活 desktop profile                          │
+│     └─ 轮询 /api/system/health/ready (最多 60s)       │
+│  7. mainWindow.loadURL/loadFile()                    │
+│     ├─ 开发: http://localhost:5173                   │
+│     └─ 生产: dist/renderer/index.html                │
+│  8. 后端就绪后发送 backend:status-changed 事件         │
+└──────────────────────────────────────────────────────┘
+```
+
+### 6.7 Desktop 与 Docker 部署的差异
+
+| 方面 | Desktop 模式 | Docker 模式 |
+|------|-------------|-------------|
+| 后端端口 | 18080 | 8080 |
+| 数据库 | 内嵌 H2（`application-desktop.yml`） | 外部 PostgreSQL |
+| Redis | 不需要（使用 Caffeine 替代） | 外部 Redis 容器 |
+| Spring Profile | `desktop` | 默认（无额外 profile） |
+| 前端 API 地址 | `http://localhost:18080` | `/api`（Nginx 反向代理） |
+| 数据目录 | `<userData>/data` | `/app/workspace` |
+
+---
+
+## 7. 关键类与函数说明
 
 > 当前实现：方法签名、常量和约束均来自当前源码。
 > 设计说明：这里描述的是稳定能力边界，不限制具体内部实现方式。
 
-### 6.1 AgentService
+### 7.1 AgentService
 
 **文件**: [AgentService.java](backend/src/main/java/com/agent/mvp/agent/service/AgentService.java)
 
@@ -691,7 +918,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 - `MAX_CONTEXT_TOKENS = 6_000` — 最大上下文 Token 预算
 - `MAX_TOOL_STEPS = 4` — 最大工具调用轮次
 
-### 6.2 OpenAiModelProvider
+### 7.2 OpenAiModelProvider
 
 **文件**: [OpenAiModelProvider.java](backend/src/main/java/com/agent/mvp/agent/provider/OpenAiModelProvider.java)
 
@@ -709,7 +936,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 - 流式响应解析 `delta.content` 和 `delta.reasoning_content`
 - 请求超时配置：connect / read / total 三级超时
 
-### 6.3 AgentToolOrchestrator
+### 7.3 AgentToolOrchestrator
 
 **文件**: [AgentToolOrchestrator.java](backend/src/main/java/com/agent/mvp/agent/tooling/AgentToolOrchestrator.java)
 
@@ -729,7 +956,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | `listRepoTree` | 列出目录树 | path(string), depth(integer) |
 | `analyzePom` | 解析 POM 依赖 | path(string) |
 
-### 6.4 AuthService
+### 7.4 AuthService
 
 **文件**: [AuthService.java](backend/src/main/java/com/agent/mvp/auth/service/AuthService.java)
 
@@ -744,7 +971,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 
 **密码强度要求**: 最少 8 位，包含大写字母、小写字母、数字、特殊字符。
 
-### 6.5 JwtService
+### 7.5 JwtService
 
 **文件**: [JwtService.java](backend/src/main/java/com/agent/mvp/auth/service/JwtService.java)
 
@@ -757,7 +984,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | `UUID parseUserId(String token)` | 从令牌解析用户 ID |
 | `boolean validate(String token)` | 验证令牌有效性 |
 
-### 6.6 SessionService
+### 7.6 SessionService
 
 **文件**: [SessionService.java](backend/src/main/java/com/agent/mvp/session/service/SessionService.java)
 
@@ -774,7 +1001,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | `SessionExportResponse exportSession(UUID userId, UUID sessionId)` | 导出会话（JSON） |
 | `String exportSessionMarkdown(UUID userId, UUID sessionId)` | 导出会话（Markdown） |
 
-### 6.7 CodeToolService
+### 7.7 CodeToolService
 
 **文件**: [CodeToolService.java](backend/src/main/java/com/agent/mvp/tooling/service/CodeToolService.java)
 
@@ -789,7 +1016,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 
 **安全约束**: `resolveSafe()` 确保所有路径操作不超出 `workspaceRoot`。
 
-### 6.8 ToolAuditService
+### 7.8 ToolAuditService
 
 **文件**: [ToolAuditService.java](backend/src/main/java/com/agent/mvp/tooling/service/ToolAuditService.java)
 
@@ -801,7 +1028,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | `ToolStatsResponse stats(UUID userId, int windowHours, UUID sessionId)` | 获取工具统计 |
 | `String statsMarkdown(UUID userId, int windowHours, UUID sessionId)` | 获取工具统计（Markdown 格式） |
 
-### 6.9 RedisRateLimiterService
+### 7.9 RedisRateLimiterService
 
 **文件**: [RedisRateLimiterService.java](backend/src/main/java/com/agent/mvp/infra/RedisRateLimiterService.java)
 
@@ -811,7 +1038,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 |----------|------|
 | `boolean allow(String key, long limit, Duration window)` | 判断请求是否允许通过 |
 
-### 6.10 AppProperties
+### 7.10 AppProperties
 
 **文件**: [AppProperties.java](backend/src/main/java/com/agent/mvp/config/AppProperties.java)
 
@@ -827,9 +1054,9 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 
 ---
 
-## 7. 数据模型与数据库
+## 8. 数据模型与数据库
 
-### 7.1 数据库表结构
+### 8.1 数据库表结构
 
 #### users 表
 
@@ -887,14 +1114,14 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 
 **索引**: `idx_tool_audits_session_created` (session_id, created_at)
 
-### 7.2 Flyway 迁移
+### 8.2 Flyway 迁移
 
 | 版本 | 文件 | 内容 |
 |------|------|------|
 | V1 | [V1__init_schema.sql](backend/src/main/resources/db/migration/V1__init_schema.sql) | 初始表结构（users, conversation_sessions, messages, tool_audits） |
 | V2 | [V2__refresh_token_rotation.sql](backend/src/main/resources/db/migration/V2__refresh_token_rotation.sql) | 添加 token_version 字段支持 Refresh Token 轮转 |
 
-### 7.3 实体与表映射
+### 8.3 实体与表映射
 
 | 实体类 | 表名 | 仓库接口 |
 |--------|------|----------|
@@ -905,9 +1132,9 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 
 ---
 
-## 8. REST API 接口
+## 9. REST API 接口
 
-### 8.1 认证接口 (`/api/auth`)
+### 9.1 认证接口 (`/api/auth`)
 
 | 方法 | 路径 | 描述 | 认证 | 速率限制 |
 |------|------|------|------|----------|
@@ -932,7 +1159,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 { "accessToken": "eyJ...", "refreshToken": "eyJ...", "expiresInSeconds": 3600 }
 ```
 
-### 8.2 会话接口 (`/api/sessions`)
+### 9.2 会话接口 (`/api/sessions`)
 
 | 方法 | 路径 | 描述 | 认证 |
 |------|------|------|------|
@@ -941,7 +1168,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | GET | `/api/sessions/{id}/messages` | 获取消息列表 | Access Token |
 | GET | `/api/sessions/{id}/export?format=json\|markdown` | 导出会话 | Access Token |
 
-### 8.3 Agent 接口 (`/api/agent`)
+### 9.3 Agent 接口 (`/api/agent`)
 
 | 方法 | 路径 | 描述 | 认证 | 速率限制 |
 |------|------|------|------|----------|
@@ -958,7 +1185,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | `done` | ChatResponse | 完整响应 |
 | `error` | `{ message: String }` | 错误信息 |
 
-### 8.4 系统接口 (`/api/system`)
+### 9.4 系统接口 (`/api/system`)
 
 | 方法 | 路径 | 描述 | 认证 |
 |------|------|------|------|
@@ -969,7 +1196,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | GET | `/api/system/release-report?windowHours=24&sessionId=` | 发布报告 | Access Token |
 | GET | `/api/system/release-report/export?windowHours=24&format=json\|markdown` | 导出发布报告 | Access Token |
 
-### 8.5 Actuator 端点
+### 9.5 Actuator 端点
 
 | 方法 | 路径 | 描述 | 认证 |
 |------|------|------|------|
@@ -995,7 +1222,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | 429 | TOO_MANY_REQUESTS | 请求频率超限 |
 | 500 | INTERNAL_ERROR | 服务器内部错误 |
 
-### 8.7 常见失败场景示例
+### 9.7 常见失败场景示例
 
 ```json
 // 401 UNAUTHORIZED（访问受保护接口但未携带/携带无效令牌）
@@ -1029,9 +1256,9 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 
 ---
 
-## 9. 依赖关系
+## 10. 依赖关系
 
-### 9.1 后端 Maven 依赖
+### 10.1 后端 Maven 依赖
 
 **文件**: [backend/pom.xml](backend/pom.xml)
 
@@ -1058,7 +1285,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | testcontainers (junit-jupiter, postgresql) | 容器化集成测试 |
 | wiremock-jre8 | HTTP Mock |
 
-### 9.2 前端 NPM 依赖
+### 10.2 前端 NPM 依赖
 
 **文件**: [web/package.json](web/package.json)
 
@@ -1075,7 +1302,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | typescript | 5.5.4 | 类型系统 |
 | @vitejs/plugin-react | 4.3.1 | Vite React 插件 |
 
-### 9.3 CLI Maven 依赖
+### 10.3 CLI Maven 依赖
 
 **文件**: [cli/pom.xml](cli/pom.xml)
 
@@ -1084,7 +1311,16 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 | picocli | 4.7.6 | 命令行框架 |
 | jackson-databind | - | JSON 序列化/反序列化 |
 
-### 9.4 模块间依赖关系
+### 10.4 Desktop NPM 依赖
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| electron | 33.2.0 | 桌面应用框架 |
+| electron-builder | 25.1.8 | 打包分发工具 |
+| electron-store | 8.2.0 | 本地持久化存储 |
+| typescript | 5.5.4 | 类型系统 |
+
+### 10.5 模块间依赖关系
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1126,7 +1362,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 9.5 服务间依赖（Docker Compose）
+### 10.6 服务间依赖（Docker Compose）
 
 ```
 web → backend → postgres
@@ -1136,9 +1372,9 @@ web → backend → postgres
 
 ---
 
-## 10. 配置参数
+## 11. 配置参数
 
-### 10.1 应用配置 (`application.yml`)
+### 11.1 应用配置 (`application.yml`)
 
 | 配置项 | 环境变量 | 默认值 | 说明 |
 |--------|----------|--------|------|
@@ -1152,7 +1388,7 @@ web → backend → postgres
 | `spring.data.redis.port` | REDIS_PORT | 6379 | Redis 端口 |
 | `spring.data.redis.password` | REDIS_PASSWORD | - | Redis 密码 |
 
-### 10.2 安全配置
+### 11.2 安全配置
 
 | 配置项 | 环境变量 | 默认值 | 说明 |
 |--------|----------|--------|------|
@@ -1160,7 +1396,7 @@ web → backend → postgres
 | `security.jwt.access-exp-seconds` | JWT_ACCESS_EXP_SECONDS | 3600 | 访问令牌有效期（秒） |
 | `security.jwt.refresh-exp-seconds` | JWT_REFRESH_EXP_SECONDS | 2592000 | 刷新令牌有效期（秒） |
 
-### 10.3 应用运行时配置 (`app.*`)
+### 11.3 应用运行时配置 (`app.*`)
 
 | 配置项 | 环境变量 | 默认值 | 说明 |
 |--------|----------|--------|------|
@@ -1184,7 +1420,7 @@ web → backend → postgres
 | `app.startup-validation.model-probe-timeout-ms` | MODEL_PROBE_TIMEOUT_MS | 3000 | 模型探测超时 |
 | `app.startup-validation.model-probe-retries` | MODEL_PROBE_RETRIES | 1 | 模型探测重试 |
 
-### 10.4 系统限制与默认值
+### 11.4 系统限制与默认值
 
 | 项目 | 默认值 | 来源 | 说明 |
 |------|--------|------|------|
@@ -1197,7 +1433,7 @@ web → backend → postgres
 | SSE 心跳间隔 | `10s` | `AgentController.HEARTBEAT_INTERVAL` | `heartbeat` 事件发送频率 |
 | SSE 总超时 | `300s` | `AgentController.STREAM_TIMEOUT_MS` | 单条流式请求最大持续时间 |
 
-### 10.5 生产环境必改项
+### 11.5 生产环境必改项
 
 > 以下配置不建议直接使用默认值上线，部署前必须显式覆盖。
 
@@ -1212,9 +1448,9 @@ web → backend → postgres
 
 ---
 
-## 11. 部署与运行
+## 12. 部署与运行
 
-### 11.1 Docker Compose 部署（推荐）
+### 12.1 Docker Compose 部署（推荐）
 
 #### 步骤一：环境准备
 
@@ -1264,7 +1500,7 @@ backend (healthcheck: /api/system/health/ready, depends_on: postgres + redis)
 web (depends_on: backend healthy)
 ```
 
-### 11.2 本地开发运行
+### 12.2 本地开发运行
 
 #### 后端
 
@@ -1310,7 +1546,7 @@ mvn -q exec:java -Dexec.args="tool-stats --window-hours 24"
 mvn -q exec:java -Dexec.args="release-report --window-hours 24"
 ```
 
-### 11.3 运维脚本
+### 12.3 运维脚本
 
 | 脚本 | 用途 |
 |------|------|
@@ -1319,7 +1555,7 @@ mvn -q exec:java -Dexec.args="release-report --window-hours 24"
 | [smoke.sh](scripts/smoke.sh) | 冒烟测试（注册→登录→创建会话→流式对话→导出→报告） |
 | [render-release-report.sh](scripts/render-release-report.sh) | 渲染发布报告 |
 
-### 11.4 冒烟测试流程
+### 12.4 冒烟测试流程
 
 [smoke.sh](scripts/smoke.sh) 执行以下步骤：
 
@@ -1337,9 +1573,9 @@ mvn -q exec:java -Dexec.args="release-report --window-hours 24"
 
 ---
 
-## 12. 开发指南
+## 13. 开发指南
 
-### 12.1 添加新的模型提供商
+### 13.1 添加新的模型提供商
 
 1. 在 `ModelProviderType` 枚举中添加新类型
 2. 实现 `ModelProvider` 接口：
@@ -1349,20 +1585,20 @@ mvn -q exec:java -Dexec.args="release-report --window-hours 24"
 3. 在 `ModelGateway` 中注册新的 Provider Bean
 4. 在 `application.yml` 中添加相关配置
 
-### 12.2 添加新的工具
+### 13.2 添加新的工具
 
 1. 在 `AgentToolOrchestrator.listToolSpecs()` 中注册工具规范
 2. 在 `AgentToolOrchestrator.execute()` 的 switch 中添加执行分支
 3. 在 `CodeToolService` 中实现工具逻辑
 4. 确保路径操作通过 `resolveSafe()` 安全验证
 
-### 12.3 数据库迁移
+### 13.3 数据库迁移
 
 添加新迁移文件到 `backend/src/main/resources/db/migration/`，命名格式：`V{version}__{description}.sql`
 
 示例：`V3__add_user_preferences.sql`
 
-### 12.4 添加新的 REST 端点
+### 13.4 添加新的 REST 端点
 
 1. 在对应模块的 Controller 中添加方法
 2. 使用 `@Valid` 验证请求体
@@ -1370,14 +1606,14 @@ mvn -q exec:java -Dexec.args="release-report --window-hours 24"
 4. 使用 MDC 记录请求上下文
 5. 在 `SecurityConfig` 中配置权限（如需公开访问）
 
-### 12.5 前端添加新功能
+### 13.5 前端添加新功能
 
 1. 在 `types.ts` 中定义 TypeScript 类型
 2. 在 `api.ts` 中添加 API 方法
 3. 在对应的 Zustand Store 中添加状态和方法
 4. 创建或修改 UI 组件
 
-### 12.6 项目构建
+### 13.6 项目构建
 
 ```bash
 # 后端构建
@@ -1393,7 +1629,7 @@ cd cli && mvn clean package -DskipTests
 mvn clean package -DskipTests
 ```
 
-### 12.7 测试
+### 13.7 测试
 
 ```bash
 # 后端单元测试
@@ -1418,7 +1654,7 @@ cd backend && mvn verify
 
 ---
 
-## 13. 术语表
+## 14. 术语表
 
 | 术语 | 定义 |
 |------|------|
@@ -1431,10 +1667,11 @@ cd backend && mvn verify
 | Refresh Token 轮转 | 每次刷新令牌后更新版本，旧刷新令牌失效的安全机制。 |
 | Workspace Root | 工具可访问的根目录边界，`resolveSafe()` 依赖它防止路径逃逸。 |
 
-## 14. 变更记录
+## 15. 变更记录
 
 | 日期 | 改动摘要 | 影响章节 |
 |------|----------|----------|
+| 2026-05-14 | 新增 Desktop 桌面客户端模块章节（第 6 章），更新整体架构图加入 Desktop 客户端，补充 Desktop NPM 依赖（10.4），全量重编号章节；基于源码实际实现校验所有常量、方法签名和配置项。 | 目录、2、6、10、所有章节编号 |
 | 2026-05-01 | 全量优化文档结构与可维护性：新增元信息、系统限制、生产必改项、术语表、失败示例和快速上手路径；统一相对路径链接并修复文本质量问题。 | 目录、2、3、4、5、8、10、13、14 |
 
-*文档生成时间: 2026-05-01*
+*文档生成时间: 2026-05-14*
