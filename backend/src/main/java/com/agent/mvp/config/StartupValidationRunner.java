@@ -5,6 +5,7 @@ import com.agent.mvp.system.dto.ReadinessCheck;
 import com.agent.mvp.system.service.SystemDiagnosticsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
@@ -20,6 +21,7 @@ public class StartupValidationRunner implements ApplicationRunner {
     private final SystemDiagnosticsService diagnosticsService;
     private final Function<String, String> envReader;
 
+    @Autowired
     public StartupValidationRunner(AppProperties appProperties,
                                    SystemDiagnosticsService diagnosticsService) {
         this(appProperties, diagnosticsService, System::getenv);

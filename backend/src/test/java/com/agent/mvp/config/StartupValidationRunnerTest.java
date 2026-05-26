@@ -3,9 +3,14 @@ package com.agent.mvp.config;
 import com.agent.mvp.system.dto.ReadinessCheck;
 import com.agent.mvp.system.service.SystemDiagnosticsService;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -13,6 +18,15 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class StartupValidationRunnerTest {
+
+    @Test
+    void shouldMarkProductionConstructorForSpringInjection() {
+        boolean hasAutowiredConstructor = Arrays.stream(StartupValidationRunner.class.getDeclaredConstructors())
+                .filter(this::isProductionConstructor)
+                .anyMatch(constructor -> constructor.isAnnotationPresent(Autowired.class));
+
+        assertTrue(hasAutowiredConstructor, "Spring needs an explicit constructor when test-only constructors exist");
+    }
 
     @Test
     void shouldFailFastWhenJwtSecretEnvIsMissing() {
@@ -69,5 +83,12 @@ class StartupValidationRunnerTest {
 
     private ReadinessCheck readinessCheck(String name, boolean ok, String detail) {
         return new ReadinessCheck(name, ok, detail, ok ? "OK" : "ERROR", 1L, java.util.Map.of());
+    }
+
+    private boolean isProductionConstructor(Constructor<?> constructor) {
+        Class<?>[] parameterTypes = constructor.getParameterTypes();
+        return parameterTypes.length == 2
+                && parameterTypes[0] == AppProperties.class
+                && parameterTypes[1] == SystemDiagnosticsService.class;
     }
 }

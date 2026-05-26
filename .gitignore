@@ -5,6 +5,8 @@
 .idea/
 .vscode/
 *.iml
+.DS_Store
+**/.DS_Store
 
 # Node
 web/node_modules/
@@ -17,6 +19,10 @@ env/*.env
 
 # Logs
 *.log
+
+# Local deploy state and generated smoke artifacts
+.deploy/
+artifacts/smoke/*/
 
 # CLI local state
 .cli-state/

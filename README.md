@@ -42,6 +42,17 @@ Edit `env/dev.env` and fill secrets (`JWT_SECRET`, `OPENAI_API_KEY`, database pa
 ./scripts/smoke.sh dev
 ```
 
+For deterministic local smoke tests without a real model endpoint, start the bundled OpenAI-compatible mock in another terminal and point `env/dev.env` or the deploy environment at it:
+
+```bash
+node scripts/openai-compatible-mock.mjs
+
+OPENAI_BASE_URL=http://host.docker.internal:18081/v1 \
+OPENAI_API_KEY=smoke-test \
+./scripts/deploy.sh dev
+./scripts/smoke.sh dev
+```
+
 Smoke test validates:
 - health and readiness
 - register -> login -> create-session -> stream-chat
@@ -68,7 +79,7 @@ Smoke test validates:
 Default URLs:
 - Web: `http://localhost:8088`
 - Backend: `http://localhost:8080`
-- Readiness: `http://localhost:8080/api/system/health/ready`
+- Readiness: `http://localhost:8080/api/v1/system/health/ready`
 
 ## Local Development (without Compose)
 
@@ -128,35 +139,35 @@ SMOKE_RENDER_PDF=true ./scripts/smoke.sh dev
 ## API Summary
 
 ### Auth
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/refresh`
-- `GET /api/auth/me`
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+- `GET /api/v1/auth/me`
 
 ### Sessions
-- `POST /api/sessions`
-- `GET /api/sessions`
-- `GET /api/sessions/{id}/messages`
-- `GET /api/sessions/{id}/export?format=json|markdown`
+- `POST /api/v1/sessions`
+- `GET /api/v1/sessions`
+- `GET /api/v1/sessions/{id}/messages`
+- `GET /api/v1/sessions/{id}/export?format=json|markdown`
 
 ### Agent
-- `POST /api/agent/chat`
-- `POST /api/agent/chat/stream` (SSE, includes `event: heartbeat`)
+- `POST /api/v1/agent/chat`
+- `POST /api/v1/agent/chat/stream` (SSE, includes `event: heartbeat`)
 
 ### Dev Coach
-- `POST /api/coach/requirements/breakdown`
-- `POST /api/coach/scaffolds`
-- `GET /api/coach/scaffolds/{id}/download`
-- `POST /api/coach/logs/diagnose`
-- `GET /api/coach/runs`
+- `POST /api/v1/coach/requirements/breakdown`
+- `POST /api/v1/coach/scaffolds`
+- `GET /api/v1/coach/scaffolds/{id}/download`
+- `POST /api/v1/coach/logs/diagnose`
+- `GET /api/v1/coach/runs`
 
 ### System
-- `GET /api/system/models`
-- `GET /api/system/health/ready`
-- `GET /api/system/tool-stats?windowHours=24&sessionId=<optional>`
-- `GET /api/system/tool-stats/export?windowHours=24&sessionId=<optional>&format=json|markdown`
-- `GET /api/system/release-report?windowHours=24&sessionId=<optional>`
-- `GET /api/system/release-report/export?windowHours=24&sessionId=<optional>&format=json|markdown`
+- `GET /api/v1/system/models`
+- `GET /api/v1/system/health/ready`
+- `GET /api/v1/system/tool-stats?windowHours=24&sessionId=<optional>`
+- `GET /api/v1/system/tool-stats/export?windowHours=24&sessionId=<optional>&format=json|markdown`
+- `GET /api/v1/system/release-report?windowHours=24&sessionId=<optional>`
+- `GET /api/v1/system/release-report/export?windowHours=24&sessionId=<optional>&format=json|markdown`
 
 ## Config Layering
 
