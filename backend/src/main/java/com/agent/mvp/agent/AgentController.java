@@ -9,7 +9,6 @@ import com.agent.mvp.common.exception.TooManyRequestsException;
 import com.agent.mvp.common.exception.UnauthorizedException;
 import com.agent.mvp.config.AppProperties;
 import com.agent.mvp.infra.RateLimiterService;
-import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
 import org.slf4j.MDC;
 import org.slf4j.Logger;
@@ -17,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,12 +29,8 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -48,48 +45,27 @@ public class AgentController {
     private final AgentService agentService;
     private final RateLimiterService rateLimiterService;
     private final AppProperties appProperties;
-    private final AtomicInteger streamThreadCounter = new AtomicInteger();
     private final AtomicInteger inFlightStreams = new AtomicInteger();
     private final AtomicInteger rejectedStreams = new AtomicInteger();
-    private final ThreadPoolExecutor streamExecutor;
-    private final ScheduledExecutorService heartbeatExecutor;
+    private final ThreadPoolTaskExecutor streamExecutor;
+    private final ThreadPoolTaskScheduler heartbeatScheduler;
 
     public AgentController(AgentService agentService,
                            RateLimiterService rateLimiterService,
                            AppProperties appProperties,
+                           ThreadPoolTaskExecutor streamExecutor,
+                           ThreadPoolTaskScheduler heartbeatScheduler,
                            MeterRegistry meterRegistry) {
         this.agentService = agentService;
         this.rateLimiterService = rateLimiterService;
         this.appProperties = appProperties;
-        int corePoolSize = Math.max(1, appProperties.getAgent().getStreamExecutorCorePoolSize());
-        int maxPoolSize = Math.max(corePoolSize, appProperties.getAgent().getStreamExecutorMaxPoolSize());
-        int queueCapacity = Math.max(1, appProperties.getAgent().getStreamExecutorQueueCapacity());
-        int heartbeatThreads = Math.max(1, appProperties.getAgent().getHeartbeatThreads());
-        this.streamExecutor = new ThreadPoolExecutor(
-                corePoolSize,
-                maxPoolSize,
-                60,
-                TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(queueCapacity),
-                runnable -> {
-                    Thread thread = new Thread(runnable, "agent-stream-" + streamThreadCounter.incrementAndGet());
-                    thread.setDaemon(true);
-                    return thread;
-                }
-        );
-        this.heartbeatExecutor = Executors.newScheduledThreadPool(
-                heartbeatThreads,
-                runnable -> {
-                    Thread thread = new Thread(runnable, "agent-heartbeat");
-                    thread.setDaemon(true);
-                    return thread;
-                }
-        );
-        Gauge.builder("agent.stream.executor.active", streamExecutor, ThreadPoolExecutor::getActiveCount)
+        this.streamExecutor = streamExecutor;
+        this.heartbeatScheduler = heartbeatScheduler;
+        Gauge.builder("agent.stream.executor.active", streamExecutor, ThreadPoolTaskExecutor::getActiveCount)
                 .register(meterRegistry);
-        Gauge.builder("agent.stream.executor.queue.size", streamExecutor, executor -> executor.getQueue().size())
+        Gauge.builder("agent.stream.executor.queue.size", streamExecutor, ThreadPoolTaskExecutor::getQueueSize)
                 .register(meterRegistry);
-        Gauge.builder("agent.stream.executor.pool.size", streamExecutor, ThreadPoolExecutor::getPoolSize)
+        Gauge.builder("agent.stream.executor.pool.size", streamExecutor, ThreadPoolTaskExecutor::getPoolSize)
                 .register(meterRegistry);
         Gauge.builder("agent.stream.inflight", inFlightStreams, AtomicInteger::get)
                 .register(meterRegistry);
@@ -115,14 +91,6 @@ public class AgentController {
         return openStream(request, authentication);
     }
 
-    @PreDestroy
-    public void shutdownStreamExecutor() {
-        streamExecutor.shutdown();
-        heartbeatExecutor.shutdown();
-        awaitTermination(streamExecutor, "streamExecutor");
-        awaitTermination(heartbeatExecutor, "heartbeatExecutor");
-    }
-
     private SseEmitter openStream(ChatRequest request, Authentication authentication) {
         AuthenticatedUser user = requireUser(authentication);
         MDC.put(RequestContext.USER_ID_KEY, user.userId().toString());
@@ -131,7 +99,7 @@ public class AgentController {
         SseEmitter emitter = new SseEmitter(Math.max(30_000L, appProperties.getAgent().getStreamTimeoutMs()));
         AtomicBoolean done = new AtomicBoolean(false);
         Duration heartbeatInterval = Duration.ofMillis(Math.max(1_000L, appProperties.getAgent().getHeartbeatIntervalMs()));
-        ScheduledFuture<?> heartbeat = heartbeatExecutor.scheduleAtFixedRate(
+        ScheduledFuture<?> heartbeat = heartbeatScheduler.getScheduledExecutor().scheduleAtFixedRate(
                 () -> sendHeartbeat(emitter, done),
                 heartbeatInterval.toMillis(),
                 heartbeatInterval.toMillis(),
@@ -232,16 +200,7 @@ public class AgentController {
         }
     }
 
-    private void awaitTermination(java.util.concurrent.ExecutorService executor, String executorName) {
-        try {
-            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
-                log.warn("{} did not terminate within timeout", executorName);
-            }
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            log.warn("{} termination interrupted", executorName, ex);
-        }
-    }
+
 
     private void sendEvent(SseEmitter emitter, String name, Object data) {
         try {

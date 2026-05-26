@@ -9,6 +9,8 @@ import com.agent.mvp.infra.RedisRateLimiterService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 import java.time.Duration;
@@ -27,11 +29,15 @@ class AgentControllerTest {
         AgentService agentService = Mockito.mock(AgentService.class);
         RedisRateLimiterService rateLimiter = Mockito.mock(RedisRateLimiterService.class);
         AppProperties appProperties = new AppProperties();
+        ThreadPoolTaskExecutor streamExecutor = Mockito.mock(ThreadPoolTaskExecutor.class);
+        ThreadPoolTaskScheduler heartbeatScheduler = Mockito.mock(ThreadPoolTaskScheduler.class);
         UUID userId = UUID.randomUUID();
         AgentController controller = new AgentController(
                 agentService,
                 rateLimiter,
                 appProperties,
+                streamExecutor,
+                heartbeatScheduler,
                 new SimpleMeterRegistry()
         );
 
@@ -57,11 +63,15 @@ class AgentControllerTest {
         appProperties.getRateLimit().setPremiumEmailSuffixes(List.of("@vip.example.com"));
         appProperties.getRateLimit().setChatPerMinute(60);
         appProperties.getRateLimit().setChatPremiumPerMinute(150);
+        ThreadPoolTaskExecutor streamExecutor = Mockito.mock(ThreadPoolTaskExecutor.class);
+        ThreadPoolTaskScheduler heartbeatScheduler = Mockito.mock(ThreadPoolTaskScheduler.class);
         UUID userId = UUID.randomUUID();
         AgentController controller = new AgentController(
                 agentService,
                 rateLimiter,
                 appProperties,
+                streamExecutor,
+                heartbeatScheduler,
                 new SimpleMeterRegistry()
         );
 
