@@ -5,6 +5,7 @@ import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.auth.repo.UserRepository;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
+import com.agent.mvp.common.dto.PageResult;
 import com.agent.mvp.config.AppProperties;
 import com.agent.mvp.infra.SessionCacheService;
 import com.agent.mvp.session.dto.CreateSessionRequest;
@@ -73,11 +74,21 @@ public class SessionService {
     }
 
     @Transactional(readOnly = true)
-    public List<SessionResponse> listSessions(UUID userId, int page, int size) {
-        return sessionRepository.findByUser_IdOrderByUpdatedAtDesc(userId, PageRequest.of(Math.max(0, page), Math.max(1, size)))
-                .stream()
+    public PageResult<SessionResponse> listSessions(UUID userId, int page, int size) {
+        org.springframework.data.domain.Page<ConversationSession> sessionPage = sessionRepository.findByUser_IdOrderByUpdatedAtDesc(
+                userId,
+                PageRequest.of(Math.max(0, page), Math.max(1, size))
+        );
+        List<SessionResponse> content = sessionPage.getContent().stream()
                 .map(this::toResponse)
                 .toList();
+        return new PageResult<>(
+                content,
+                sessionPage.getNumber(),
+                sessionPage.getSize(),
+                sessionPage.getTotalElements(),
+                sessionPage.getTotalPages()
+        );
     }
 
     @Transactional(readOnly = true)

@@ -2,6 +2,7 @@ package com.agent.mvp.session;
 
 import com.agent.mvp.auth.security.AuthenticatedUser;
 import com.agent.mvp.common.context.RequestContext;
+import com.agent.mvp.common.dto.PageResult;
 import com.agent.mvp.common.exception.UnauthorizedException;
 import com.agent.mvp.session.dto.CreateSessionRequest;
 import com.agent.mvp.session.dto.MessageResponse;
@@ -45,7 +46,7 @@ public class SessionController {
     }
 
     @GetMapping
-    public List<SessionResponse> listSessions(
+    public PageResult<SessionResponse> listSessions(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
