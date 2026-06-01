@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.security.core.Authentication;
@@ -23,7 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -86,88 +87,76 @@ public class AgentController {
     }
 
     @PostMapping(value = "/chat/stream", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@Valid @RequestBody ChatRequest request,
-                             Authentication authentication) {
-        return openStream(request, authentication);
-    }
-
-    private SseEmitter openStream(ChatRequest request, Authentication authentication) {
+    public Flux<ServerSentEvent<Object>> stream(@Valid @RequestBody ChatRequest request,
+                                                Authentication authentication) {
         AuthenticatedUser user = requireUser(authentication);
-        MDC.put(RequestContext.USER_ID_KEY, user.userId().toString());
-        MDC.put(RequestContext.SESSION_ID_KEY, request.sessionId().toString());
         enforceChatRateLimit(user);
-        SseEmitter emitter = new SseEmitter(Math.max(30_000L, appProperties.getAgent().getStreamTimeoutMs()));
-        AtomicBoolean done = new AtomicBoolean(false);
-        Duration heartbeatInterval = Duration.ofMillis(Math.max(1_000L, appProperties.getAgent().getHeartbeatIntervalMs()));
-        ScheduledFuture<?> heartbeat = heartbeatScheduler.getScheduledExecutor().scheduleAtFixedRate(
-                () -> sendHeartbeat(emitter, done),
-                heartbeatInterval.toMillis(),
-                heartbeatInterval.toMillis(),
-                TimeUnit.MILLISECONDS
-        );
-        emitter.onCompletion(() -> {
-            done.set(true);
-            heartbeat.cancel(true);
-        });
-        emitter.onTimeout(() -> {
-            done.set(true);
-            heartbeat.cancel(true);
-        });
-        emitter.onError(error -> {
-            done.set(true);
-            heartbeat.cancel(true);
-        });
 
-        try {
-            inFlightStreams.incrementAndGet();
-            streamExecutor.execute(() -> runStream(user, request, emitter, done, heartbeat));
-        } catch (RejectedExecutionException ex) {
-            done.set(true);
-            heartbeat.cancel(true);
-            rejectedStreams.incrementAndGet();
-            inFlightStreams.decrementAndGet();
-            throw new TooManyRequestsException("Too many concurrent stream requests");
-        } finally {
-            MDC.remove(RequestContext.USER_ID_KEY);
-            MDC.remove(RequestContext.SESSION_ID_KEY);
-        }
-
-        return emitter;
-    }
-
-    private void runStream(AuthenticatedUser user,
-                           ChatRequest request,
-                           SseEmitter emitter,
-                           AtomicBoolean done,
-                           ScheduledFuture<?> heartbeat) {
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
-             MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, request.sessionId().toString())) {
-        try {
-            ChatResponse response = agentService.streamChat(
-                    user.userId(),
-                    request,
-                    meta -> sendEvent(emitter, "meta", meta),
-                    chunk -> sendEvent(emitter, "chunk", chunk)
+        return Flux.create(sink -> {
+            AtomicBoolean done = new AtomicBoolean(false);
+            Duration heartbeatInterval = Duration.ofMillis(Math.max(1_000L, appProperties.getAgent().getHeartbeatIntervalMs()));
+            ScheduledFuture<?> heartbeat = heartbeatScheduler.getScheduledExecutor().scheduleAtFixedRate(
+                    () -> {
+                        if (!done.get()) {
+                            sink.next(ServerSentEvent.builder()
+                                    .event("heartbeat")
+                                    .data(Map.of("ts", Instant.now().toString()))
+                                    .build());
+                        }
+                    },
+                    heartbeatInterval.toMillis(),
+                    heartbeatInterval.toMillis(),
+                    TimeUnit.MILLISECONDS
             );
-            sendEvent(emitter, "done", response);
-            emitter.complete();
-        } catch (Exception ex) {
-            if (isClientDisconnect(ex)) {
-                emitter.complete();
-                return;
-            }
+
+            sink.onDispose(() -> {
+                done.set(true);
+                heartbeat.cancel(true);
+            });
+
             try {
-                sendEvent(emitter, "error", Map.of("message", errorMessage(ex)));
-                emitter.complete();
-            } catch (Exception sendError) {
-                emitter.complete();
+                inFlightStreams.incrementAndGet();
+                streamExecutor.execute(() -> {
+                    try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
+                         MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, request.sessionId().toString())) {
+                        try {
+                            ChatResponse response = agentService.streamChat(
+                                    user.userId(),
+                                    request,
+                                    meta -> sink.next(ServerSentEvent.builder().event("meta").data(meta).build()),
+                                    chunk -> sink.next(ServerSentEvent.builder().event("chunk").data(chunk).build())
+                            );
+                            sink.next(ServerSentEvent.builder().event("done").data(response).build());
+                            sink.complete();
+                        } catch (Exception ex) {
+                            if (isClientDisconnect(ex)) {
+                                sink.complete();
+                                return;
+                            }
+                            try {
+                                sink.next(ServerSentEvent.builder()
+                                        .event("error")
+                                        .data(Map.of("message", errorMessage(ex)))
+                                        .build());
+                                sink.complete();
+                            } catch (Exception sendError) {
+                                sink.complete();
+                            }
+                        }
+                    } finally {
+                        done.set(true);
+                        heartbeat.cancel(true);
+                        inFlightStreams.decrementAndGet();
+                    }
+                });
+            } catch (RejectedExecutionException ex) {
+                done.set(true);
+                heartbeat.cancel(true);
+                rejectedStreams.incrementAndGet();
+                inFlightStreams.decrementAndGet();
+                sink.error(new TooManyRequestsException("Too many concurrent stream requests"));
             }
-        }
-        } finally {
-            done.set(true);
-            heartbeat.cancel(true);
-            inFlightStreams.decrementAndGet();
-        }
+        });
     }
 
     private void enforceChatRateLimit(AuthenticatedUser user) {
@@ -187,29 +176,6 @@ public class AgentController {
         return appProperties.getRateLimit().getPremiumEmailSuffixes().stream()
                 .filter(suffix -> suffix != null && !suffix.isBlank())
                 .anyMatch(email::endsWith);
-    }
-
-    private void sendHeartbeat(SseEmitter emitter, AtomicBoolean done) {
-        if (done.get()) {
-            return;
-        }
-        try {
-            sendEvent(emitter, "heartbeat", Map.of("ts", Instant.now().toString()));
-        } catch (Exception ex) {
-            log.warn("Failed to send heartbeat event", ex);
-        }
-    }
-
-
-
-    private void sendEvent(SseEmitter emitter, String name, Object data) {
-        try {
-            synchronized (emitter) {
-                emitter.send(SseEmitter.event().name(name).data(data));
-            }
-        } catch (IOException ex) {
-            throw new IllegalStateException("Failed to write stream event", ex);
-        }
     }
 
     private String errorMessage(Exception ex) {

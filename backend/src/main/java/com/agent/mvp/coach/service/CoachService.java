@@ -4,6 +4,7 @@ import com.agent.mvp.agent.ModelProviderType;
 import com.agent.mvp.agent.dto.ModelChatRequest;
 import com.agent.mvp.agent.dto.ModelChatResponse;
 import com.agent.mvp.agent.service.ModelGateway;
+import com.agent.mvp.agent.service.RAGMemoryService;
 import com.agent.mvp.coach.domain.GeneratedScaffold;
 import com.agent.mvp.coach.domain.ScaffoldFile;
 import com.agent.mvp.coach.dto.ApiEndpointPlan;
@@ -43,6 +44,7 @@ public class CoachService {
     private final DevCoachRunRepository runRepository;
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
+    private final RAGMemoryService ragMemoryService;
 
     public CoachService(ModelGateway modelGateway,
                         CoachPromptService promptService,
@@ -50,7 +52,8 @@ public class CoachService {
                         ScaffoldZipService scaffoldZipService,
                         DevCoachRunRepository runRepository,
                         AppProperties appProperties,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        RAGMemoryService ragMemoryService) {
         this.modelGateway = modelGateway;
         this.promptService = promptService;
         this.scaffoldTemplateRegistry = scaffoldTemplateRegistry;
@@ -58,6 +61,7 @@ public class CoachService {
         this.runRepository = runRepository;
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
+        this.ragMemoryService = ragMemoryService;
     }
 
     public RequirementBreakdownResponse breakdown(UUID userId, RequirementBreakdownRequest request) {
@@ -83,6 +87,11 @@ public class CoachService {
         String raw = modelResponse.content() == null ? "" : modelResponse.content();
         Parsed<LogDiagnosis> parsed = parseLogDiagnosis(raw);
         DevCoachRun run = saveRun(userId, "LOG_DIAGNOSIS", titleFrom(request.logContent()), request.logContent(), toJson(parsed.value()), null);
+        
+        if (parsed.warning() == null) {
+            ragMemoryService.storeDiagnosis(userId, run.getId(), parsed.value().symptom(), parsed.value().rootCause(), parsed.value().minimalFix());
+        }
+
         return new LogDiagnosisResponse(run.getId(), parsed.value(), raw, parsed.warning());
     }
 

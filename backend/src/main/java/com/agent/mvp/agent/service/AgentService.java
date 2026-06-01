@@ -38,6 +38,7 @@ public class AgentService {
     private final ToolAuditService toolAuditService;
     private final ObjectMapper objectMapper;
     private final AppProperties appProperties;
+    private final RAGMemoryService ragMemoryService;
 
     public AgentService(SessionService sessionService,
                         ModelRoutingService modelRoutingService,
@@ -45,7 +46,8 @@ public class AgentService {
                         AgentToolOrchestrator toolOrchestrator,
                         ToolAuditService toolAuditService,
                         AppProperties appProperties,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        RAGMemoryService ragMemoryService) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
         this.modelGateway = modelGateway;
@@ -53,6 +55,7 @@ public class AgentService {
         this.toolAuditService = toolAuditService;
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
+        this.ragMemoryService = ragMemoryService;
     }
 
     public ChatResponse chat(UUID userId, ChatRequest request) {
@@ -116,7 +119,7 @@ public class AgentService {
         int maxContextTokens = maxContextTokens();
         int maxToolSteps = maxToolSteps();
         boolean stopOnToolError = appProperties.getAgent().isStopOnToolError();
-        HistoryWindow historyWindow = buildMessages(history, maxContextTokens);
+        HistoryWindow historyWindow = buildMessages(userId, history, maxContextTokens);
         List<ModelChatMessage> messages = historyWindow.messages();
         List<ToolExecutionResult> traces = new ArrayList<>();
         String reply = "";
@@ -196,13 +199,36 @@ public class AgentService {
         );
     }
 
-    private HistoryWindow buildMessages(List<MessageResponse> history, int maxContextTokens) {
+    private HistoryWindow buildMessages(UUID userId, List<MessageResponse> history, int maxContextTokens) {
         List<ModelChatMessage> messages = new ArrayList<>();
-        messages.add(ModelChatMessage.of(
-                "system",
+        
+        String lastUserMessage = "";
+        if (history != null && !history.isEmpty()) {
+            MessageResponse lastMsg = history.get(history.size() - 1);
+            if ("user".equals(lastMsg.role())) {
+                lastUserMessage = lastMsg.content();
+            }
+        }
+
+        List<String> similarDiagnoses = List.of();
+        if (lastUserMessage != null && !lastUserMessage.isBlank()) {
+            similarDiagnoses = ragMemoryService.searchSimilarDiagnoses(userId, lastUserMessage, 3);
+        }
+
+        StringBuilder systemPrompt = new StringBuilder(
                 "You are a Java AI coding assistant. Use provided tool context as factual repo grounding. " +
-                        "If tool context is insufficient, say what extra info is needed."
-        ));
+                "If tool context is insufficient, say what extra info is needed."
+        );
+
+        if (!similarDiagnoses.isEmpty()) {
+            systemPrompt.append("\n\nHere are some relevant historical log diagnoses for reference:\n");
+            for (String diagnosis : similarDiagnoses) {
+                systemPrompt.append("---\n").append(diagnosis).append("\n");
+            }
+            systemPrompt.append("---\n");
+        }
+
+        messages.add(ModelChatMessage.of("system", systemPrompt.toString()));
 
         HistoryWindow historyWindow = sliceByTokenBudget(history, maxContextTokens);
         List<ModelChatMessage> historyMessages = historyWindow.messages();

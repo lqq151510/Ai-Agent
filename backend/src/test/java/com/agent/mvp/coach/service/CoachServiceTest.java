@@ -6,6 +6,7 @@ import com.agent.mvp.agent.service.ModelGateway;
 import com.agent.mvp.coach.dto.RequirementBreakdownRequest;
 import com.agent.mvp.coach.repo.DevCoachRunRepository;
 import com.agent.mvp.config.AppProperties;
+import com.agent.mvp.agent.service.RAGMemoryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +26,7 @@ class CoachServiceTest {
     void breakdownShouldParseStrictJsonAndPersistRun() {
         ModelGateway gateway = mock(ModelGateway.class);
         DevCoachRunRepository repository = mock(DevCoachRunRepository.class);
+        RAGMemoryService ragMemoryService = mock(RAGMemoryService.class);
         var service = new CoachService(
                 gateway,
                 new CoachPromptService(),
@@ -32,7 +34,8 @@ class CoachServiceTest {
                 new ScaffoldZipService(),
                 repository,
                 new AppProperties(),
-                new ObjectMapper()
+                new ObjectMapper(),
+                ragMemoryService
         );
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(gateway.chat(eq(ModelProviderType.OPENAI), any()))

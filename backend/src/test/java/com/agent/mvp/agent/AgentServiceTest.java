@@ -16,6 +16,7 @@ import com.agent.mvp.session.dto.MessageResponse;
 import com.agent.mvp.session.entity.ConversationSession;
 import com.agent.mvp.session.service.SessionService;
 import com.agent.mvp.tooling.service.ToolAuditService;
+import com.agent.mvp.agent.service.RAGMemoryService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -118,6 +119,7 @@ class AgentServiceTest {
         final AgentToolOrchestrator toolOrchestrator = mock(AgentToolOrchestrator.class);
         final ToolAuditService toolAuditService = mock(ToolAuditService.class);
         final AppProperties appProperties = new AppProperties();
+        final RAGMemoryService ragMemoryService = mock(RAGMemoryService.class);
         final AgentService service = new AgentService(
                 sessionService,
                 modelRoutingService,
@@ -125,7 +127,8 @@ class AgentServiceTest {
                 toolOrchestrator,
                 toolAuditService,
                 appProperties,
-                new ObjectMapper()
+                new ObjectMapper(),
+                ragMemoryService
         );
         final UUID userId = UUID.randomUUID();
         final ConversationSession session = new ConversationSession();
