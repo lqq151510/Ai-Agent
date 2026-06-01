@@ -10,6 +10,10 @@ import { CoachWorkspace } from './components/CoachWorkspace';
 import { MessageContainer } from './components/MessageContainer';
 import { Settings } from './components/Settings';
 import { useAuthStore } from './stores/authStore';
+import { useStreamStore } from './stores/streamStore';
+import { useChatActions } from './hooks/useChatActions';
+import { useAppBootstrap } from './hooks/useAppBootstrap';
+
 import { useChatStore, type ErrorKind } from './stores/chatStore';
 import { useUiStore } from './stores/uiStore';
 
@@ -97,6 +101,17 @@ export function App() {
     chat.setRateLimitRetryInSec(RATE_LIMIT_AUTO_RETRY_SECONDS);
   }
 
+  const { bootstrapAuth, onLogout } = useAppBootstrap(
+    api, chat, ui, navigate, setUser, updateTokens, clearAuth, applyError, loadModels, refreshWorkspaceDiagnostics
+  );
+
+  const {
+    onExportSession,
+    onExportToolStats,
+    onExportReleaseReport,
+    onSwitchFallbackSession
+  } = useChatActions(api, chat, ui, activeSession, applyError, onCreateSession);
+
   async function loadModels(client = api) {
     try {
       const res = await client.listModels();
@@ -143,38 +158,6 @@ export function App() {
     ]);
   }
 
-  async function bootstrapAuth(client = api) {
-    if (!useAuthStore.getState().tokens && client === api) {
-      navigate('/login');
-      return;
-    }
-    chat.setLoading(true);
-    chat.clearError();
-    try {
-      const [profile, list] = await Promise.all([client.me(), client.listSessions(), loadModels(client)]);
-      setUser(profile);
-      chat.setSessions(list);
-      const picked = list.find(s => s.id === chat.activeSessionId) ?? list[0] ?? null;
-      if (!picked) {
-        chat.setActiveSessionId('');
-        chat.setMessages([]);
-        await refreshWorkspaceDiagnostics(client, { sessionId: undefined });
-        navigate('/');
-      } else {
-        navigate(`/chat/sessions/${picked.id}`, { replace: true });
-      }
-    } catch (e) {
-      updateTokens(null);
-      clearAuth();
-      chat.resetChat();
-      ui.setToolStats(null);
-      ui.setReleaseReport(null);
-      applyError(e);
-      navigate('/login');
-    } finally {
-      chat.setLoading(false);
-    }
-  }
 
   useEffect(() => {
     const stored = readStoredTokens();
@@ -293,12 +276,15 @@ export function App() {
     }
   }, [urlSessionId, chat.sessions, tokens, user, location.pathname]);
 
-  async function sendMessage(outgoing: string) {
+    async function sendMessage(outgoing: string) {
     if (!chat.activeSessionId || !outgoing.trim()) return;
     const content = outgoing.trim();
     const assistantMessageId = `stream-assistant-${Date.now()}`;
     const now = new Date().toISOString();
     let streamedAnyChunk = false;
+    
+    useStreamStore.getState().resetStream();
+    
     chat.setSending(true);
     chat.clearError();
     chat.setPrompt('');
@@ -308,6 +294,7 @@ export function App() {
       { id: `stream-user-${Date.now()}`, role: 'user', content, provider: activeSession?.provider ?? '', model: activeSession?.model ?? '', createdAt: now },
       { id: assistantMessageId, role: 'assistant', content: '', toolTrace: '[]', provider: activeSession?.provider ?? '', model: activeSession?.model ?? '', createdAt: now }
     ]);
+    
     try {
       await api.streamChat({ sessionId: chat.activeSessionId, message: content, provider: activeSession?.provider, model: activeSession?.model }, {
         onChunk: chunk => {
@@ -315,7 +302,7 @@ export function App() {
             streamedAnyChunk = true;
             chat.setStreamState('streaming');
           }
-          chat.setMessages(prev => prev.map(msg => (msg.id === assistantMessageId ? { ...msg, content: msg.content + chunk } : msg)));
+          useStreamStore.getState().setStream(assistantMessageId, chunk);
         },
         onError: message => {
           const kind = applyError(message);
@@ -325,6 +312,11 @@ export function App() {
       });
       chat.setStreamState('idle');
       chat.setLastFailedMessage('');
+      
+      const finalBuffer = useStreamStore.getState().buffer;
+      chat.setMessages(prev => prev.map(msg => msg.id === assistantMessageId ? { ...msg, content: finalBuffer } : msg));
+      useStreamStore.getState().resetStream();
+      
       await reloadSessions(chat.activeSessionId);
     } catch (e) {
       chat.setStreamState('error');
@@ -346,100 +338,11 @@ export function App() {
     await sendMessage(chat.lastFailedMessage);
   }
 
-  function downloadFile(filename: string, content: string, type: string) {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  }
 
-  async function onExportSession(format: 'json' | 'markdown') {
-    if (!chat.activeSessionId) return;
-    chat.setExporting(true);
-    chat.clearError();
-    try {
-      const payload = await api.exportSession(chat.activeSessionId, format);
-      const baseTitle = (activeSession?.title || `session-${chat.activeSessionId}`).trim().replace(/[^\w.-]+/g, '_').slice(0, 48) || `session-${chat.activeSessionId}`;
-      const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-      if (format === 'markdown') {
-        downloadFile(`${baseTitle}.md`, text, 'text/markdown;charset=utf-8');
-        return;
-      }
-      downloadFile(`${baseTitle}.json`, text, 'application/json;charset=utf-8');
-    } catch (e) {
-      applyError(e);
-    } finally {
-      chat.setExporting(false);
-    }
-  }
 
-  async function onExportToolStats(format: 'json' | 'markdown') {
-    chat.setExporting(true);
-    chat.clearError();
-    try {
-      const sessionId = ui.toolStatsScope === 'session' ? chat.activeSessionId || undefined : undefined;
-      const payload = await api.exportToolStats(ui.toolStatsWindowHours, format, sessionId);
-      const scope = sessionId ? 'session' : 'global';
-      const baseName = `tool-stats-${scope}-${ui.toolStatsWindowHours}h`;
-      const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-      if (format === 'markdown') {
-        downloadFile(`${baseName}.md`, text, 'text/markdown;charset=utf-8');
-        return;
-      }
-      downloadFile(`${baseName}.json`, text, 'application/json;charset=utf-8');
-    } catch (e) {
-      applyError(e);
-    } finally {
-      chat.setExporting(false);
-    }
-  }
 
-  async function onExportReleaseReport(format: 'json' | 'markdown') {
-    chat.setExporting(true);
-    chat.clearError();
-    try {
-      const sessionId = ui.toolStatsScope === 'session' ? chat.activeSessionId || undefined : undefined;
-      const payload = await api.exportReleaseReport(ui.toolStatsWindowHours, format, sessionId);
-      const scope = sessionId ? 'session' : 'global';
-      const baseName = `release-report-${scope}-${ui.toolStatsWindowHours}h`;
-      const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-      if (format === 'markdown') {
-        downloadFile(`${baseName}.md`, text, 'text/markdown;charset=utf-8');
-        return;
-      }
-      downloadFile(`${baseName}.json`, text, 'application/json;charset=utf-8');
-    } catch (e) {
-      applyError(e);
-    } finally {
-      chat.setExporting(false);
-    }
-  }
 
-  async function onSwitchFallbackSession() {
-    if (!activeSession) return;
-    const fallbackModel = ui.modelOptions.find(item => item.provider === 'OPENAI' && item.isDefault)?.model || ui.modelOptions.find(item => item.provider === 'OPENAI')?.model || defaultModel('OPENAI');
-    await onCreateSession('OPENAI', fallbackModel, 'Fallback OPENAI');
-  }
 
-  async function onLogout() {
-    try {
-      if (tokens?.refreshToken) {
-        await api.logout({ refreshToken: tokens.refreshToken });
-      }
-    } catch {
-      // Best effort logout API call
-    }
-    updateTokens(null);
-    clearAuth();
-    chat.resetChat();
-    ui.resetUi();
-    navigate('/login');
-  }
 
   function toggleEffects() {
     const next = !ui.effectsEnabled;
@@ -472,6 +375,7 @@ export function App() {
             onExportReleaseReportJson={() => { void onExportReleaseReport('json'); }}
             onExportReleaseReportMarkdown={() => { void onExportReleaseReport('markdown'); }}
             onCreateSession={onCreateSession}
+            onNavigateToCoach={() => navigate('/coach')}
           />
           <ChatList sessions={chat.sessions} activeSessionId={chat.activeSessionId} onSelectSession={onSelectSession} />
         </aside>
@@ -507,7 +411,7 @@ export function App() {
             chat.errorKind === 'auth_expired'
               ? onLogout
               : chat.errorKind === 'model_unreachable'
-              ? () => { void onSwitchFallbackSession(); }
+              ? () => { void onSwitchFallbackSession(defaultModel); }
               : chat.errorKind === 'rate_limit' && !!chat.lastFailedMessage
               ? () => { chat.setRateLimitRetryArmed(false); chat.setRateLimitRetryInSec(null); void onRetryLast(); }
               : undefined
@@ -527,11 +431,6 @@ export function App() {
       <button className="ghost fx-toggle" type="button" onClick={toggleEffects}>
         {ui.effectsEnabled ? '动态效果: 开' : '动态效果: 关'}
       </button>
-      {tokens && user ? (
-        <button className="ghost coach-launch" type="button" onClick={() => navigate('/coach')}>
-          开发陪跑
-        </button>
-      ) : null}
       <Routes>
         <Route path="/login" element={
           !tokens || !user ? (

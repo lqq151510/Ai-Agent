@@ -36,3 +36,4 @@ desktop/backend-jre/
 # Runtime generated coach scaffold artifacts
 var/coach-artifacts/
 **/var/coach-artifacts/
+tmp/

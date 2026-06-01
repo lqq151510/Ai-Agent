@@ -66,10 +66,7 @@ public class OpenAiModelProvider implements ModelProvider {
     @Override
     @SuppressWarnings("unchecked")
     public ModelChatResponse chat(ModelChatRequest request) {
-        String apiKey = appProperties.getOpenai().getApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new BadRequestException("OPENAI_API_KEY is not configured");
-        }
+        String apiKey = resolveApiKey();
 
         Instant start = Instant.now();
         Map<String, Object> body = Map.of(
@@ -120,10 +117,7 @@ public class OpenAiModelProvider implements ModelProvider {
     @Override
     @SuppressWarnings("unchecked")
     public ModelChatResponse stream(ModelChatRequest request, Consumer<String> chunkConsumer) {
-        String apiKey = appProperties.getOpenai().getApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new BadRequestException("OPENAI_API_KEY is not configured");
-        }
+        String apiKey = resolveApiKey();
 
         Instant start = Instant.now();
         StringBuilder content = new StringBuilder();
@@ -298,5 +292,29 @@ public class OpenAiModelProvider implements ModelProvider {
         } catch (Exception ex) {
             return "";
         }
+    }
+
+    private String resolveApiKey() {
+        String apiKey = appProperties.getOpenai().getApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            if (isLocalOrMockEndpoint(baseUrl)) {
+                return "sk-local-mock-placeholder";
+            }
+            throw new BadRequestException("OPENAI_API_KEY is not configured");
+        }
+        return apiKey;
+    }
+
+    private boolean isLocalOrMockEndpoint(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        String lower = url.toLowerCase();
+        return lower.contains("localhost")
+                || lower.contains("127.0.0.1")
+                || lower.contains("0.0.0.0")
+                || lower.contains("host.docker.internal")
+                || lower.contains("192.168.")
+                || lower.contains("10.");
     }
 }

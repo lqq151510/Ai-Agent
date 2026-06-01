@@ -272,7 +272,7 @@ public class AgentService {
         for (int i = history.size() - 1; i >= 0; i--) {
             MessageResponse msg = history.get(i);
             String content = msg.content() == null ? "" : msg.content();
-            int messageTokens = estimateTokens(msg.role()) + estimateTokens(content) + 8;
+            int messageTokens = TokenCounter.countTokens(msg.role()) + TokenCounter.countTokens(content) + 8;
             if (used + messageTokens > budget && !reversed.isEmpty()) {
                 truncated = true;
                 break;
@@ -295,13 +295,7 @@ public class AgentService {
         return Math.max(1, appProperties.getAgent().getMaxToolSteps());
     }
 
-    private int estimateTokens(String text) {
-        if (text == null || text.isBlank()) {
-            return 0;
-        }
-        // Lightweight approximation for mixed zh/en code content.
-        return Math.max(1, (text.length() + 3) / 4);
-    }
+
 
     private record AgentLoopResult(String reply,
                                    long totalLatencyMs,

@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -79,6 +80,77 @@ class StartupValidationRunnerTest {
         verify(diagnosticsService).checkDatabase();
         verify(diagnosticsService).checkRedis();
         verify(diagnosticsService).checkModelProvider();
+    }
+
+    @Test
+    void shouldPassWhenModelProviderCheckFailsAndFailFastDisabled() {
+        SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
+        when(diagnosticsService.checkDatabase()).thenReturn(readinessCheck("database", true, "ok"));
+        when(diagnosticsService.checkRedis()).thenReturn(readinessCheck("redis", true, "ok"));
+        when(diagnosticsService.checkModelProvider()).thenReturn(readinessCheck("model", false, "mock not available"));
+        AppProperties appProperties = new AppProperties();
+        appProperties.getOpenai().setApiKey("sk-test");
+        appProperties.getOpenai().setBaseUrl("http://localhost:1234/v1");
+        appProperties.setDefaultOpenaiModel("qwen/qwen3.5-9b");
+        appProperties.getStartupValidation().setFailFast(false);
+
+        StartupValidationRunner runner = new StartupValidationRunner(
+                appProperties,
+                diagnosticsService,
+                ignored -> "01234567890123456789012345678901"
+        );
+
+        assertDoesNotThrow(() -> runner.run(mock(ApplicationArguments.class)));
+        verify(diagnosticsService).checkDatabase();
+        verify(diagnosticsService).checkRedis();
+        verify(diagnosticsService).checkModelProvider();
+    }
+
+    @Test
+    void shouldFailWhenModelProviderCheckFailsAndFailFastEnabled() {
+        SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
+        when(diagnosticsService.checkDatabase()).thenReturn(readinessCheck("database", true, "ok"));
+        when(diagnosticsService.checkRedis()).thenReturn(readinessCheck("redis", true, "ok"));
+        when(diagnosticsService.checkModelProvider()).thenReturn(readinessCheck("model", false, "mock not available"));
+        AppProperties appProperties = new AppProperties();
+        appProperties.getOpenai().setApiKey("sk-test");
+        appProperties.getOpenai().setBaseUrl("http://localhost:1234/v1");
+        appProperties.setDefaultOpenaiModel("qwen/qwen3.5-9b");
+        appProperties.getStartupValidation().setFailFast(true);
+
+        StartupValidationRunner runner = new StartupValidationRunner(
+                appProperties,
+                diagnosticsService,
+                ignored -> "01234567890123456789012345678901"
+        );
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
+        org.junit.jupiter.api.Assertions.assertTrue(ex.getMessage().contains("Model provider readiness check failed"));
+        verify(diagnosticsService).checkDatabase();
+        verify(diagnosticsService).checkRedis();
+        verify(diagnosticsService).checkModelProvider();
+    }
+
+    @Test
+    void shouldFailWhenRequiredDependencyCheckFails() {
+        SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
+        when(diagnosticsService.checkDatabase()).thenReturn(readinessCheck("database", false, "db down"));
+        AppProperties appProperties = new AppProperties();
+        appProperties.getOpenai().setApiKey("sk-test");
+        appProperties.getOpenai().setBaseUrl("http://localhost:1234/v1");
+        appProperties.setDefaultOpenaiModel("qwen/qwen3.5-9b");
+
+        StartupValidationRunner runner = new StartupValidationRunner(
+                appProperties,
+                diagnosticsService,
+                ignored -> "01234567890123456789012345678901"
+        );
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
+        org.junit.jupiter.api.Assertions.assertTrue(ex.getMessage().contains("Database connectivity check failed"));
+        verify(diagnosticsService).checkDatabase();
+        verify(diagnosticsService, never()).checkRedis();
+        verify(diagnosticsService, never()).checkModelProvider();
     }
 
     private ReadinessCheck readinessCheck(String name, boolean ok, String detail) {

@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 
@@ -42,7 +43,7 @@ public class SystemDiagnosticsService {
 
     public SystemDiagnosticsService(AppProperties appProperties,
                                     JdbcTemplate jdbcTemplate,
-                                    StringRedisTemplate redisTemplate) {
+                                    @Autowired(required = false) StringRedisTemplate redisTemplate) {
         this.appProperties = appProperties;
         this.jdbcTemplate = jdbcTemplate;
         this.redisTemplate = redisTemplate;
@@ -103,12 +104,13 @@ public class SystemDiagnosticsService {
     }
 
     public ReadinessResponse readiness() {
-        List<ReadinessCheck> checks = List.of(
-                checkDatabase(),
-                checkRedis(),
-                checkModelProvider()
-        );
-        boolean ready = checks.stream().allMatch(ReadinessCheck::ok);
+        ReadinessCheck dbCheck = checkDatabase();
+        ReadinessCheck redisCheck = checkRedis();
+        ReadinessCheck modelCheck = checkModelProvider();
+
+        List<ReadinessCheck> checks = List.of(dbCheck, redisCheck, modelCheck);
+        // Database and Redis are hard dependencies. Model check is a soft/degradable dependency.
+        boolean ready = dbCheck.ok() && redisCheck.ok();
         return new ReadinessResponse(ready, checks, Instant.now());
     }
 
@@ -170,6 +172,16 @@ public class SystemDiagnosticsService {
     }
 
     public ReadinessCheck checkRedis() {
+        if (redisTemplate == null) {
+            return new ReadinessCheck(
+                    "redis",
+                    true,
+                    "redis is disabled (using memory cache)",
+                    "OK",
+                    0L,
+                    Map.of()
+            );
+        }
         Instant start = Instant.now();
         try {
             String pong = null;

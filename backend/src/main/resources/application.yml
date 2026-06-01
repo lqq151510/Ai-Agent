@@ -12,6 +12,8 @@ management:
         enabled: true
 
 spring:
+  profiles:
+    include: mq
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_DATABASE:ai_agent}}
     username: ${PG_USERNAME:postgres}

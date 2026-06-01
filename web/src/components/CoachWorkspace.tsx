@@ -90,6 +90,50 @@ export const CoachWorkspace: React.FC<CoachWorkspaceProps> = ({ api, onBack }) =
     });
   }
 
+  function handleRunClick(run: CoachRunResponse) {
+    setError('');
+    try {
+      if (run.runType === 'REQUIREMENT_BREAKDOWN') {
+        setActiveTab('requirements');
+        setRequirement(run.inputText);
+        const parsed = JSON.parse(run.outputJson);
+        setBreakdown({
+          runId: run.id,
+          breakdown: parsed,
+          rawText: '',
+          parseWarning: null
+        });
+      } else if (run.runType === 'LOG_DIAGNOSIS') {
+        setActiveTab('logs');
+        setLogContent(run.inputText);
+        setLogContext('Spring Boot Runtime');
+        const parsed = JSON.parse(run.outputJson);
+        setDiagnosis({
+          runId: run.id,
+          diagnosis: parsed,
+          rawText: '',
+          parseWarning: null
+        });
+      } else if (run.runType === 'SCAFFOLD') {
+        setActiveTab('scaffold');
+        if (run.inputText) {
+          try {
+            const req = JSON.parse(run.inputText);
+            if (req.preset) setPreset(req.preset);
+            if (req.projectName) setProjectName(req.projectName);
+            if (req.basePackage) setBasePackage(req.basePackage);
+          } catch {
+            // fallback
+          }
+        }
+        const parsed = JSON.parse(run.outputJson);
+        setScaffold(parsed);
+      }
+    } catch (e) {
+      setError('无法还原该条历史记录的数据：' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
   return (
     <main className="coach-workspace panel">
       <header className="coach-hero">
@@ -188,8 +232,8 @@ export const CoachWorkspace: React.FC<CoachWorkspaceProps> = ({ api, onBack }) =
           </div>
           {runs.length === 0 ? <p className="muted">还没有开发陪跑记录。</p> : null}
           {runs.map(run => (
-            <article key={run.id} className="coach-run-item">
-              <span>{run.runType}</span>
+            <article key={run.id} className="coach-run-item" onClick={() => handleRunClick(run)} style={{ cursor: 'pointer' }} title="点击还原并复盘该记录">
+              <span>{run.runType === 'REQUIREMENT_BREAKDOWN' ? '需求拆解' : run.runType === 'LOG_DIAGNOSIS' ? '日志定位' : '项目脚手架'}</span>
               <strong>{run.title}</strong>
               <small>{new Date(run.createdAt).toLocaleString()}</small>
             </article>

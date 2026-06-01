@@ -41,6 +41,7 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/h2
+    baseline-on-migrate: true
   cache:
     type: caffeine
   autoconfigure:
@@ -60,7 +61,7 @@ security:
     refresh-exp-seconds: ${JWT_REFRESH_EXP_SECONDS:2592000}
 
 app:
-  data-dir: ${app.data-dir:${user.home}/.ai-agent-desktop}
+  data-dir: ${APP_DATA_DIR:${user.home}/.ai-agent-desktop}
   workspace-root: ${WORKSPACE_ROOT:${user.home}/.ai-agent-desktop/workspace}
   desktop:
     cache:

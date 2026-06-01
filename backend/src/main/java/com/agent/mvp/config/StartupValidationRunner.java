@@ -11,6 +11,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 @Component
 public class StartupValidationRunner implements ApplicationRunner {
@@ -37,11 +38,35 @@ public class StartupValidationRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        validateRequiredConfiguration();
+        validateRequiredDependencies();
+        validateOptionalDependencies();
+    }
+
+    private void validateRequiredConfiguration() {
         validateJwtSecret();
         validateModelConfig();
-        validateDatabase();
-        validateRedis();
-        validateModelEndpoint();
+    }
+
+    private void validateRequiredDependencies() {
+        validateRequiredDependency("database", diagnosticsService::checkDatabase,
+                "Database connectivity check failed: ");
+        validateRequiredDependency("redis", diagnosticsService::checkRedis,
+                "Redis connectivity check failed: ");
+    }
+
+    private void validateOptionalDependencies() {
+        validateOptionalModelProvider();
+    }
+
+    private void validateRequiredDependency(String dependencyName,
+                                            Supplier<ReadinessCheck> checkSupplier,
+                                            String errorPrefix) {
+        ReadinessCheck check = checkSupplier.get();
+        if (!check.ok()) {
+            throw new IllegalStateException(errorPrefix + check.detail());
+        }
+        log.info("Startup required dependency check passed: {} ({})", dependencyName, check.detail());
     }
 
     private void validateJwtSecret() {
@@ -71,23 +96,10 @@ public class StartupValidationRunner implements ApplicationRunner {
         }
     }
 
-    private void validateDatabase() {
-        ReadinessCheck check = diagnosticsService.checkDatabase();
-        if (!check.ok()) {
-            throw new IllegalStateException("Database connectivity check failed: " + check.detail());
-        }
-    }
-
-    private void validateRedis() {
-        ReadinessCheck check = diagnosticsService.checkRedis();
-        if (!check.ok()) {
-            throw new IllegalStateException("Redis connectivity check failed: " + check.detail());
-        }
-    }
-
-    private void validateModelEndpoint() {
+    private void validateOptionalModelProvider() {
         ReadinessCheck check = diagnosticsService.checkModelProvider();
         if (check.ok()) {
+            log.info("Startup optional dependency check passed: model provider ({})", check.detail());
             return;
         }
 
@@ -95,6 +107,6 @@ public class StartupValidationRunner implements ApplicationRunner {
             throw new IllegalStateException("Model provider readiness check failed: " + check.detail());
         }
 
-        log.warn("Model provider readiness check failed but fail-fast disabled: {}", check.detail());
+        log.warn("Startup optional dependency check failed but fail-fast disabled: model provider ({})", check.detail());
     }
 }

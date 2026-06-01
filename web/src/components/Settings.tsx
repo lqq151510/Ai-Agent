@@ -25,6 +25,7 @@ interface SettingsProps {
   onExportReleaseReportJson: () => void;
   onExportReleaseReportMarkdown: () => void;
   onCreateSession: (provider: Provider, model: string, title?: string) => void;
+  onNavigateToCoach: () => void;
 }
 
 const RECENT_MODEL_KEY = 'ai_agent_recent_model';
@@ -53,7 +54,8 @@ export const Settings: React.FC<SettingsProps> = ({
   onExportToolStatsMarkdown,
   onExportReleaseReportJson,
   onExportReleaseReportMarkdown,
-  onCreateSession
+  onCreateSession,
+  onNavigateToCoach
 }) => {
   const [createProvider, setCreateProvider] = useState<Provider>('OPENAI');
   const [createTitle, setCreateTitle] = useState('');
@@ -114,6 +116,15 @@ export const Settings: React.FC<SettingsProps> = ({
           <LogOut size={17} />
         </button>
       </header>
+      <div className="coach-nav-card" onClick={onNavigateToCoach} style={{ cursor: 'pointer' }}>
+        <div className="coach-nav-icon">
+          <Zap size={16} />
+        </div>
+        <div className="coach-nav-body">
+          <h3>AI + Java 开发陪跑器</h3>
+          <p>需求拆解、脚手架与日志诊断</p>
+        </div>
+      </div>
       <section className="section new-session-form">
         <div className="section-heading">
           <MessageSquarePlus size={16} />

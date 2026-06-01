@@ -36,21 +36,23 @@ Edit `env/dev.env` and fill secrets (`JWT_SECRET`, `OPENAI_API_KEY`, database pa
 ```bash
 ./scripts/deploy.sh dev
 ```
+`deploy.sh` runs `scripts/check-consistency.sh` before building so API path drift is caught early. When `SMOKE_USE_OPENAI_MOCK=true`, it also overrides backend OpenAI endpoint to the local mock URL.
 
 ### 3) Smoke test
 ```bash
 ./scripts/smoke.sh dev
 ```
+`smoke.sh` also runs `scripts/check-consistency.sh` first.
 
-For deterministic local smoke tests without a real model endpoint, start the bundled OpenAI-compatible mock in another terminal and point `env/dev.env` or the deploy environment at it:
+Smoke defaults to deterministic local execution when `MODEL_PROVIDER=OPENAI`:
+- `SMOKE_USE_OPENAI_MOCK=true` (default) auto-starts the bundled OpenAI-compatible mock.
+- Mock endpoint follows `SMOKE_MOCK_BASE_URL` (default: `http://host.docker.internal:18081/v1`).
+- If nothing is listening, `smoke.sh` launches `scripts/openai-compatible-mock.mjs` automatically and stores logs under the run artifacts folder.
+
+To run against a real model endpoint instead of the bundled mock:
 
 ```bash
-node scripts/openai-compatible-mock.mjs
-
-OPENAI_BASE_URL=http://host.docker.internal:18081/v1 \
-OPENAI_API_KEY=smoke-test \
-./scripts/deploy.sh dev
-./scripts/smoke.sh dev
+SMOKE_USE_OPENAI_MOCK=false ./scripts/smoke.sh dev
 ```
 
 Smoke test validates:
@@ -177,6 +179,10 @@ Templates:
 - `env/prod.env.example`
 
 Key runtime knobs:
+- `SMOKE_USE_OPENAI_MOCK`
+- `SMOKE_MOCK_BASE_URL`
+- `SMOKE_MOCK_BIND_HOST`
+- `SMOKE_MOCK_STARTUP_TIMEOUT_SECONDS`
 - `MODEL_CONNECT_TIMEOUT_MS`
 - `MODEL_READ_TIMEOUT_MS`
 - `MODEL_TOTAL_TIMEOUT_MS`

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, Tray, shell } from 'electron';
 import * as path from 'path';
+import * as net from 'net';
 import { BackendManager } from './backend-manager';
 import { CliManager } from './cli-manager';
 
@@ -10,6 +11,33 @@ let cliManager: CliManager;
 const isDev = !app.isPackaged;
 
 const DESKTOP_PORT = 18080;
+let activePort = DESKTOP_PORT;
+let isQuitting = false;
+
+function checkPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => {
+      resolve(false);
+    });
+    server.once('listening', () => {
+      server.close(() => {
+        resolve(true);
+      });
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+async function findFreePort(startPort: number, endPort: number): Promise<number> {
+  for (let port = startPort; port <= endPort; port++) {
+    const free = await checkPortFree(port);
+    if (free) {
+      return port;
+    }
+  }
+  throw new Error(`No free port found in range ${startPort}-${endPort}`);
+}
 
 function getBackendStartupTimeoutMs(): number {
   const raw = process.env.DESKTOP_BACKEND_READY_TIMEOUT_MS;
@@ -53,6 +81,13 @@ function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  mainWindow.on('close', (event) => {
+    if (process.platform === 'darwin' && !isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -120,6 +155,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', async () => {
+  isQuitting = true;
   if (backendManager) {
     await backendManager.stop();
   }
@@ -150,7 +186,13 @@ if (!gotTheLock) {
     const jrePath = getJrePath();
     const jarPath = getBackendJarPath();
 
-    backendManager = new BackendManager(jrePath, jarPath, dataDir, DESKTOP_PORT, {
+    try {
+      activePort = await findFreePort(DESKTOP_PORT, DESKTOP_PORT + 10);
+    } catch (error) {
+      console.warn('[desktop] Failed to find free port, falling back to default', error);
+    }
+
+    backendManager = new BackendManager(jrePath, jarPath, dataDir, activePort, {
       startupTimeoutMs: getBackendStartupTimeoutMs(),
     });
     cliManager = new CliManager();
@@ -183,4 +225,4 @@ if (!gotTheLock) {
   });
 }
 
-export { mainWindow, backendManager, getDataDir, DESKTOP_PORT };
+export { mainWindow, backendManager, getDataDir, activePort as DESKTOP_PORT };

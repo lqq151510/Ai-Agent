@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message, ToolExecutionResult } from '../types';
 import { Bot, ChevronDown, ChevronUp, Clock3, User, Wrench } from 'lucide-react';
+import { useStreamStore } from '../stores/streamStore';
 
 interface MessageItemProps {
   message: Message;
@@ -28,6 +29,8 @@ function parseToolTrace(raw?: string): ToolExecutionResult[] {
 }
 
 export const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
+  const streamBuffer = useStreamStore(state => state.activeId === message.id ? state.buffer : null);
+  const finalContent = streamBuffer !== null ? streamBuffer : message.content;
   const isAssistant = message.role === 'assistant';
   const traces = useMemo(() => parseToolTrace(message.toolTrace), [message.toolTrace]);
   const [showTrace, setShowTrace] = React.useState(false);
@@ -49,7 +52,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
       <div className="message-bubble">
         <div className="markdown-body">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {message.content}
+            {finalContent}
           </ReactMarkdown>
         </div>
       </div>
