@@ -8,6 +8,7 @@ import com.agent.mvp.agent.tooling.ToolCall;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.config.AppProperties;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
 import org.springframework.http.HttpHeaders;
@@ -64,7 +65,6 @@ public class OpenAiModelProvider implements ModelProvider {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public ModelChatResponse chat(ModelChatRequest request) {
         String apiKey = resolveApiKey();
 
@@ -77,14 +77,14 @@ public class OpenAiModelProvider implements ModelProvider {
                 "tool_choice", request.toolChoice() == null ? "auto" : request.toolChoice()
         );
 
-        Map<String, Object> response;
+        JsonNode response;
         try {
             response = withIdempotentRetry(() -> webClient.post()
                     .uri("/chat/completions")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                     .bodyValue(body)
                     .retrieve()
-                    .bodyToMono(Map.class)
+                    .bodyToMono(JsonNode.class)
                     .timeout(totalTimeout)
                     .block());
         } catch (WebClientRequestException ex) {
@@ -100,22 +100,21 @@ public class OpenAiModelProvider implements ModelProvider {
             throw new BadRequestException("OpenAI response is empty");
         }
 
-        List<Map<String, Object>> choices = (List<Map<String, Object>>) response.get("choices");
-        if (choices == null || choices.isEmpty()) {
+        JsonNode choices = response.path("choices");
+        if (choices.isEmpty()) {
             throw new BadRequestException("OpenAI response choices are empty");
         }
 
-        Map<String, Object> choice = choices.get(0);
-        Map<String, Object> message = (Map<String, Object>) choice.get("message");
-        String content = message == null ? "" : String.valueOf(message.getOrDefault("content", ""));
+        JsonNode choice = choices.get(0);
+        JsonNode message = choice.path("message");
+        String content = message.path("content").isNull() ? "" : message.path("content").asText();
         List<ToolCall> toolCalls = extractToolCalls(message);
-        String finishReason = String.valueOf(choice.getOrDefault("finish_reason", ""));
+        String finishReason = choice.path("finish_reason").asText("");
 
         return new ModelChatResponse(content, Duration.between(start, Instant.now()).toMillis(), toolCalls, finishReason);
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public ModelChatResponse stream(ModelChatRequest request, Consumer<String> chunkConsumer) {
         String apiKey = resolveApiKey();
 
@@ -212,22 +211,23 @@ public class OpenAiModelProvider implements ModelProvider {
         return text.length() > 240 ? text.substring(0, 240) + "..." : text;
     }
 
-    @SuppressWarnings("unchecked")
-    private List<ToolCall> extractToolCalls(Map<String, Object> message) {
-        if (message == null) {
+    private List<ToolCall> extractToolCalls(JsonNode message) {
+        if (message == null || message.isMissingNode() || message.isNull()) {
             return List.of();
         }
-        List<Map<String, Object>> raw = (List<Map<String, Object>>) message.get("tool_calls");
-        if (raw == null || raw.isEmpty()) {
+        JsonNode toolCallsNode = message.path("tool_calls");
+        if (!toolCallsNode.isArray() || toolCallsNode.isEmpty()) {
             return List.of();
         }
-        return raw.stream().map(item -> {
-            Map<String, Object> function = (Map<String, Object>) item.get("function");
-            String id = String.valueOf(item.getOrDefault("id", ""));
-            String name = function == null ? "" : String.valueOf(function.getOrDefault("name", ""));
-            String args = function == null ? "{}" : String.valueOf(function.getOrDefault("arguments", "{}"));
-            return new ToolCall(id, name, args);
-        }).toList();
+        return java.util.stream.StreamSupport.stream(toolCallsNode.spliterator(), false)
+                .map(item -> {
+                    JsonNode function = item.path("function");
+                    String id = item.path("id").asText("");
+                    String name = function.path("name").asText("");
+                    String args = function.path("arguments").asText("{}");
+                    return new ToolCall(id, name, args);
+                })
+                .toList();
     }
 
     private <T> T withIdempotentRetry(Supplier<T> call) {
@@ -268,25 +268,24 @@ public class OpenAiModelProvider implements ModelProvider {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private String extractOpenAiChunk(String data) {
         try {
-            Map<String, Object> event = objectMapper.readValue(data, new TypeReference<>() {});
-            List<Map<String, Object>> choices = (List<Map<String, Object>>) event.get("choices");
-            if (choices == null || choices.isEmpty()) {
+            JsonNode event = objectMapper.readTree(data);
+            JsonNode choices = event.path("choices");
+            if (choices.isEmpty() || !choices.isArray()) {
                 return "";
             }
-            Map<String, Object> delta = (Map<String, Object>) choices.get(0).get("delta");
-            if (delta == null) {
+            JsonNode delta = choices.get(0).path("delta");
+            if (delta.isMissingNode()) {
                 return "";
             }
-            Object content = delta.get("content");
-            if (content != null && !content.toString().isEmpty()) {
-                return content.toString();
+            JsonNode content = delta.path("content");
+            if (!content.isMissingNode() && !content.isNull() && !content.asText().isEmpty()) {
+                return content.asText();
             }
-            Object reasoning = delta.get("reasoning_content");
-            if (reasoning != null && !reasoning.toString().isEmpty()) {
-                return reasoning.toString();
+            JsonNode reasoning = delta.path("reasoning_content");
+            if (!reasoning.isMissingNode() && !reasoning.isNull() && !reasoning.asText().isEmpty()) {
+                return reasoning.asText();
             }
             return "";
         } catch (Exception ex) {
