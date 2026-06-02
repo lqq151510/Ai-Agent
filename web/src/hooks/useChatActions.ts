@@ -6,7 +6,7 @@ export function useChatActions(
   ui: any,
   activeSession: Session | null,
   applyError: (e: any) => void,
-  onCreateSession: (provider: any, model: string, title?: string) => Promise<void>
+  onCreateSession: (provider: any, model: string, title?: string, contextTokenLimit?: number | null) => Promise<void>
 ) {
   function downloadFile(filename: string, content: string, type: string) {
     const blob = new Blob([content], { type });

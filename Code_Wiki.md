@@ -58,7 +58,7 @@ Java AI Agent MVP 是一个完整的 AI 智能助手应用，采用前后端分�
 | 容器化 | Docker + Docker Compose | - |
 | 认证 | JWT (jjwt) | 0.12.6 |
 | 数据库迁移 | Flyway | 10.22.0 |
-| CLI 框架 | Picocli | 4.7.6 |
+| CLI 框架 | TypeScript + React (Ink) | Ink 7 / React 19 |
 | 桌面框架 | Electron + TypeScript | Electron 33 / TS 5.5 |
 | 响应式 HTTP | Spring WebFlux + Reactor Netty | - |
 
@@ -99,9 +99,10 @@ AI-agent/
 │   ├── package.json            # NPM 配置
 │   ├── vite.config.ts          # Vite 配置
 │   └── tsconfig.json           # TypeScript 配置
-├── cli/                        # Java CLI 工具
-│   ├── src/main/java/          # CLI 源码
-│   └── pom.xml                 # Maven 配置
+├── ts-cli/                     # TypeScript + Ink 终端工具
+│   ├── src/                    # CLI 源码
+│   ├── package.json            # NPM 配置
+│   └── tsconfig.json           # TypeScript 配置
 ├── desktop/                    # Electron 桌面客户端
 │   ├── src/main/               # Electron 主进程
 │   │   ├── index.ts            # 应用入口（窗口/托盘/IPC）
@@ -143,7 +144,7 @@ AI-agent/
 │                          客户端层                                 │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌───────────────┐  │
 │  │     Web UI       │  │     CLI 工具      │  │  Desktop App  │  │
-│  │  React + Vite    │  │  Picocli + Java   │  │  Electron     │  │
+│  │  React + Vite    │  │  Ink + TS/React   │  │  Electron     │  │
 │  └────────┬─────────┘  └────────┬─────────┘  └───────┬───────┘  │
 └───────────┼──────────────────────┼───────────────────┼───────────┘
             │                      │                   │
@@ -618,64 +619,68 @@ npm run dev
 
 ## 5. CLI 模块详解
 
-> 当前实现：命令与参数来自 `cli` 模块现有命令定义。
+> 当前实现：命令与参数来自 `ts-cli` 模块现有命令定义。
 > 设计说明：命令名与输出格式优先保持向后兼容。
 
 ### 5.1 概述
 
-CLI 模块是一个基于 Picocli 的命令行工具，允许用户通过终端与后端 API 交互。
+CLI 模块已经迁移为一个基于 TypeScript + React (Ink) 的终端工具，允许用户通过终端与后端 API 交互，并提供交互式 REPL。
 
-**入口类**: [AgentCliApplication.java](cli/src/main/java/com/agent/cli/AgentCliApplication.java)
+**入口文件**: [index.tsx](ts-cli/src/index.tsx)
 
 ### 5.2 命令列表
 
 | 命令 | 类 | 功能 |
 |------|-----|------|
-| `login` | [LoginCommand](cli/src/main/java/com/agent/cli/cmd/LoginCommand.java) | 用户登录，保存令牌到本地 |
-| `sessions` | [SessionsCommand](cli/src/main/java/com/agent/cli/cmd/SessionsCommand.java) | 列出所有会话 |
-| `create-session` | [CreateSessionCommand](cli/src/main/java/com/agent/cli/cmd/CreateSessionCommand.java) | 创建新会话 |
-| `chat` | [ChatCommand](cli/src/main/java/com/agent/cli/cmd/ChatCommand.java) | 同步对话 |
-| `stream-chat` | [StreamChatCommand](cli/src/main/java/com/agent/cli/cmd/StreamChatCommand.java) | 流式对话（SSE） |
-| `tool-stats` | [ToolStatsCommand](cli/src/main/java/com/agent/cli/cmd/ToolStatsCommand.java) | 查看工具统计 |
-| `release-report` | [ReleaseReportCommand](cli/src/main/java/com/agent/cli/cmd/ReleaseReportCommand.java) | 获取发布报告 |
+| `login` | [index.tsx](ts-cli/src/index.tsx) | 用户登录，保存令牌到本地 |
+| `sessions` | [index.tsx](ts-cli/src/index.tsx) | 列出所有会话 |
+| `create-session` | [index.tsx](ts-cli/src/index.tsx) | 创建新会话 |
+| `chat` | [index.tsx](ts-cli/src/index.tsx) | 同步对话 |
+| `stream-chat` | [index.tsx](ts-cli/src/index.tsx) | 流式对话（SSE） |
+| `tool-stats` | [index.tsx](ts-cli/src/index.tsx) | 查看工具统计 |
+| `release-report` | [index.tsx](ts-cli/src/index.tsx) | 获取发布报告 |
+| `repl` | [repl-app.tsx](ts-cli/src/repl-app.tsx) | Ink 交互式终端界面 |
 
 ### 5.3 核心类
 
 | 类 | 职责 |
 |-----|------|
-| `ApiClient` | HTTP 客户端，支持 GET/POST/SSE 流式请求，含自动令牌刷新 |
-| `CliStateStore` | 本地状态持久化（令牌存储到文件） |
-| `AuthState` | 认证状态模型（accessToken, refreshToken） |
+| `api-client.ts` | HTTP 客户端，支持 GET/POST/SSE 流式请求，含自动令牌刷新 |
+| `state-store.ts` | 本地状态持久化（令牌存储到文件） |
+| `repl-app.tsx` | Ink REPL，提供 slash commands 和流式消息渲染 |
+| `context-collector.ts` | 白名单上下文收集与脱敏 |
 
 ### 5.4 CLI 使用示例
 
 ```bash
 # 登录
-java -jar cli.jar login --email user@example.com --password Passw0rd!
+node dist/index.js login --email user@example.com --password Passw0rd!
 
 # 创建会话
-java -jar cli.jar create-session --title "My Session" --provider OPENAI --model qwen/qwen3.5-9b
+node dist/index.js create-session --title "My Session" --provider OPENAI --model qwen/qwen3.5-9b
 
 # 同步对话
-java -jar cli.jar chat --session-id <uuid> --message "Hello"
+node dist/index.js chat --session <uuid> --message "Hello"
 
 # 流式对话
-java -jar cli.jar stream-chat --session-id <uuid> --message "Hello"
+node dist/index.js stream-chat --session <uuid> --message "Hello"
 
 # 查看工具统计
-java -jar cli.jar tool-stats --window-hours 24
+node dist/index.js tool-stats --window-hours 24
 
 # 获取发布报告
-java -jar cli.jar release-report --window-hours 24
+node dist/index.js release-report --window-hours 24
 ```
 
 ### 5.5 CLI 最小可运行路径（30 秒）
 
 ```bash
-cd cli
-mvn -q exec:java -Dexec.args="login --email <email> --password <password> --base-url http://localhost:8080"
-mvn -q exec:java -Dexec.args="create-session --provider OPENAI --model qwen/qwen3.5-9b"
-mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
+cd ts-cli
+npm install
+npm run build
+node dist/index.js login --email <email> --password <password> --base-url http://localhost:8080
+node dist/index.js create-session --provider OPENAI --model qwen/qwen3.5-9b
+node dist/index.js chat --session <uuid> --message "Hello"
 ```
 
 ---
@@ -690,7 +695,7 @@ mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
 Desktop 模块是一个基于 **Electron 33** 的桌面客户端，它将 Spring Boot 后端内嵌到 Electron 应用中，提供原生桌面体验。主要能力包括：
 
 - **内嵌后端**：Electron 主进程通过 `child_process.spawn()` 启动 Java 后端 JAR
-- **内嵌 CLI**：可通过 IPC 调用 CLI JAR 执行命令
+- **内嵌 CLI**：可通过 IPC 调用打包后的 `ts-cli` 执行命令
 - **系统托盘**：提供快捷菜单（显示窗口/重启后端/退出）
 - **单实例锁**：`app.requestSingleInstanceLock()` 防止重复启动
 - **上下文隔离**：通过 `contextBridge` 暴露安全的 API 给渲染进程
@@ -856,7 +861,7 @@ npm run dist:win      # Windows
 | 脚本 | 用途 |
 |------|------|
 | [build-jre.sh](desktop/scripts/build-jre.sh) | 使用 `jlink` 裁剪 JRE（仅包含必要模块） |
-| [build-backend.sh](desktop/scripts/build-backend.sh) | 构建 backend.jar 和 cli.jar |
+| [build-backend.sh](desktop/scripts/build-backend.sh) | 构建 backend.jar 并打包 ts-cli 运行时 |
 | [build-all.sh](desktop/scripts/build-all.sh) | 串联 JRE + 后端 + Web + Electron 全量构建 |
 
 ### 6.6 Desktop 启动流程
@@ -1302,14 +1307,18 @@ npm run dist:win      # Windows
 | typescript | 5.5.4 | 类型系统 |
 | @vitejs/plugin-react | 4.3.1 | Vite React 插件 |
 
-### 10.3 CLI Maven 依赖
+### 10.3 CLI NPM 依赖
 
-**文件**: [cli/pom.xml](cli/pom.xml)
+**文件**: [package.json](/Users/liuyongze/Documents/AI-agent/ts-cli/package.json)
 
 | 依赖 | 版本 | 用途 |
 |------|------|------|
-| picocli | 4.7.6 | 命令行框架 |
-| jackson-databind | - | JSON 序列化/反序列化 |
+| ink | 7.0.5 | 终端 UI 框架 |
+| react | 19.2.7 | CLI 组件模型 |
+| ink-text-input | 6.0.0 | 终端输入框 |
+| ink-spinner | 5.0.0 | 加载状态 |
+| typescript | 6.0.3 | 类型系统 |
+| ts-node | 10.9.2 | 开发态执行 |
 
 ### 10.4 Desktop NPM 依赖
 
@@ -1522,28 +1531,30 @@ npm run dev    # 开发服务器 http://localhost:5173
 npm run build  # 生产构建
 ```
 
-#### CLI
+#### TS CLI
 
 ```bash
-cd cli
+cd ts-cli
+npm install
+npm run build
 
 # 登录
-mvn -q exec:java -Dexec.args="login --email <email> --password <password> --base-url http://localhost:8080"
+node dist/index.js login --email <email> --password <password> --base-url http://localhost:8080
 
 # 创建会话
-mvn -q exec:java -Dexec.args="create-session --provider OPENAI --model qwen/qwen3.5-9b"
+node dist/index.js create-session --provider OPENAI --model qwen/qwen3.5-9b
 
 # 同步对话
-mvn -q exec:java -Dexec.args="chat --session-id <uuid> --message 'Hello'"
+node dist/index.js chat --session <uuid> --message "Hello"
 
 # 流式对话
-mvn -q exec:java -Dexec.args="stream-chat --session-id <uuid> --message 'Hello'"
+node dist/index.js stream-chat --session <uuid> --message "Hello"
 
 # 工具统计
-mvn -q exec:java -Dexec.args="tool-stats --window-hours 24"
+node dist/index.js tool-stats --window-hours 24
 
 # 发布报告
-mvn -q exec:java -Dexec.args="release-report --window-hours 24"
+node dist/index.js release-report --window-hours 24
 ```
 
 ### 12.3 运维脚本
@@ -1623,7 +1634,7 @@ cd backend && mvn clean package -DskipTests
 cd web && npm run build
 
 # CLI 构建
-cd cli && mvn clean package -DskipTests
+cd ts-cli && npm run build
 
 # 全量构建（父 POM）
 mvn clean package -DskipTests

@@ -1,0 +1,39 @@
+{
+  "name": "agent-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "agent-cli": "./dist/index.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "dev": "node --no-warnings --loader ts-node/esm src/index.tsx",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "cli-markdown": "^3.5.1",
+    "eventsource-parser": "^3.1.0",
+    "ink": "^7.0.5",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "marked": "^18.0.4",
+    "react": "^19.2.7",
+    "react-devtools-core": "^7.0.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/preset-react": "^7.29.7",
+    "@babel/preset-typescript": "^7.29.7",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.16",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}

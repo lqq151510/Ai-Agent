@@ -59,9 +59,9 @@ function getBackendJarPath(): string {
   return path.join(resourceRoot, 'backend-jre', 'backend.jar');
 }
 
-function getCliJarPath(): string {
+function getCliEntryPath(): string {
   const resourceRoot = getResourcePath();
-  return path.join(resourceRoot, 'backend-jre', 'cli.jar');
+  return path.join(resourceRoot, 'backend-jre', 'ts-cli', 'dist', 'index.js');
 }
 
 function getDataDir(): string {
@@ -141,7 +141,7 @@ function setupIpc() {
     shell.openPath(getDataDir());
   });
   ipcMain.handle('cli:execute', (_event, args: string[]) => {
-    return cliManager.execute(getJrePath(), getCliJarPath(), args);
+    return cliManager.execute(getCliEntryPath(), args);
   });
   ipcMain.on('cli:input', (_event, input: string) => {
     cliManager.sendInput(input);

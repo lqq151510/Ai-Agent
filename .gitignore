@@ -11,6 +11,8 @@
 # Node
 web/node_modules/
 web/dist/
+ts-cli/node_modules/
+ts-cli/dist/
 
 # Env
 .env

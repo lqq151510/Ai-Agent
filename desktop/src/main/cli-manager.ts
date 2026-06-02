@@ -3,15 +3,18 @@ import { spawn, ChildProcess } from 'child_process';
 export class CliManager {
   private activeProcess: ChildProcess | null = null;
 
-  execute(jrePath: string, cliJarPath: string, args: string[]): Promise<{ exitCode: number; output: string }> {
+  execute(cliEntryPath: string, args: string[]): Promise<{ exitCode: number; output: string }> {
     if (this.activeProcess) {
       return Promise.resolve({ exitCode: 1, output: 'Another CLI command is already running' });
     }
 
     return new Promise((resolve) => {
-      const fullArgs = ['-jar', cliJarPath, ...args];
-      this.activeProcess = spawn(jrePath, fullArgs, {
+      this.activeProcess = spawn(process.execPath, [cliEntryPath, ...args], {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+        },
       });
 
       let output = '';

@@ -10,6 +10,7 @@ public record SessionResponse(
         String title,
         ModelProviderType provider,
         String model,
+        Integer contextTokenLimit,
         Instant createdAt,
         Instant updatedAt
 ) {

@@ -30,6 +30,8 @@ import java.util.function.Consumer;
 @Service
 public class AgentService {
     private static final Logger log = LoggerFactory.getLogger(AgentService.class);
+    private static final int MIN_CONTEXT_TOKENS = 500;
+    private static final int MAX_SYSTEM_CONTEXT_TOKENS = 256;
 
     private final SessionService sessionService;
     private final ModelRoutingService modelRoutingService;
@@ -62,7 +64,8 @@ public class AgentService {
         ConversationSession session = sessionService.findOwnedSession(userId, request.sessionId());
         ResolvedModelConfig resolved = modelRoutingService.resolve(request.provider(), request.model(), session);
         sessionService.saveMessage(session, "user", request.message(), null, resolved.provider().name(), resolved.model());
-        AgentLoopResult loop = executeLoop(userId, session, resolved, null);
+        int maxContextTokens = resolveContextTokenBudget(request.maxContextTokens(), session);
+        AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, null, request.systemContext());
         return new ChatResponse(
                 session.getId(),
                 resolved.provider(),
@@ -82,16 +85,17 @@ public class AgentService {
         ResolvedModelConfig resolved = modelRoutingService.resolve(request.provider(), request.model(), session);
 
         sessionService.saveMessage(session, "user", request.message(), null, resolved.provider().name(), resolved.model());
+        int maxContextTokens = resolveContextTokenBudget(request.maxContextTokens(), session);
         metaConsumer.accept(new ChatStreamMeta(
                 session.getId(),
                 resolved.provider(),
                 resolved.model(),
                 List.of(),
                 "started",
-                initialExecutionDiagnostics()
+                initialExecutionDiagnostics(maxContextTokens)
         ));
 
-        AgentLoopResult loop = executeLoop(userId, session, resolved, chunkConsumer);
+        AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, chunkConsumer, request.systemContext());
         metaConsumer.accept(new ChatStreamMeta(
                 session.getId(),
                 resolved.provider(),
@@ -114,12 +118,13 @@ public class AgentService {
     private AgentLoopResult executeLoop(UUID userId,
                                         ConversationSession session,
                                         ResolvedModelConfig resolved,
-                                        Consumer<String> chunkConsumer) {
-        List<MessageResponse> history = sessionService.listRecentMessages(userId, session.getId(), 200);
-        int maxContextTokens = maxContextTokens();
+                                        int maxContextTokens,
+                                        Consumer<String> chunkConsumer,
+                                        String systemContext) {
+        List<MessageResponse> history = sessionService.listMessages(userId, session.getId());
         int maxToolSteps = maxToolSteps();
         boolean stopOnToolError = appProperties.getAgent().isStopOnToolError();
-        HistoryWindow historyWindow = buildMessages(userId, history, maxContextTokens);
+        HistoryWindow historyWindow = buildMessages(userId, history, maxContextTokens, systemContext);
         List<ModelChatMessage> messages = historyWindow.messages();
         List<ToolExecutionResult> traces = new ArrayList<>();
         String reply = "";
@@ -188,9 +193,9 @@ public class AgentService {
         return new AgentLoopResult(reply, totalLatencyMs, traces, execution);
     }
 
-    private AgentExecutionDiagnostics initialExecutionDiagnostics() {
+    private AgentExecutionDiagnostics initialExecutionDiagnostics(int maxContextTokens) {
         return new AgentExecutionDiagnostics(
-                maxContextTokens(),
+                maxContextTokens,
                 maxToolSteps(),
                 0,
                 false,
@@ -199,9 +204,9 @@ public class AgentService {
         );
     }
 
-    private HistoryWindow buildMessages(UUID userId, List<MessageResponse> history, int maxContextTokens) {
+    private HistoryWindow buildMessages(UUID userId, List<MessageResponse> history, int maxContextTokens, String systemContext) {
         List<ModelChatMessage> messages = new ArrayList<>();
-        
+
         String lastUserMessage = "";
         if (history != null && !history.isEmpty()) {
             MessageResponse lastMsg = history.get(history.size() - 1);
@@ -228,9 +233,16 @@ public class AgentService {
             systemPrompt.append("---\n");
         }
 
-        messages.add(ModelChatMessage.of("system", systemPrompt.toString()));
+        String sanitizedSystemContext = sanitizeSystemContext(systemContext);
+        if (!sanitizedSystemContext.isBlank()) {
+            systemPrompt.append("\n\n# Dynamic Context\n").append(sanitizedSystemContext);
+        }
 
-        HistoryWindow historyWindow = sliceByTokenBudget(history, maxContextTokens);
+        String promptText = systemPrompt.toString();
+        messages.add(ModelChatMessage.of("system", promptText));
+
+        int historyBudget = Math.max(0, maxContextTokens - TokenCounter.countTokens(promptText) - 8);
+        HistoryWindow historyWindow = sliceByTokenBudget(history, historyBudget);
         List<ModelChatMessage> historyMessages = historyWindow.messages();
         messages.addAll(historyMessages);
         return new HistoryWindow(messages, historyWindow.historyMessagesUsed(), historyWindow.historyTruncated());
@@ -292,7 +304,7 @@ public class AgentService {
 
     private HistoryWindow sliceByTokenBudget(List<MessageResponse> history, int maxTokens) {
         List<ModelChatMessage> reversed = new ArrayList<>();
-        int budget = Math.max(500, maxTokens);
+        int budget = Math.max(0, maxTokens);
         int used = 0;
         boolean truncated = false;
         for (int i = history.size() - 1; i >= 0; i--) {
@@ -313,8 +325,36 @@ public class AgentService {
         return new HistoryWindow(sliced, sliced.size(), truncated);
     }
 
-    private int maxContextTokens() {
-        return Math.max(500, appProperties.getAgent().getMaxContextTokens());
+    private String sanitizeSystemContext(String systemContext) {
+        if (systemContext == null || systemContext.isBlank()) {
+            return "";
+        }
+
+        String sanitized = systemContext
+                .replace("\r\n", "\n")
+                .replaceAll("Bearer\\s+[A-Za-z0-9._-]+", "Bearer [redacted]")
+                .replaceAll("(?i)sk-[A-Za-z0-9]+", "sk-[redacted]")
+                .replaceAll("(?im)^.*(?:token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie).*$", "[redacted sensitive line]")
+                .replaceAll("[^\\x09\\x0A\\x0D\\x20-\\x7E]", "")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+
+        while (!sanitized.isBlank() && TokenCounter.countTokens(sanitized) > MAX_SYSTEM_CONTEXT_TOKENS) {
+            sanitized = sanitized.substring(0, Math.max(0, sanitized.length() - 120)).trim();
+        }
+
+        return sanitized;
+    }
+
+    private int resolveContextTokenBudget(Integer userProvidedMaxContextTokens, ConversationSession session) {
+        if (userProvidedMaxContextTokens != null) {
+            return Math.max(MIN_CONTEXT_TOKENS, userProvidedMaxContextTokens);
+        }
+        if (session != null && session.getContextTokenLimit() != null) {
+            return Math.max(MIN_CONTEXT_TOKENS, session.getContextTokenLimit());
+        }
+        int fallback = Math.max(MIN_CONTEXT_TOKENS, appProperties.getAgent().getMaxContextTokens());
+        return fallback;
     }
 
     private int maxToolSteps() {

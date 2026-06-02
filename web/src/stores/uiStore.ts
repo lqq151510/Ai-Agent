@@ -7,6 +7,7 @@ type ToolStatsScope = 'session' | 'global';
 interface UiState {
   effectsEnabled: boolean;
   modelOptions: ModelOption[];
+  contextTokenLimit: number | null;
   toolStats: ToolStatsResponse | null;
   toolStatsLoading: boolean;
   releaseReport: ReleaseReportResponse | null;
@@ -15,6 +16,7 @@ interface UiState {
   toolStatsScope: ToolStatsScope;
   setEffectsEnabled: (enabled: boolean) => void;
   setModelOptions: (options: ModelOption[]) => void;
+  setContextTokenLimit: (limit: number | null) => void;
   setToolStats: (stats: ToolStatsResponse | null) => void;
   setToolStatsLoading: (loading: boolean) => void;
   setReleaseReport: (report: ReleaseReportResponse | null) => void;
@@ -31,6 +33,7 @@ const fallbackModelOptions = (): ModelOption[] => [
 const initialState = {
   effectsEnabled: true,
   modelOptions: fallbackModelOptions(),
+  contextTokenLimit: null as number | null,
   toolStats: null as ToolStatsResponse | null,
   toolStatsLoading: false,
   releaseReport: null as ReleaseReportResponse | null,
@@ -43,6 +46,7 @@ export const useUiStore = create<UiState>(set => ({
   ...initialState,
   setEffectsEnabled: effectsEnabled => set({ effectsEnabled }),
   setModelOptions: modelOptions => set({ modelOptions }),
+  setContextTokenLimit: contextTokenLimit => set({ contextTokenLimit }),
   setToolStats: toolStats => set({ toolStats }),
   setToolStatsLoading: toolStatsLoading => set({ toolStatsLoading }),
   setReleaseReport: releaseReport => set({ releaseReport }),

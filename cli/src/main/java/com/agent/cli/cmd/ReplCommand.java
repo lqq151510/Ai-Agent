@@ -1,13 +1,21 @@
 package com.agent.cli.cmd;
 
 import com.agent.cli.AgentCliApplication;
+import com.agent.cli.client.CliStateStore;
+import com.agent.cli.model.AuthState;
+import org.jline.reader.EndOfFileException;
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.UserInterruptException;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
 import picocli.CommandLine;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
 
-@CommandLine.Command(name = "repl", description = "Start interactive REPL shell mode")
+@CommandLine.Command(name = "repl", description = "Start interactive REPL shell mode (Claude Code style)")
 public class ReplCommand implements Runnable {
 
     @CommandLine.ParentCommand
@@ -15,36 +23,71 @@ public class ReplCommand implements Runnable {
 
     @Override
     public void run() {
-        System.out.println("Entering AI Agent Interactive Shell. Type 'exit' or 'quit' to exit.");
-        System.out.println("Available commands: login, sessions, create-session, chat, stream-chat, tool-stats, release-report, exit");
+        System.out.println("Entering AI Agent Interactive Shell.");
+        System.out.println("Commands starting with '/' are system commands (e.g., /sessions, /create-session, /exit).");
+        System.out.println("Other inputs are treated as chat messages to the active session.");
 
-        CommandLine cmd = new CommandLine(root);
-        Scanner scanner = new Scanner(System.in);
+        CliStateStore store = new CliStateStore(root.objectMapper());
 
-        while (true) {
-            System.out.print("agent-cli> ");
-            if (!scanner.hasNextLine()) {
-                break;
-            }
-            String line = scanner.nextLine().trim();
-            if (line.isEmpty()) {
-                continue;
-            }
-            if ("exit".equalsIgnoreCase(line) || "quit".equalsIgnoreCase(line)) {
-                break;
-            }
+        try {
+            Terminal terminal = TerminalBuilder.builder().system(true).build();
+            LineReader lineReader = LineReaderBuilder.builder()
+                    .terminal(terminal)
+                    .build();
 
-            String[] args = tokenize(line);
-            if (args.length == 0) {
-                continue;
+            CommandLine cmd = new CommandLine(root);
+
+            while (true) {
+                AuthState state = store.read();
+                String prompt = state.getActiveSessionId() != null
+                        ? "\u001B[32m" + state.getActiveSessionId().substring(0, 8) + "\u001B[0m> "
+                        : "\u001B[33magent-cli\u001B[0m> ";
+
+                String line;
+                try {
+                    line = lineReader.readLine(prompt);
+                } catch (UserInterruptException | EndOfFileException e) {
+                    break;
+                }
+
+                line = line.trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+
+                if (line.equalsIgnoreCase("/exit") || line.equalsIgnoreCase("/quit")) {
+                    break;
+                }
+
+                if (line.startsWith("/")) {
+                    // System command
+                    String commandLine = line.substring(1);
+                    String[] args = tokenize(commandLine);
+                    try {
+                        cmd.execute(args);
+                    } catch (Exception e) {
+                        System.err.println("Error executing command: " + e.getMessage());
+                    }
+                } else {
+                    // Chat message
+                    if (state.getActiveSessionId() == null || state.getActiveSessionId().isBlank()) {
+                        System.err.println("No active session! Please use '/create-session <title>' or '/sessions' to select one.");
+                        continue;
+                    }
+
+                    // Call stream-chat
+                    String[] args = {"stream-chat", "--message", line};
+                    try {
+                        cmd.execute(args);
+                    } catch (Exception e) {
+                        System.err.println("Chat error: " + e.getMessage());
+                    }
+                }
             }
-            try {
-                cmd.execute(args);
-            } catch (Exception e) {
-                System.err.println("Error: " + e.getMessage());
-            }
+            System.out.println("Goodbye!");
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        System.out.println("Goodbye!");
     }
 
     public String[] tokenize(String line) {

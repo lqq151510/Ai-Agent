@@ -69,6 +69,7 @@ public class SessionService {
         session.setTitle(title);
         session.setProvider(provider);
         session.setModel(model);
+        session.setContextTokenLimit(request.contextTokenLimit());
 
         return toResponse(sessionRepository.save(session));
     }
@@ -89,6 +90,13 @@ public class SessionService {
                 sessionPage.getTotalElements(),
                 sessionPage.getTotalPages()
         );
+    }
+
+    @Transactional
+    public SessionResponse updateContextTokenLimit(UUID userId, UUID sessionId, Integer contextTokenLimit) {
+        ConversationSession session = findOwnedSession(userId, sessionId);
+        session.setContextTokenLimit(contextTokenLimit);
+        return toResponse(sessionRepository.save(session));
     }
 
     @Transactional(readOnly = true)
@@ -190,6 +198,7 @@ public class SessionService {
                 session.getTitle(),
                 session.getProvider(),
                 session.getModel(),
+                session.getContextTokenLimit(),
                 session.getCreatedAt(),
                 session.getUpdatedAt()
         );

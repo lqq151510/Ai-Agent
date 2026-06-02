@@ -1,6 +1,8 @@
 package com.agent.mvp.agent.dto;
 
 import com.agent.mvp.agent.ModelProviderType;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -17,6 +19,11 @@ public record ChatRequest(
         ModelProviderType provider,
         @Size(max = 128, message = "model must be <= 128 chars")
         @Pattern(regexp = "^[\\w./:-]{0,128}$", message = "model format is invalid")
-        String model
+        String model,
+        @Min(value = 500, message = "maxContextTokens must be >= 500")
+        @Max(value = 32768, message = "maxContextTokens must be <= 32768")
+        Integer maxContextTokens,
+        @Size(max = 1500, message = "systemContext must be <= 1500 chars")
+        String systemContext
 ) {
 }

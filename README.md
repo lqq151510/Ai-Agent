@@ -3,7 +3,7 @@
 This repo delivers a runnable Beta stack:
 - `backend`: Spring Boot API (JWT auth, sessions, SSE chat, system readiness/models API)
 - `web`: React + TypeScript frontend (white minimal UI, streaming status/retry)
-- `cli`: Java Picocli client (`chat` and `stream-chat`)
+- `ts-cli`: TypeScript + React (Ink) terminal client
 - `docker-compose`: one-command single-host deployment with PostgreSQL + Redis
 
 ## AI + Java Dev Coach MVP
@@ -98,33 +98,38 @@ npm install
 npm run dev
 ```
 
-### CLI
+### TS CLI
 ```bash
-cd cli
+cd ts-cli
+npm install
+npm run build
 
 # login
-mvn -q exec:java -Dexec.args="login --email you@example.com --password your_password --base-url http://localhost:8080"
+node dist/index.js login --email you@example.com --password your_password --base-url http://localhost:8080
 
 # create session
-mvn -q exec:java -Dexec.args="create-session --provider OPENAI --model qwen/qwen3.5-9b"
+node dist/index.js create-session --provider OPENAI --model qwen/qwen3.5-9b
 
 # sync chat
-mvn -q exec:java -Dexec.args="chat --message '总结当前项目结构'"
+node dist/index.js chat --message "总结当前项目结构"
 
 # streaming chat
-mvn -q exec:java -Dexec.args="stream-chat --message '请给出一个简短状态总结'"
+node dist/index.js stream-chat --message "请给出一个简短状态总结"
+
+# Ink REPL
+node dist/index.js
 
 # tool stats (table)
-mvn -q exec:java -Dexec.args="tool-stats --window-hours 24"
+node dist/index.js tool-stats --window-hours 24
 
 # tool stats (json / markdown)
-mvn -q exec:java -Dexec.args="tool-stats --window-hours 24 --json"
-mvn -q exec:java -Dexec.args="tool-stats --window-hours 24 --markdown"
+node dist/index.js tool-stats --window-hours 24 --json
+node dist/index.js tool-stats --window-hours 24 --markdown
 
 # release report (summary / json / markdown)
-mvn -q exec:java -Dexec.args="release-report --window-hours 24"
-mvn -q exec:java -Dexec.args="release-report --window-hours 24 --json"
-mvn -q exec:java -Dexec.args="release-report --window-hours 24 --markdown"
+node dist/index.js release-report --window-hours 24
+node dist/index.js release-report --window-hours 24 --json
+node dist/index.js release-report --window-hours 24 --markdown
 ```
 
 ### Release report rendering
@@ -199,14 +204,14 @@ Key runtime knobs:
 ## Notes
 - Error payloads include `requestId` for traceability.
 - Structured logging includes `requestId/userId/sessionId`.
-- CLI state is stored under `~/.ai-agent-cli/state.json` with restrictive permissions on POSIX systems.
+- TS CLI state is stored under `~/.ai-agent-cli/state.json` with restrictive permissions on POSIX systems.
 - Web sidebar includes tool stats filters (`1h/24h/7d`, current-session/global) with one-click refresh.
 - Web sidebar supports exporting tool stats as JSON/Markdown.
 - Web sidebar supports exporting release reports as JSON/Markdown.
 - Web chat errors expose next-step action buttons (re-login, retry, switch fallback model).
 - Rate-limit chat failures trigger a short countdown auto-retry.
-- CLI `stream-chat` prints stream status (`connecting`, `first token`, `done`) and friendlier failure hints.
-- CLI `tool-stats` supports table/json/markdown output with optional session filter.
-- CLI `release-report` supports summary/json/markdown output with optional session filter.
+- TS CLI `stream-chat` prints stream status (`connecting`, `meta`, `done`) and collects a sanitized repo context.
+- TS CLI includes an Ink REPL with slash commands such as `/login`, `/sessions`, `/new`, `/stats`, and `/report`.
+- TS CLI `tool-stats` and `release-report` support summary/json/markdown output with optional session filter.
 - `smoke.sh` now saves readiness, models, SSE stream, session export, tool stats, and release report artifacts for each run.
 - `render-release-report.sh` always emits a `.tex` handoff and compiles PDF when `tectonic` is available.

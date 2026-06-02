@@ -25,32 +25,35 @@ public class AgentToolOrchestrator {
                         "searchCode",
                         "Search source code by regex-like pattern.",
                         schema(
+                                List.of("query"),
                                 "query", type("string"),
                                 "glob", type("string"),
-                                "maxResults", type("integer")
+                                "maxResults", integerType(1, 100)
                         )
                 ),
                 new ToolSpec(
                         "readFile",
                         "Read a file from workspace by path and optional line range.",
                         schema(
+                                List.of("path"),
                                 "path", type("string"),
-                                "startLine", type("integer"),
-                                "endLine", type("integer")
+                                "startLine", integerType(1, null),
+                                "endLine", integerType(1, null)
                         )
                 ),
                 new ToolSpec(
                         "listRepoTree",
                         "List repository tree from a relative path with max depth.",
                         schema(
+                                List.of(),
                                 "path", type("string"),
-                                "depth", type("integer")
+                                "depth", integerType(1, 5)
                         )
                 ),
                 new ToolSpec(
                         "analyzePom",
                         "Summarize pom.xml dependencies and artifact info.",
-                        schema("path", type("string"))
+                        schema(List.of(), "path", type("string"))
                 )
         );
     }
@@ -129,14 +132,30 @@ public class AgentToolOrchestrator {
         return Map.of("type", type);
     }
 
-    private Map<String, Object> schema(Object... pairs) {
+    private Map<String, Object> integerType(Integer minimum, Integer maximum) {
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("type", "integer");
+        if (minimum != null) {
+            out.put("minimum", minimum);
+        }
+        if (maximum != null) {
+            out.put("maximum", maximum);
+        }
+        return out;
+    }
+
+    private Map<String, Object> schema(List<String> required, Object... pairs) {
         Map<String, Object> props = new java.util.LinkedHashMap<>();
         for (int i = 0; i + 1 < pairs.length; i += 2) {
             props.put(String.valueOf(pairs[i]), pairs[i + 1]);
         }
-        return Map.of(
-                "type", "object",
-                "properties", props
-        );
+        Map<String, Object> schema = new java.util.LinkedHashMap<>();
+        schema.put("type", "object");
+        schema.put("properties", props);
+        schema.put("additionalProperties", false);
+        if (required != null && !required.isEmpty()) {
+            schema.put("required", required);
+        }
+        return schema;
     }
 }

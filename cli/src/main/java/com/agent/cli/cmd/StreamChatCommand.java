@@ -32,6 +32,8 @@ public class StreamChatCommand implements Runnable {
     @CommandLine.Option(names = "--model")
     private String model;
 
+    private static final String[] SPINNER = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+
     @Override
     public void run() {
         CliStateStore store = new CliStateStore(root.objectMapper());
@@ -46,6 +48,7 @@ public class StreamChatCommand implements Runnable {
         Map<String, Object> payload = new HashMap<>();
         payload.put("sessionId", sid);
         payload.put("message", message);
+        payload.put("systemContext", com.agent.cli.context.ContextCollector.collectContext());
         if (provider != null && !provider.isBlank()) {
             payload.put("provider", provider);
         }
@@ -58,28 +61,33 @@ public class StreamChatCommand implements Runnable {
         AtomicReference<String> streamError = new AtomicReference<>();
         AtomicReference<String> doneData = new AtomicReference<>();
         AtomicLong firstTokenMs = new AtomicLong(-1);
-        AtomicInteger heartbeatCount = new AtomicInteger();
+        AtomicInteger spinnerIdx = new AtomicInteger(0);
 
-        System.out.println("[status] connecting stream...");
+        System.out.println("\u001B[36m[status] connecting to session " + sid.substring(0, 8) + "...\u001B[0m");
 
         try {
             root.apiClient().streamAuthenticated("/api/v1/agent/chat/stream", payload, state, store, (event, data) -> {
                 switch (event) {
-                    case "meta" -> printMeta(data);
+                    case "meta" -> {
+                        System.out.print("\033[2K\r");
+                        printMeta(data);
+                    }
                     case "chunk" -> {
                         if (!started.get()) {
                             long elapsedMs = elapsedMs(startNs);
                             firstTokenMs.set(elapsedMs);
-                            System.out.printf("[status] first token in %d ms%n", elapsedMs);
-                            System.out.print("assistant> ");
+                            System.out.print("\033[2K\r"); // Clear spinner
+                            System.out.print("\u001B[36massistant>\u001B[0m ");
                             started.set(true);
                         }
                         System.out.print(data);
                         System.out.flush();
                     }
                     case "heartbeat" -> {
-                        if (!started.get() && heartbeatCount.incrementAndGet() == 2) {
-                            System.out.println("[status] waiting for model response...");
+                        if (!started.get()) {
+                            String frame = SPINNER[spinnerIdx.getAndIncrement() % SPINNER.length];
+                            System.out.print("\033[2K\r\u001B[33m" + frame + " Thinking & executing tools...\u001B[0m");
+                            System.out.flush();
                         }
                     }
                     case "done" -> doneData.set(data);
@@ -90,7 +98,7 @@ public class StreamChatCommand implements Runnable {
                 }
             });
         } catch (RuntimeException ex) {
-            System.err.println("stream failed: " + normalizeTransportError(ex));
+            System.err.println("\033[2K\rstream failed: " + normalizeTransportError(ex));
             return;
         }
 

@@ -51,7 +51,7 @@ class AgentControllerTest {
         );
 
         assertThrows(TooManyRequestsException.class, () ->
-                controller.chat(new ChatRequest(UUID.randomUUID(), "hello", null, null), auth)
+                controller.chat(new ChatRequest(UUID.randomUUID(), "hello", null, null, null, null), auth)
         );
     }
 
@@ -85,7 +85,7 @@ class AgentControllerTest {
         );
 
         TooManyRequestsException ex = assertThrows(TooManyRequestsException.class, () ->
-                controller.chat(new ChatRequest(UUID.randomUUID(), "hello", null, null), auth)
+                controller.chat(new ChatRequest(UUID.randomUUID(), "hello", null, null, null, null), auth)
         );
 
         assertEquals("Too many requests", ex.getMessage());

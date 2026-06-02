@@ -38,6 +38,9 @@ public class ConversationSession {
     @Column(nullable = false)
     private String model;
 
+    @Column(name = "context_token_limit")
+    private Integer contextTokenLimit;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -101,6 +104,14 @@ public class ConversationSession {
 
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public Integer getContextTokenLimit() {
+        return contextTokenLimit;
+    }
+
+    public void setContextTokenLimit(Integer contextTokenLimit) {
+        this.contextTokenLimit = contextTokenLimit;
     }
 
     public Instant getCreatedAt() {

@@ -101,7 +101,7 @@ public class OpenAiModelProvider implements ModelProvider {
         }
 
         JsonNode choices = response.path("choices");
-        if (choices.isEmpty()) {
+        if (!choices.isArray() || choices.isEmpty()) {
             throw new BadRequestException("OpenAI response choices are empty");
         }
 

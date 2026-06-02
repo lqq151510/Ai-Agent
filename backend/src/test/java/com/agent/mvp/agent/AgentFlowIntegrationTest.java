@@ -35,7 +35,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -127,12 +129,13 @@ class AgentFlowIntegrationTest {
 
         ResponseEntity<Map<String, Object>> createSession = postJson(
                 "/api/v1/sessions",
-                Map.of("title", "IT Session", "provider", "OPENAI", "model", "mock-model"),
+                Map.of("title", "IT Session", "provider", "OPENAI", "model", "mock-model", "contextTokenLimit", 1800),
                 accessToken,
                 new ParameterizedTypeReference<>() {}
         );
         assertStatus(createSession, 200);
         assertNotNull(createSession.getBody());
+        assertEquals(1800, ((Number) createSession.getBody().get("contextTokenLimit")).intValue());
         String sessionId = String.valueOf(createSession.getBody().get("id"));
 
         ResponseEntity<Map<String, Object>> chat = postJson(
@@ -210,6 +213,104 @@ class AgentFlowIntegrationTest {
         assertTrue(body.contains("event:meta"));
         assertTrue(body.contains("event:chunk"));
         assertTrue(body.contains("event:done"));
+    }
+
+    @Test
+    void shouldUpdateSessionContextTokenLimit() {
+        String email = "it_ctx_" + UUID.randomUUID() + "@example.com";
+        String password = "Passw0rd123";
+
+        postJson(
+                "/api/v1/auth/register",
+                Map.of("email", email, "password", password),
+                null,
+                new ParameterizedTypeReference<>() {}
+        );
+
+        ResponseEntity<Map<String, Object>> login = postJson(
+                "/api/v1/auth/login",
+                Map.of("email", email, "password", password),
+                null,
+                new ParameterizedTypeReference<>() {}
+        );
+        String accessToken = String.valueOf(login.getBody().get("accessToken"));
+
+        ResponseEntity<Map<String, Object>> createSession = postJson(
+                "/api/v1/sessions",
+                Map.of("title", "CTX Session", "provider", "OPENAI", "model", "mock-model"),
+                accessToken,
+                new ParameterizedTypeReference<>() {}
+        );
+        String sessionId = String.valueOf(createSession.getBody().get("id"));
+
+        HttpHeaders headers = authHeaders(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(Map.of("contextTokenLimit", 2200), headers);
+
+        ResponseEntity<Map<String, Object>> updated = restTemplate.exchange(
+                url("/api/v1/sessions/" + sessionId + "/context-token-limit"),
+                HttpMethod.PATCH,
+                request,
+                new ParameterizedTypeReference<>() {}
+        );
+
+        assertStatus(updated, 200);
+        assertNotNull(updated.getBody());
+        assertEquals(2200, ((Number) updated.getBody().get("contextTokenLimit")).intValue());
+    }
+
+    @Test
+    void chatShouldReturnClientErrorWhenChoicesIsNotArray() {
+        OPENAI_MOCK.stubFor(post(urlEqualTo("/chat/completions"))
+                .atPriority(1)
+                .withRequestBody(matchingJsonPath("$.stream", equalTo("false")))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("""
+                                {"choices":"invalid-shape"}
+                                """)));
+
+        String email = "it_invalid_choices_" + UUID.randomUUID() + "@example.com";
+        String password = "Passw0rd123";
+
+        postJson(
+                "/api/v1/auth/register",
+                Map.of("email", email, "password", password),
+                null,
+                new ParameterizedTypeReference<>() {}
+        );
+
+        ResponseEntity<Map<String, Object>> login = postJson(
+                "/api/v1/auth/login",
+                Map.of("email", email, "password", password),
+                null,
+                new ParameterizedTypeReference<>() {}
+        );
+        String accessToken = String.valueOf(login.getBody().get("accessToken"));
+
+        ResponseEntity<Map<String, Object>> createSession = postJson(
+                "/api/v1/sessions",
+                Map.of("title", "Invalid Choices Session", "provider", "OPENAI", "model", "mock-model"),
+                accessToken,
+                new ParameterizedTypeReference<>() {}
+        );
+        String sessionId = String.valueOf(createSession.getBody().get("id"));
+
+        ResponseEntity<Map<String, Object>> chat = postJson(
+                "/api/v1/agent/chat",
+                Map.of("sessionId", sessionId, "message", "hello"),
+                accessToken,
+                new ParameterizedTypeReference<>() {}
+        );
+
+        assertStatus(chat, 400);
+        assertNotNull(chat.getBody());
+        assertTrue(String.valueOf(chat.getBody().get("message")).contains("choices are empty"));
+
+        OPENAI_MOCK.resetRequests();
+        OPENAI_MOCK.resetToDefaultMappings();
+        configureOpenAiStubs();
     }
 
     private static void configureOpenAiStubs() {

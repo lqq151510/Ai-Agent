@@ -31,6 +31,7 @@ type CreateSessionInput = {
   title?: string;
   provider?: 'OPENAI';
   model?: string;
+  contextTokenLimit?: number;
 };
 
 type ChatInput = {
@@ -38,6 +39,7 @@ type ChatInput = {
   message: string;
   provider?: 'OPENAI';
   model?: string;
+  maxContextTokens?: number;
 };
 
 type RequirementBreakdownInput = {
@@ -65,6 +67,14 @@ type StreamHandlers = {
   onChunk?: (chunk: string) => void;
   onDone?: (response: ChatResponse) => void;
   onError?: (message: string) => void;
+};
+
+type PageResult<T> = {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
 };
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -332,8 +342,12 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       return request<UserProfile>('/api/v1/auth/me', { method: 'GET' }, true);
     },
 
-    listSessions() {
-      return request<Session[]>('/api/v1/sessions', { method: 'GET' }, true);
+    async listSessions() {
+      const payload = await request<Session[] | PageResult<Session>>('/api/v1/sessions', { method: 'GET' }, true);
+      if (Array.isArray(payload)) {
+        return payload;
+      }
+      return payload?.content ?? [];
     },
 
     listModels() {
@@ -382,6 +396,13 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       return request<Session>('/api/v1/sessions', {
         method: 'POST',
         body: JSON.stringify(input)
+      }, true);
+    },
+
+    updateSessionContextTokenLimit(sessionId: string, contextTokenLimit: number | null) {
+      return request<Session>(`/api/v1/sessions/${sessionId}/context-token-limit`, {
+        method: 'PATCH',
+        body: JSON.stringify({ contextTokenLimit })
       }, true);
     },
 

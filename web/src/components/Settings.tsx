@@ -14,6 +14,7 @@ interface SettingsProps {
   releaseReportLoading: boolean;
   toolStatsWindowHours: number;
   toolStatsScope: 'session' | 'global';
+  contextTokenLimit: number | null;
   hasActiveSession: boolean;
   activeSession: Session | null;
   currentModelOption: ModelOption | null;
@@ -24,7 +25,9 @@ interface SettingsProps {
   onExportToolStatsMarkdown: () => void;
   onExportReleaseReportJson: () => void;
   onExportReleaseReportMarkdown: () => void;
-  onCreateSession: (provider: Provider, model: string, title?: string) => void;
+  onChangeContextTokenLimit: (rawValue: string) => void;
+  onPersistContextTokenLimit: () => void;
+  onCreateSession: (provider: Provider, model: string, title?: string, contextTokenLimit?: number | null) => void;
   onNavigateToCoach: () => void;
 }
 
@@ -44,6 +47,7 @@ export const Settings: React.FC<SettingsProps> = ({
   releaseReportLoading,
   toolStatsWindowHours,
   toolStatsScope,
+  contextTokenLimit,
   hasActiveSession,
   activeSession,
   currentModelOption,
@@ -54,6 +58,8 @@ export const Settings: React.FC<SettingsProps> = ({
   onExportToolStatsMarkdown,
   onExportReleaseReportJson,
   onExportReleaseReportMarkdown,
+  onChangeContextTokenLimit,
+  onPersistContextTokenLimit,
   onCreateSession,
   onNavigateToCoach
 }) => {
@@ -94,7 +100,7 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const handleCreate = async () => {
     const model = createModel.trim() || pickModel(createProvider);
-    await onCreateSession(createProvider, model, createTitle.trim() || undefined);
+    await onCreateSession(createProvider, model, createTitle.trim() || undefined, contextTokenLimit);
     localStorage.setItem(recentModelKey(createProvider), model);
     setCreateTitle('');
     setCreateModel(pickModel(createProvider));
@@ -182,6 +188,23 @@ export const Settings: React.FC<SettingsProps> = ({
               <span>{activeSession?.model || currentModelOption?.displayName || '等待会话'}</span>
               <span>{activeSession?.taskCount ? `${activeSession.taskCount} tasks` : hasActiveSession ? '1 active session' : '0 session'}</span>
             </div>
+            <label htmlFor="contextTokenLimit">上下文Token上限</label>
+            <input
+              id="contextTokenLimit"
+              type="number"
+              min={500}
+              max={32768}
+              value={contextTokenLimit ?? ''}
+              onChange={e => onChangeContextTokenLimit(e.target.value)}
+              onBlur={onPersistContextTokenLimit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  (e.currentTarget as HTMLInputElement).blur();
+                }
+              }}
+              placeholder="留空使用系统默认"
+            />
+            <p className="muted">可选范围 500 - 32768，留空则按系统默认配置。</p>
             {currentModelOption?.capabilities?.length ? (
               <div className="context-capability-list">
                 {currentModelOption.capabilities.slice(0, 4).map(capability => (

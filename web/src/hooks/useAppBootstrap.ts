@@ -28,9 +28,11 @@ export function useAppBootstrap(
       if (!picked) {
         chat.setActiveSessionId('');
         chat.setMessages([]);
+        ui.setContextTokenLimit(null);
         await refreshWorkspaceDiagnostics(client, { sessionId: undefined });
         navigate('/');
       } else {
+        ui.setContextTokenLimit(picked.contextTokenLimit ?? null);
         navigate(`/chat/sessions/${picked.id}`, { replace: true });
       }
     } catch (e) {

@@ -24,6 +24,7 @@ export interface Session {
   title: string;
   provider: Provider;
   model: string;
+  contextTokenLimit?: number | null;
   createdAt: string;
   updatedAt: string;
   summary?: string;
