@@ -22,6 +22,12 @@ env/*.env
 # Logs
 *.log
 
+# Python local runtime artifacts
+**/__pycache__/
+*.py[cod]
+python-service/venv/
+python-service/test.txt
+
 # Local deploy state and generated smoke artifacts
 .deploy/
 artifacts/smoke/*/
