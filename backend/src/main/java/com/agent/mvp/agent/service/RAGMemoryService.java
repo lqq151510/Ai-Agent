@@ -16,9 +16,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 
 @Service
 public class RAGMemoryService {
@@ -34,8 +36,11 @@ public class RAGMemoryService {
     @Value("${milvus.port:19530}")
     private int milvusPort;
 
-    public RAGMemoryService(AppProperties appProperties) {
+    private final MarkItDownService markItDownService;
+
+    public RAGMemoryService(AppProperties appProperties, MarkItDownService markItDownService) {
         this.appProperties = appProperties;
+        this.markItDownService = markItDownService;
         // 自定义轻量级的 EmbeddingModel 接口实现，完全消除外部大型 onnx 库依赖，并在本地生成确定性向量
         this.embeddingModel = new EmbeddingModel() {
             @Override
@@ -114,5 +119,35 @@ public class RAGMemoryService {
             log.error("Failed to search similar diagnoses from vector store. Error: {}", ex.getMessage());
         }
         return results;
+    }
+
+    /**
+     * Ingest a document file by converting it to Markdown using MarkItDown,
+     * splitting it into segments, and storing it in the vector database.
+     */
+    public void ingestDocument(File documentFile) {
+        try {
+            log.info("Starting ingestion of document: {}", documentFile.getName());
+            String markdown = markItDownService.convertDocumentToMarkdown(documentFile);
+            
+            // Simple text splitting by double newlines (paragraphs) for demonstration
+            String[] paragraphs = markdown.split("\n\n");
+            
+            for (int i = 0; i < paragraphs.length; i++) {
+                String para = paragraphs[i].trim();
+                if (para.isEmpty()) continue;
+                
+                TextSegment segment = TextSegment.from(para, Metadata.from(Map.of(
+                    "filename", documentFile.getName(),
+                    "chunkIndex", String.valueOf(i)
+                )));
+                Embedding embedding = embeddingModel.embed(segment).content();
+                embeddingStore.add(embedding, segment);
+            }
+            log.info("Successfully ingested document: {}", documentFile.getName());
+        } catch (Exception ex) {
+            log.error("Failed to ingest document {}. Error: {}", documentFile.getName(), ex.getMessage());
+            throw new RuntimeException("Document ingestion failed", ex);
+        }
     }
 }
