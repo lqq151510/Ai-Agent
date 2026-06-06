@@ -1,35 +1,37 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --bg-color: #e0e7ff;
-  --bg-wash: #f3e8ff;
-  --surface-color: rgba(255, 255, 255, 0.65);
-  --surface-subtle: rgba(255, 255, 255, 0.4);
-  --surface-hover: rgba(255, 255, 255, 0.8);
-  --border-color: #e2e8f0;
-  --border-strong: #cbd5e1;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --accent-color: #3b82f6;
-  --accent-ink: #1d4ed8;
-  --accent-soft: #eff6ff;
-  --accent-light: #dbeafe;
-  --danger-color: #ef4444;
-  --danger-soft: #fef2f2;
-  --success-color: #10b981;
-  --success-soft: #ecfdf5;
-  --warning-color: #f59e0b;
-  --warning-soft: #fffbeb;
-  --sidebar-width: 340px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --bg-color: #080d17;
+  --bg-wash: #101827;
+  --surface-color: rgba(15, 23, 42, 0.88);
+  --surface-subtle: rgba(30, 41, 59, 0.72);
+  --surface-hover: rgba(51, 65, 85, 0.78);
+  --surface-raised: #111827;
+  --surface-light: #f8fafc;
+  --border-color: rgba(148, 163, 184, 0.22);
+  --border-strong: rgba(203, 213, 225, 0.34);
+  --text-primary: #e5edf7;
+  --text-secondary: #a9b7c9;
+  --text-muted: #718096;
+  --accent-color: #38bdf8;
+  --accent-ink: #7dd3fc;
+  --accent-soft: rgba(56, 189, 248, 0.13);
+  --accent-light: rgba(125, 211, 252, 0.28);
+  --danger-color: #fb7185;
+  --danger-soft: rgba(251, 113, 133, 0.12);
+  --success-color: #a3e635;
+  --success-soft: rgba(163, 230, 53, 0.12);
+  --warning-color: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.14);
+  --sidebar-width: 368px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
   --font-main: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
-  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.04);
-  --shadow-medium: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 20px 40px -10px rgba(0, 0, 0, 0.04);
+  --shadow-soft: 0 10px 30px rgba(2, 6, 23, 0.22);
+  --shadow-medium: 0 16px 42px rgba(2, 6, 23, 0.32);
+  --shadow-lg: 0 24px 70px rgba(2, 6, 23, 0.45);
   --transition-fast: 150ms ease;
   --transition-medium: 250ms ease;
 }
@@ -41,7 +43,13 @@
 body {
   margin: 0;
   font-family: var(--font-main);
-  background: linear-gradient(180deg, var(--bg-color) 0%, var(--bg-wash) 100%);
+  background:
+    linear-gradient(90deg, rgba(56, 189, 248, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(163, 230, 53, 0.04) 1px, transparent 1px),
+    radial-gradient(circle at 15% 10%, rgba(56, 189, 248, 0.16), transparent 34%),
+    radial-gradient(circle at 82% 18%, rgba(163, 230, 53, 0.1), transparent 28%),
+    linear-gradient(135deg, var(--bg-color) 0%, var(--bg-wash) 48%, #07111d 100%);
+  background-size: 44px 44px, 44px 44px, auto, auto, auto;
   color: var(--text-primary);
   height: 100vh;
   line-height: 1.5;
@@ -90,8 +98,8 @@ button:disabled {
   right: 18px;
   z-index: 3;
   border: 1px solid var(--border-color);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.82);
+  backdrop-filter: blur(10px);
   font-size: 12px;
   padding: 8px 10px;
 }
@@ -187,11 +195,11 @@ button:disabled {
 /* ===== Panel ===== */
 .panel {
   background: var(--surface-color);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 /* ===== Badge ===== */
@@ -203,10 +211,10 @@ button:disabled {
   border: 1px solid var(--border-color);
   border-radius: 999px;
   color: var(--text-secondary);
-  background: #ffffff;
+  background: rgba(15, 23, 42, 0.72);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
   line-height: 1;
   margin: 0;
   padding: 6px 9px;

@@ -23,7 +23,7 @@ public record ChatRequest(
         @Min(value = 500, message = "maxContextTokens must be >= 500")
         @Max(value = 32768, message = "maxContextTokens must be <= 32768")
         Integer maxContextTokens,
-        @Size(max = 1500, message = "systemContext must be <= 1500 chars")
+        @Size(max = 2000, message = "systemContext must be <= 2000 chars")
         String systemContext
 ) {
 }

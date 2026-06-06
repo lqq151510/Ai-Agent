@@ -1,0 +1,149 @@
+{
+  "meta": {
+    "title": "AI + Java Dev Cockpit",
+    "subtitle": "Visual references for a dense, clear, IDE-like product frontend.",
+    "updated": "2026-06-06",
+    "business": "AI + Java development coach and Agent workspace",
+    "goal": "Turn a runnable MVP into a daily-use product frontend for Java AI learning, Agent/RAG debugging, and engineering review."
+  },
+  "signals": [
+    {
+      "label": "Audience",
+      "value": "University students, Java AI learners, and developers debugging Agent/RAG workflows."
+    },
+    {
+      "label": "Tone",
+      "value": "Dense, clear, calm engineering cockpit with IDE and console cues."
+    },
+    {
+      "label": "Scope",
+      "value": "Navigation, workspace shell, visual tokens, Dev Coach core page, login, component polish."
+    },
+    {
+      "label": "Avoid",
+      "value": "Generic purple AI gradients, marketing hero pages, readable fake UI text, logos, collage tiles, stock-photo cliches."
+    }
+  ],
+  "items": [
+    {
+      "id": "midnight-ide-cockpit",
+      "title": "Midnight IDE Cockpit",
+      "caption": "A calm workstation atmosphere for the primary app shell: sidebar, command surface, status rails, and deep focus.",
+      "source": "Generated from product frontend brief.",
+      "tone": "focused, technical, calm",
+      "motif": "IDE workspace, terminal glow, dense panels, keyboard-level productivity",
+      "palette": ["#0b1020", "#111827", "#1f2937", "#4ade80", "#38bdf8"],
+      "prompt": "Single visual reference image of a modern software developer workstation at night, one large IDE-like interface reflected on a dark glass desk, dense but clean panels, subtle cyan and green status lights, matte black keyboard, no readable text, no logos, no split panels, no collage, cinematic but restrained, crisp product-design lighting."
+    },
+    {
+      "id": "clean-rag-debug-table",
+      "title": "Clean RAG Debug Table",
+      "caption": "Reference for RAG evidence review: structured rows, retrieval traces, source cards, and readable density.",
+      "source": "Generated from product frontend brief.",
+      "tone": "analytical, precise, trustworthy",
+      "motif": "retrieval table, evidence lanes, subtle highlights, inspection mode",
+      "palette": ["#f7fafc", "#e5edf5", "#0f172a", "#2563eb", "#f59e0b"],
+      "prompt": "Single visual reference image of a clean high-density AI retrieval debugging surface on a laptop screen, structured table rows and source preview zones suggested as abstract blocks without readable text, light neutral background, precise blue and amber accents, no logos, no readable UI labels, no collage, one composed scene."
+    },
+    {
+      "id": "agent-tool-trace-map",
+      "title": "Agent Tool Trace Map",
+      "caption": "Reference for showing model decisions, tool calls, results, and retry states as one inspectable flow.",
+      "source": "Generated from product frontend brief.",
+      "tone": "systematic, transparent, engineering-grade",
+      "motif": "node flow, tool execution trace, observable state, compact timeline",
+      "palette": ["#0f172a", "#1e293b", "#22c55e", "#60a5fa", "#f8fafc"],
+      "prompt": "Single visual reference image of an abstract agent execution flow displayed on a dark engineering monitor, compact nodes and connecting lines representing tool calls and results, subtle green success and blue reasoning accents, no readable text, no logos, no diagram labels, no collage, one cohesive screen-like scene."
+    },
+    {
+      "id": "spring-boot-scaffold-studio",
+      "title": "Spring Boot Scaffold Studio",
+      "caption": "Reference for the scaffold generator: file tree, package structure, preview pane, and build confidence.",
+      "source": "Generated from product frontend brief.",
+      "tone": "productive, organized, builder-focused",
+      "motif": "file tree, generated project preview, green build indicators, modular creation",
+      "palette": ["#f8fafc", "#e2e8f0", "#064e3b", "#16a34a", "#1e293b"],
+      "prompt": "Single visual reference image of a bright developer studio desk with a generated Java project structure implied on screen as clean abstract file-tree blocks and preview panes, green build-ready accents, paper notebook and mechanical pencil nearby, no readable text, no logos, no collage, one composed editorial product scene."
+    },
+    {
+      "id": "log-diagnosis-console",
+      "title": "Log Diagnosis Console",
+      "caption": "Reference for root-cause debugging: logs, diagnosis cards, trigger conditions, and verification steps.",
+      "source": "Generated from product frontend brief.",
+      "tone": "serious, diagnostic, high-signal",
+      "motif": "console logs, root-cause pane, warning line, fix checklist",
+      "palette": ["#111827", "#1f2937", "#f97316", "#facc15", "#e5e7eb"],
+      "prompt": "Single visual reference image of a dark log diagnosis console on a workstation, abstract orange warning bars and grey log rhythm without readable characters, a clean side panel suggesting root cause and verification steps as blocks, no readable text, no logos, no collage, one cinematic engineering scene."
+    },
+    {
+      "id": "student-learning-lab",
+      "title": "Student Learning Lab",
+      "caption": "Reference for making the product approachable for AI + Java learners without becoming childish.",
+      "source": "Generated from product frontend brief.",
+      "tone": "encouraging, studious, calm",
+      "motif": "university lab desk, annotated architecture sketches, laptop, quiet guidance",
+      "palette": ["#f5f7fb", "#dbeafe", "#1e40af", "#0f172a", "#fbbf24"],
+      "prompt": "Single visual reference image of a university study desk for an AI plus Java learner, laptop with abstract software workspace, clean architecture sketch papers with non-readable marks, calm daylight, subtle blue and warm yellow accents, no readable text, no logos, no collage, one editorial scene."
+    },
+    {
+      "id": "session-memory-archive",
+      "title": "Session Memory Archive",
+      "caption": "Reference for conversation history, engineering memory, exportable traces, and searchable context.",
+      "source": "Generated from product frontend brief.",
+      "tone": "archival, orderly, recallable",
+      "motif": "session stacks, memory shelves, timeline threads, durable artifacts",
+      "palette": ["#0b1220", "#1e293b", "#64748b", "#14b8a6", "#f8fafc"],
+      "prompt": "Single visual reference image of a dark digital archive for engineering sessions, stacked translucent panels and timeline threads floating above a desk, teal memory accents, abstract message blocks without readable text, no logos, no collage, one composed scene."
+    },
+    {
+      "id": "model-routing-switchboard",
+      "title": "Model Routing Switchboard",
+      "caption": "Reference for provider/model controls: routing, fallback, capabilities, and context budget.",
+      "source": "Generated from product frontend brief.",
+      "tone": "operational, configurable, clear",
+      "motif": "switchboard, routing rails, capability toggles, context meter",
+      "palette": ["#f8fafc", "#0f172a", "#38bdf8", "#22c55e", "#cbd5e1"],
+      "prompt": "Single visual reference image of a premium technical switchboard metaphor for AI model routing, clean knobs, rails, meters and light indicators arranged like a software control surface, no readable labels, no logos, no collage, one product-design scene with crisp light background."
+    },
+    {
+      "id": "release-readiness-radar",
+      "title": "Release Readiness Radar",
+      "caption": "Reference for readiness checks, tool stats, release reports, and deployment confidence.",
+      "source": "Generated from product frontend brief.",
+      "tone": "confident, measurable, release-focused",
+      "motif": "status dashboard, readiness radar, smoke evidence, pass-fail clarity",
+      "palette": ["#111827", "#172033", "#34d399", "#93c5fd", "#f8fafc"],
+      "prompt": "Single visual reference image of a release readiness command surface on a dark monitor, abstract radar rings, compact status blocks, green pass lights and blue metrics, no readable text, no logos, no collage, one cohesive dashboard-like scene."
+    },
+    {
+      "id": "component-token-workbench",
+      "title": "Component Token Workbench",
+      "caption": "Reference for the design system layer: tokens, spacing, controls, buttons, chips, and state rules.",
+      "source": "Generated from product frontend brief.",
+      "tone": "systematic, tactile, reusable",
+      "motif": "component samples, color swatches, spacing blocks, UI construction kit",
+      "palette": ["#f9fafb", "#e5e7eb", "#111827", "#2563eb", "#22c55e"],
+      "prompt": "Single visual reference image of a refined frontend component workbench, abstract color swatches, button shapes, spacing blocks, and control samples arranged on a clean desk like a physical design system kit, no readable text, no logos, no collage, one top-down product design scene."
+    },
+    {
+      "id": "desktop-app-chrome",
+      "title": "Desktop App Chrome",
+      "caption": "Reference for turning web, CLI, and desktop concerns into a unified product shell.",
+      "source": "Generated from product frontend brief.",
+      "tone": "native, durable, mature",
+      "motif": "desktop shell, command bar, side rail, status footer, window controls",
+      "palette": ["#101828", "#1f2937", "#e5e7eb", "#60a5fa", "#a3e635"],
+      "prompt": "Single visual reference image of a polished desktop application shell for developer tools, one wide monitor with native-like app chrome, command bar, side rail, status footer implied through abstract blocks, dark graphite surfaces with blue and lime accents, no readable text, no logos, no collage."
+    },
+    {
+      "id": "login-threshold",
+      "title": "Login Threshold",
+      "caption": "Reference for the login screen: trustworthy, technical, quiet, and immediately product-specific.",
+      "source": "Generated from product frontend brief.",
+      "tone": "secure, quiet, welcoming",
+      "motif": "secure entry, product signal, light technical texture, calm onboarding",
+      "palette": ["#f8fafc", "#dbeafe", "#0f172a", "#2563eb", "#10b981"],
+      "prompt": "Single visual reference image of a calm secure login threshold for a developer productivity app, bright neutral environment with subtle technical texture, abstract authentication panel shape and soft blue-green accents, no readable text, no logos, no collage, one clean editorial product scene."
+    }
+  ]
+}

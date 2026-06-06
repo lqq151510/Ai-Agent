@@ -22,6 +22,11 @@ public class AgentToolOrchestrator {
     public List<ToolSpec> listToolSpecs() {
         return List.of(
                 new ToolSpec(
+                        "execute_cli_command",
+                        "Run a bash command on the user's local machine via the CLI client. Use this to read files, run tests, list dirs, or edit code locally.",
+                        schema(List.of("command"), "command", type("string"), "cwd", type("string"))
+                ),
+                new ToolSpec(
                         "searchCode",
                         "Search source code by regex-like pattern.",
                         schema(
@@ -58,10 +63,22 @@ public class AgentToolOrchestrator {
         );
     }
 
-    public ToolResult execute(ToolCall call) {
+    public ToolResult execute(ToolCall call, java.util.function.Function<ToolCall, String> clientToolInvoker) {
         CodeToolService.ToolCallOutput output;
         JsonNode args = parseArgs(call.argumentsJson());
         String name = call.name() == null ? "" : call.name();
+
+        if ("execute_cli_command".equals(name)) {
+            long start = System.currentTimeMillis();
+            String res = null;
+            try {
+                res = clientToolInvoker.apply(call);
+            } catch (Exception ex) {
+                res = "ERROR: " + ex.getMessage();
+            }
+            return new ToolResult(call.id(), name, call.argumentsJson(), "SUCCESS", System.currentTimeMillis() - start, res);
+        }
+
         output = switch (name) {
             case "searchCode" -> codeToolService.searchCode(
                     text(args, "query"),

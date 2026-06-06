@@ -16,6 +16,7 @@ import com.agent.mvp.session.entity.ConversationSession;
 import com.agent.mvp.session.service.SessionService;
 import com.agent.mvp.tooling.dto.ToolExecutionResult;
 import com.agent.mvp.tooling.service.ToolAuditService;
+import com.agent.mvp.agent.tooling.ClientToolRegistry;
 import com.agent.mvp.config.AppProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -31,7 +32,6 @@ import java.util.function.Consumer;
 public class AgentService {
     private static final Logger log = LoggerFactory.getLogger(AgentService.class);
     private static final int MIN_CONTEXT_TOKENS = 500;
-    private static final int MAX_SYSTEM_CONTEXT_TOKENS = 256;
 
     private final SessionService sessionService;
     private final ModelRoutingService modelRoutingService;
@@ -41,6 +41,7 @@ public class AgentService {
     private final ObjectMapper objectMapper;
     private final AppProperties appProperties;
     private final RAGMemoryService ragMemoryService;
+    private final ClientToolRegistry clientToolRegistry;
 
     public AgentService(SessionService sessionService,
                         ModelRoutingService modelRoutingService,
@@ -49,7 +50,8 @@ public class AgentService {
                         ToolAuditService toolAuditService,
                         AppProperties appProperties,
                         ObjectMapper objectMapper,
-                        RAGMemoryService ragMemoryService) {
+                        RAGMemoryService ragMemoryService,
+                        ClientToolRegistry clientToolRegistry) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
         this.modelGateway = modelGateway;
@@ -58,6 +60,7 @@ public class AgentService {
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
         this.ragMemoryService = ragMemoryService;
+        this.clientToolRegistry = clientToolRegistry;
     }
 
     public ChatResponse chat(UUID userId, ChatRequest request) {
@@ -65,7 +68,8 @@ public class AgentService {
         ResolvedModelConfig resolved = modelRoutingService.resolve(request.provider(), request.model(), session);
         sessionService.saveMessage(session, "user", request.message(), null, resolved.provider().name(), resolved.model());
         int maxContextTokens = resolveContextTokenBudget(request.maxContextTokens(), session);
-        AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, null, request.systemContext());
+        java.util.function.Function<ToolCall, String> rejectClientTool = (call) -> "ERROR: execute_cli_command is only available via streaming chat (/api/v1/agent/chat/stream)";
+        AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, null, request.systemContext(), rejectClientTool);
         return new ChatResponse(
                 session.getId(),
                 resolved.provider(),
@@ -80,7 +84,8 @@ public class AgentService {
     public ChatResponse streamChat(UUID userId,
                                    ChatRequest request,
                                    Consumer<ChatStreamMeta> metaConsumer,
-                                   Consumer<String> chunkConsumer) {
+                                   Consumer<String> chunkConsumer,
+                                   Consumer<ToolCall> clientToolConsumer) {
         ConversationSession session = sessionService.findOwnedSession(userId, request.sessionId());
         ResolvedModelConfig resolved = modelRoutingService.resolve(request.provider(), request.model(), session);
 
@@ -95,7 +100,20 @@ public class AgentService {
                 initialExecutionDiagnostics(maxContextTokens)
         ));
 
-        AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, chunkConsumer, request.systemContext());
+        java.util.function.Function<ToolCall, String> clientToolInvoker = (call) -> {
+            try {
+                java.util.concurrent.CompletableFuture<String> future = clientToolRegistry.register(call.id());
+                if (clientToolConsumer != null) {
+                    clientToolConsumer.accept(call);
+                }
+                // Wait up to 5 minutes for the client to execute the command and POST the result back
+                return future.get(5, java.util.concurrent.TimeUnit.MINUTES);
+            } catch (Exception e) {
+                return "ERROR: Client execution timed out or failed: " + e.getMessage();
+            }
+        };
+
+        AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, chunkConsumer, request.systemContext(), clientToolInvoker);
         metaConsumer.accept(new ChatStreamMeta(
                 session.getId(),
                 resolved.provider(),
@@ -120,7 +138,8 @@ public class AgentService {
                                         ResolvedModelConfig resolved,
                                         int maxContextTokens,
                                         Consumer<String> chunkConsumer,
-                                        String systemContext) {
+                                        String systemContext,
+                                        java.util.function.Function<ToolCall, String> clientToolInvoker) {
         List<MessageResponse> history = sessionService.listMessages(userId, session.getId());
         int maxToolSteps = maxToolSteps();
         boolean stopOnToolError = appProperties.getAgent().isStopOnToolError();
@@ -164,7 +183,7 @@ public class AgentService {
 
             boolean stopForError = false;
             for (ToolCall call : toolCalls) {
-                ToolResult result = toolOrchestrator.execute(call);
+                ToolResult result = toolOrchestrator.execute(call, clientToolInvoker);
                 ToolExecutionResult trace = toTrace(result);
                 traces.add(trace);
                 messages.add(ModelChatMessage.tool(call.id(), call.name(), result.output()));
@@ -233,7 +252,10 @@ public class AgentService {
             systemPrompt.append("---\n");
         }
 
-        String sanitizedSystemContext = sanitizeSystemContext(systemContext);
+        int currentPromptTokens = TokenCounter.countTokens(systemPrompt.toString());
+        int systemContextBudget = Math.max(0, maxContextTokens - currentPromptTokens - 500);
+
+        String sanitizedSystemContext = sanitizeSystemContext(systemContext, systemContextBudget);
         if (!sanitizedSystemContext.isBlank()) {
             systemPrompt.append("\n\n# Dynamic Context\n").append(sanitizedSystemContext);
         }
@@ -325,7 +347,7 @@ public class AgentService {
         return new HistoryWindow(sliced, sliced.size(), truncated);
     }
 
-    private String sanitizeSystemContext(String systemContext) {
+    private String sanitizeSystemContext(String systemContext, int tokenBudget) {
         if (systemContext == null || systemContext.isBlank()) {
             return "";
         }
@@ -339,7 +361,7 @@ public class AgentService {
                 .replaceAll("\\n{3,}", "\n\n")
                 .trim();
 
-        while (!sanitized.isBlank() && TokenCounter.countTokens(sanitized) > MAX_SYSTEM_CONTEXT_TOKENS) {
+        while (!sanitized.isBlank() && TokenCounter.countTokens(sanitized) > tokenBudget) {
             sanitized = sanitized.substring(0, Math.max(0, sanitized.length() - 120)).trim();
         }
 

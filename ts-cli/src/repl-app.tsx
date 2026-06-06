@@ -2,8 +2,10 @@ import React, { startTransition, useDeferredValue, useEffect, useRef, useState }
 import { Box, Text, useApp, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
+import cliMd from 'cli-markdown';
 
 import { createApiClient, type ApiClient } from './api-client.js';
+import { startAuthServer } from './cli-auth-server.js';
 import { collectSystemContext } from './context-collector.js';
 import { formatReleaseReportSummary, formatSessions, formatToolStatsSummary } from './format.js';
 import { StateStore } from './state-store.js';
@@ -41,6 +43,7 @@ function renderHelp(): string {
     '/new [title]',
     '/stats [windowHours]',
     '/report [windowHours]',
+    '/model <provider> <modelName>',
     '/clear',
     '/exit',
   ].join('\n');
@@ -66,6 +69,8 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
   const [userEmail, setUserEmail] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [statusLine, setStatusLine] = useState('Idle');
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [draftInput, setDraftInput] = useState('');
   const authRef = useRef(authState);
   const deferredMessages = useDeferredValue(messages);
   const visibleMessages = deferredMessages.slice(-MAX_RENDERED_MESSAGES);
@@ -86,9 +91,51 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
     }),
   );
 
-  useInput((_input, key) => {
+  const ALL_SLASH_COMMANDS = ['/help', '/login', '/logout', '/sessions', '/use', '/new', '/stats', '/report', '/model', '/clear', '/exit', '/quit'];
+
+  useInput((_char, key) => {
     if (key.escape) {
       exit();
+    }
+
+    const history = authRef.current.commandHistory || [];
+
+    if (key.upArrow) {
+      if (history.length === 0) return;
+      if (historyIndex === -1) {
+        setDraftInput(input);
+      }
+      const nextIndex = Math.min(historyIndex + 1, history.length - 1);
+      setHistoryIndex(nextIndex);
+      setInput(history[history.length - 1 - nextIndex] || '');
+    } else if (key.downArrow) {
+      if (historyIndex >= 0) {
+        const nextIndex = historyIndex - 1;
+        setHistoryIndex(nextIndex);
+        if (nextIndex === -1) {
+          setInput(draftInput);
+        } else {
+          setInput(history[history.length - 1 - nextIndex] || '');
+        }
+      }
+    } else if (key.tab) {
+      if (input.startsWith('/')) {
+        const matches = ALL_SLASH_COMMANDS.filter(cmd => cmd.startsWith(input));
+        if (matches.length === 1) {
+          setInput(matches[0] + ' ');
+        } else if (matches.length > 1) {
+          let prefix = matches[0] || '';
+          for (let i = 1; i < matches.length; i++) {
+            let j = 0;
+            const match = matches[i] || '';
+            while (j < prefix.length && j < match.length && prefix[j] === match[j]) {
+              j++;
+            }
+            prefix = prefix.slice(0, j);
+          }
+          setInput(prefix);
+        }
+      }
     }
   });
 
@@ -147,7 +194,12 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
         }
         setStatusLine('Ready');
       } catch (error) {
-        pushMessage('error', error instanceof Error ? error.message : String(error));
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('fetch failed')) {
+          pushMessage('error', '⚠️ Cannot connect to backend server. Is the Java backend running?');
+        } else {
+          pushMessage('error', msg);
+        }
         setStatusLine('Ready');
       } finally {
         setLoading(false);
@@ -164,7 +216,8 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
 
     const created = await api.createSession({
       title: `TS CLI Session ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
-      provider: 'OPENAI',
+      provider: authRef.current.defaultProvider || 'OPENAI',
+      model: authRef.current.defaultModel,
     });
     setAuthState(current => ({ ...current, activeSessionId: created.id }));
     await refreshSessions(created.id);
@@ -203,6 +256,25 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
           onChunk: chunk => {
             updateDraftAssistant(draftId, chunk);
           },
+          onClientToolCall: async call => {
+            if (call.name === 'execute_cli_command') {
+              try {
+                const args = JSON.parse(call.argumentsJson);
+                setStatusLine(`⚙️ Executing local command: ${args.command}`);
+                pushMessage('system', `⚙️ Local tool execution: \`${args.command}\``);
+                const { exec } = await import('node:child_process');
+                const { promisify } = await import('node:util');
+                const execAsync = promisify(exec);
+                const { stdout, stderr } = await execAsync(args.command, { cwd: args.cwd || process.cwd() });
+                const output = stdout + (stderr ? '\n[stderr]\n' + stderr : '');
+                await api.submitToolResult(call.id, output || 'Command executed successfully with no output.');
+              } catch (error) {
+                await api.submitToolResult(call.id, `Error: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            } else {
+              await api.submitToolResult(call.id, `Error: Unknown client tool ${call.name}`);
+            }
+          },
           onDone: payload => {
             if (payload.reply && !messages.find(message => message.id === draftId)?.content) {
               updateDraftAssistant(draftId, payload.reply);
@@ -217,9 +289,10 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
       );
       await refreshSessions(session.id);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const msg = error instanceof Error ? error.message : String(error);
+      const displayMsg = msg.includes('fetch failed') ? '⚠️ Cannot connect to backend server. Is the Java backend running?' : msg;
       setMessages(current =>
-        current.map(item => (item.id === draftId ? { ...item, role: 'error', content: message } : item)),
+        current.map(item => (item.id === draftId ? { ...item, role: 'error', content: displayMsg } : item)),
       );
       setStatusLine('Stream failed');
     } finally {
@@ -242,29 +315,25 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
         exit();
         return;
       case 'login': {
-        if (args.length < 2) {
-          pushMessage('error', 'Usage: /login <email> <password>');
-          return;
-        }
-        setLoading(true);
-        setStatusLine('Logging in...');
+        setStatusLine('Starting local auth server...');
         try {
-          const [email, password] = args;
-          const tokens = await api.login(email, password);
-          setAuthState({
-            accessToken: tokens.accessToken,
-            refreshToken: tokens.refreshToken,
-            activeSessionId: authRef.current.activeSessionId,
-          });
+          const { port, waitResult } = await startAuthServer();
+          setStatusLine(`Waiting for browser login... (Port: ${port})`);
+          pushMessage('system', `> 正在通过浏览器登录... 如果浏览器没有自动打开，请手动访问: http://localhost:5173/cli-login?cliPort=${port}`);
+
+          const { exec } = await import('node:child_process');
+          exec(`open "http://localhost:5173/cli-login?cliPort=${port}"`);
+
+          const tokens = await waitResult;
+          setAuthState({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, activeSessionId: undefined });
+          pushMessage('system', '> ✅ 登录成功！');
+          setStatusLine('Ready');
           await loadCurrentUser();
           await refreshSessions();
-          pushMessage('system', `Logged in as ${email}.`);
-          setStatusLine('Ready');
         } catch (error) {
-          pushMessage('error', error instanceof Error ? error.message : String(error));
-          setStatusLine('Login failed');
-        } finally {
-          setLoading(false);
+          const msg = error instanceof Error ? error.message : String(error);
+          pushMessage('error', `Login failed: ${msg}`);
+          setStatusLine('Ready');
         }
         return;
       }
@@ -390,6 +459,17 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
         }
         return;
       }
+      case 'model': {
+        const provider = args[0] as 'OPENAI' | undefined;
+        const model = args[1];
+        if (!provider || !model) {
+          pushMessage('error', 'Usage: /model <provider> <modelName>\nExample: /model OPENAI qwen/qwen3.5-9b');
+          return;
+        }
+        setAuthState(current => ({ ...current, defaultProvider: provider, defaultModel: model }));
+        pushMessage('system', `Default model set to ${provider}/${model}. It will be used for new sessions.`);
+        return;
+      }
       default:
         pushMessage('error', `Unknown command: /${command || ''}`);
     }
@@ -400,6 +480,18 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
     if (!trimmed) {
       return;
     }
+
+    setAuthState(current => {
+      const hist = current.commandHistory || [];
+      if (hist.length > 0 && hist[hist.length - 1] === trimmed) {
+        return current;
+      }
+      const newHist = [...hist, trimmed];
+      if (newHist.length > 500) newHist.shift();
+      return { ...current, commandHistory: newHist };
+    });
+    setHistoryIndex(-1);
+    setDraftInput('');
 
     setInput('');
     if (trimmed.startsWith('/')) {
@@ -433,7 +525,7 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
                     ? 'err > '
                     : 'sys > '}
             </Text>
-            <Text>{message.content}</Text>
+            <Text>{message.role === 'assistant' ? cliMd(message.content) : message.content}</Text>
           </Box>
         ))}
       </Box>

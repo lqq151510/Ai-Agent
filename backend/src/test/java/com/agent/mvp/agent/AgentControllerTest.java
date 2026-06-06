@@ -36,6 +36,7 @@ class AgentControllerTest {
                 agentService,
                 rateLimiter,
                 appProperties,
+                Mockito.mock(com.agent.mvp.agent.tooling.ClientToolRegistry.class),
                 streamExecutor,
                 heartbeatScheduler,
                 new SimpleMeterRegistry()
@@ -70,6 +71,7 @@ class AgentControllerTest {
                 agentService,
                 rateLimiter,
                 appProperties,
+                Mockito.mock(com.agent.mvp.agent.tooling.ClientToolRegistry.class),
                 streamExecutor,
                 heartbeatScheduler,
                 new SimpleMeterRegistry()

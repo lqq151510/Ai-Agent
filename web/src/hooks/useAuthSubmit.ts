@@ -32,12 +32,23 @@ export function useAuthSubmit(
         chat.setMessages([]);
         ui.setContextTokenLimit(null);
         await refreshWorkspaceDiagnostics(authedApi, { sessionId: undefined });
-        navigate('/');
       } else {
         const targetId = list[0].id;
         ui.setContextTokenLimit(list[0].contextTokenLimit ?? null);
-        navigate(`/chat/sessions/${targetId}`);
       }
+
+      const searchParams = new URLSearchParams(window.location.search);
+      const returnTo = searchParams.get('returnTo');
+      if (returnTo) {
+        navigate(returnTo);
+      } else {
+        if (list.length === 0) {
+          navigate('/');
+        } else {
+          navigate(`/chat/sessions/${list[0].id}`);
+        }
+      }
+
       setPassword('');
       chat.setStreamState('idle');
     } catch (e) {

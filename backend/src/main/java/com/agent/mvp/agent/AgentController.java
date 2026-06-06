@@ -2,7 +2,9 @@ package com.agent.mvp.agent;
 
 import com.agent.mvp.agent.dto.ChatRequest;
 import com.agent.mvp.agent.dto.ChatResponse;
+import com.agent.mvp.agent.dto.ClientToolResultRequest;
 import com.agent.mvp.agent.service.AgentService;
+import com.agent.mvp.agent.tooling.ClientToolRegistry;
 import com.agent.mvp.auth.security.AuthenticatedUser;
 import com.agent.mvp.common.context.RequestContext;
 import com.agent.mvp.common.exception.TooManyRequestsException;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
 import reactor.core.publisher.Flux;
 
 import java.io.IOException;
@@ -46,6 +49,7 @@ public class AgentController {
     private final AgentService agentService;
     private final RateLimiterService rateLimiterService;
     private final AppProperties appProperties;
+    private final ClientToolRegistry clientToolRegistry;
     private final AtomicInteger inFlightStreams = new AtomicInteger();
     private final AtomicInteger rejectedStreams = new AtomicInteger();
     private final ThreadPoolTaskExecutor streamExecutor;
@@ -54,12 +58,14 @@ public class AgentController {
     public AgentController(AgentService agentService,
                            RateLimiterService rateLimiterService,
                            AppProperties appProperties,
+                           ClientToolRegistry clientToolRegistry,
                            ThreadPoolTaskExecutor streamExecutor,
                            ThreadPoolTaskScheduler heartbeatScheduler,
                            MeterRegistry meterRegistry) {
         this.agentService = agentService;
         this.rateLimiterService = rateLimiterService;
         this.appProperties = appProperties;
+        this.clientToolRegistry = clientToolRegistry;
         this.streamExecutor = streamExecutor;
         this.heartbeatScheduler = heartbeatScheduler;
         Gauge.builder("agent.stream.executor.active", streamExecutor, ThreadPoolTaskExecutor::getActiveCount)
@@ -84,6 +90,14 @@ public class AgentController {
 
             return agentService.chat(user.userId(), request);
         }
+    }
+
+    @PostMapping("/chat/tool_result")
+    public ResponseEntity<Void> submitToolResult(@Valid @RequestBody ClientToolResultRequest request,
+                                                 Authentication authentication) {
+        requireUser(authentication);
+        clientToolRegistry.complete(request.callId(), request.result());
+        return ResponseEntity.ok().build();
     }
 
     @PostMapping(value = "/chat/stream", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -124,7 +138,8 @@ public class AgentController {
                                     user.userId(),
                                     request,
                                     meta -> sink.next(ServerSentEvent.builder().event("meta").data(meta).build()),
-                                    chunk -> sink.next(ServerSentEvent.builder().event("chunk").data(chunk).build())
+                                    chunk -> sink.next(ServerSentEvent.builder().event("chunk").data(chunk).build()),
+                                    call -> sink.next(ServerSentEvent.builder().event("client_tool_call").data(call).build())
                             );
                             sink.next(ServerSentEvent.builder().event("done").data(response).build());
                             sink.complete();

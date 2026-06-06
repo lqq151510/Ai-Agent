@@ -10,6 +10,9 @@ export interface AuthState {
   accessToken?: string;
   refreshToken?: string;
   activeSessionId?: string;
+  commandHistory?: string[];
+  defaultProvider?: Provider;
+  defaultModel?: string;
 }
 
 export interface ApiError {

@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Tokens } from '../types';
-import { KeyRound, Loader2, Mail, ShieldCheck, Zap } from 'lucide-react';
+import { Braces, CheckCircle2, Cpu, KeyRound, Layers3, Loader2, Mail, ShieldCheck, TerminalSquare, Zap } from 'lucide-react';
 
 interface AuthPanelProps {
   tokens: Tokens | null;
@@ -31,28 +31,59 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
       <div className="auth-intro">
         <div className="auth-brand">
           <div className="brand-icon">
-            <Zap size={28} />
+            <Braces size={28} />
           </div>
-          <h1>AI Agent</h1>
+          <h1>AI + Java Dev Coach</h1>
         </div>
-        <p className="auth-tagline">智能会话管理与工具执行平台</p>
+        <p className="auth-tagline">把需求拆解、RAG/Agent 调试、脚手架生成和日志定位放进一个日常可用的工程工作台。</p>
         <div className="auth-features">
           <div className="feature-item">
-            <ShieldCheck size={18} />
-            <span>安全认证</span>
+            <TerminalSquare size={18} />
+            <span>Agent 工作台</span>
           </div>
           <div className="feature-item">
-            <Zap size={18} />
-            <span>实时对话</span>
+            <Layers3 size={18} />
+            <span>Dev Coach 三流程</span>
+          </div>
+          <div className="feature-item">
+            <ShieldCheck size={18} />
+            <span>会话与巡检沉淀</span>
+          </div>
+        </div>
+        <div className="auth-product-preview" aria-hidden="true">
+          <div className="preview-toolbar">
+            <i />
+            <i />
+            <i />
+            <span />
+          </div>
+          <div className="preview-grid">
+            <div className="preview-rail">
+              {Array.from({ length: 7 }).map((_, index) => <span key={index} />)}
+            </div>
+            <div className="preview-main">
+              <b />
+              <span />
+              <span />
+              <span className="wide" />
+              <span />
+              <span className="accent" />
+            </div>
+            <div className="preview-side">
+              <Cpu size={18} />
+              <span />
+              <span />
+              <CheckCircle2 size={18} />
+            </div>
           </div>
         </div>
       </div>
 
       <div className="auth-panel panel">
         <div className="auth-header">
-          <p className="badge">{authMode === 'login' ? '欢迎回来' : '新用户'}</p>
-          <h2>{authMode === 'login' ? '登录账户' : '注册账户'}</h2>
-          <p className="muted">{authMode === 'login' ? '登录以继续您的会话' : '创建账户开始使用'}</p>
+          <p className="badge">{authMode === 'login' ? 'Workspace Access' : 'Create Workspace'}</p>
+          <h2>{authMode === 'login' ? '进入工程工作台' : '创建你的陪跑空间'}</h2>
+          <p className="muted">{authMode === 'login' ? '继续你的会话、工具轨迹和开发陪跑记录。' : '注册后即可创建 Agent 会话与 Dev Coach 任务。'}</p>
         </div>
         <div className="auth-tabs" role="tablist" aria-label="认证模式">
           <button
@@ -86,7 +117,7 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
         </div>
         <button className="primary full-width" onClick={onAuthSubmit} disabled={loading || !email || !password}>
           {loading ? <Loader2 className="animate-spin" size={16} /> : null}
-          {loading ? '处理中...' : authMode === 'login' ? '登录' : '注册并登录'}
+          {loading ? '处理中...' : authMode === 'login' ? '进入工作台' : '注册并进入'}
         </button>
         {error ? <div className="error-box">{error}</div> : null}
       </div>

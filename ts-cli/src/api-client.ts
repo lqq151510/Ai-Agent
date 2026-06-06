@@ -32,6 +32,7 @@ type ChatInput = {
 type StreamHandlers = {
   onMeta?: (payload: ChatResponse) => void;
   onChunk?: (chunk: string) => void;
+  onClientToolCall?: (call: { id: string; name: string; argumentsJson: string }) => void;
   onDone?: (payload: ChatResponse) => void;
   onError?: (message: string) => void;
 };
@@ -177,6 +178,10 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
         handlers.onMeta?.(payload as ChatResponse);
         return;
       }
+      if (event === 'client_tool_call') {
+        handlers.onClientToolCall?.(payload as unknown as { id: string; name: string; argumentsJson: string });
+        return;
+      }
       if (event === 'done') {
         handlers.onDone?.(payload as ChatResponse);
         return;
@@ -310,6 +315,17 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
 
     streamChat(input: ChatInput, handlers: StreamHandlers) {
       return streamChatRequest(input, handlers);
+    },
+
+    submitToolResult(callId: string, result: string) {
+      return request<void>(
+        '/api/v1/agent/chat/tool_result',
+        {
+          method: 'POST',
+          body: JSON.stringify({ callId, result }),
+        },
+        true,
+      );
     },
 
     toolStats(windowHours = 24, sessionId?: string) {

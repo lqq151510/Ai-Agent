@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, BrainCircuit, Bug, Download, FileArchive, Layers3, WandSparkles } from 'lucide-react';
+import { ArrowLeft, BrainCircuit, Bug, CheckCircle2, Download, FileArchive, Layers3, Route, Sparkles, WandSparkles } from 'lucide-react';
 import type { ApiClient } from '../api';
 import type { CoachRunResponse, LogDiagnosisResponse, RequirementBreakdownResponse, ScaffoldResponse } from '../types';
 import { Card, CardContent } from './Card';
@@ -15,6 +15,12 @@ const PRESETS = [
   { id: 'spring-ai-rag-starter', label: 'Spring AI RAG Starter' },
   { id: 'langchain4j-agent-starter', label: 'LangChain4j Agent Starter' },
   { id: 'spring-boot-agent-basic', label: 'Spring Boot Agent Basic' }
+];
+
+const COACH_STEPS: Array<{ id: CoachTab; title: string; description: string; icon: React.ReactNode }> = [
+  { id: 'requirements', title: '需求拆解', description: '从一句想法生成模块、接口、风险和测试点。', icon: <BrainCircuit size={17} /> },
+  { id: 'scaffold', title: '项目脚手架', description: '生成可预览、可下载的 Java AI starter。', icon: <FileArchive size={17} /> },
+  { id: 'logs', title: '日志定位', description: '把报错压缩成根因、触发条件和验证步骤。', icon: <Bug size={17} /> }
 ];
 
 export const CoachWorkspace: React.FC<CoachWorkspaceProps> = ({ api, onBack }) => {
@@ -141,26 +147,42 @@ export const CoachWorkspace: React.FC<CoachWorkspaceProps> = ({ api, onBack }) =
           <ArrowLeft size={16} />
           返回对话工作台
         </button>
-        <div>
+        <div className="coach-hero-copy">
           <p className="badge">AI + Java Dev Coach</p>
           <h1>开发陪跑器</h1>
-          <p>把需求拆解、脚手架生成、日志定位串成一条可复盘的工程闭环。</p>
+          <p>把需求拆解、脚手架生成、日志定位串成一条可复盘的工程闭环，适合 AI + Java 学习、RAG 原型和 Agent 调试。</p>
+        </div>
+        <div className="coach-hero-metrics" aria-label="开发陪跑能力摘要">
+          <div>
+            <strong>3</strong>
+            <span>核心流程</span>
+          </div>
+          <div>
+            <strong>{runs.length}</strong>
+            <span>最近沉淀</span>
+          </div>
+          <div>
+            <strong>{loading ? 'Run' : 'Ready'}</strong>
+            <span>执行状态</span>
+          </div>
         </div>
       </header>
 
-      <div className="coach-tabs">
-        <button className={activeTab === 'requirements' ? 'active' : ''} onClick={() => setActiveTab('requirements')} type="button">
-          <BrainCircuit size={16} />
-          需求拆解
-        </button>
-        <button className={activeTab === 'scaffold' ? 'active' : ''} onClick={() => setActiveTab('scaffold')} type="button">
-          <FileArchive size={16} />
-          项目脚手架
-        </button>
-        <button className={activeTab === 'logs' ? 'active' : ''} onClick={() => setActiveTab('logs')} type="button">
-          <Bug size={16} />
-          日志定位
-        </button>
+      <div className="coach-tabs" role="tablist" aria-label="开发陪跑流程">
+        {COACH_STEPS.map(step => (
+          <button
+            key={step.id}
+            className={activeTab === step.id ? 'active' : ''}
+            onClick={() => setActiveTab(step.id)}
+            type="button"
+          >
+            {step.icon}
+            <span>
+              <strong>{step.title}</strong>
+              <small>{step.description}</small>
+            </span>
+          </button>
+        ))}
       </div>
 
       {error ? <div className="coach-error">{error}</div> : null}
@@ -168,13 +190,20 @@ export const CoachWorkspace: React.FC<CoachWorkspaceProps> = ({ api, onBack }) =
       <section className="coach-grid">
         <div className="coach-main">
           {activeTab === 'requirements' ? (
-            <Card>
+            <Card className="coach-task-card">
               <CardContent>
-                <h2>提问即拆解</h2>
+                <div className="coach-card-head">
+                  <div>
+                    <span className="coach-step-index">01</span>
+                    <h2>提问即拆解</h2>
+                    <p>输入一个功能想法，让系统按工程交付视角给出边界、模块、接口、风险和测试点。</p>
+                  </div>
+                  <Route size={28} />
+                </div>
                 <textarea value={requirement} onChange={e => setRequirement(e.target.value)} rows={8} />
                 <button className="primary" type="button" onClick={onBreakdown} disabled={loading || !requirement.trim()}>
                   <WandSparkles size={16} />
-                  生成拆解
+                  {loading ? '生成中...' : '生成拆解'}
                 </button>
                 {breakdown ? <BreakdownResult result={breakdown} /> : null}
               </CardContent>
@@ -182,9 +211,16 @@ export const CoachWorkspace: React.FC<CoachWorkspaceProps> = ({ api, onBack }) =
           ) : null}
 
           {activeTab === 'scaffold' ? (
-            <Card>
+            <Card className="coach-task-card">
               <CardContent>
-                <h2>Java AI 项目脚手架</h2>
+                <div className="coach-card-head">
+                  <div>
+                    <span className="coach-step-index">02</span>
+                    <h2>Java AI 项目脚手架</h2>
+                    <p>选择 Spring AI、LangChain4j 或基础 Agent 模板，生成能预览并下载的 starter。</p>
+                  </div>
+                  <FileArchive size={28} />
+                </div>
                 <label>Preset</label>
                 <select value={preset} onChange={e => setPreset(e.target.value)}>
                   {PRESETS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -195,7 +231,7 @@ export const CoachWorkspace: React.FC<CoachWorkspaceProps> = ({ api, onBack }) =
                 <input value={basePackage} onChange={e => setBasePackage(e.target.value)} />
                 <button className="primary" type="button" onClick={onScaffold} disabled={loading || !projectName.trim() || !basePackage.trim()}>
                   <FileArchive size={16} />
-                  生成预览与 ZIP
+                  {loading ? '生成中...' : '生成预览与 ZIP'}
                 </button>
                 {scaffold ? (
                   <ScaffoldResult
@@ -208,16 +244,23 @@ export const CoachWorkspace: React.FC<CoachWorkspaceProps> = ({ api, onBack }) =
           ) : null}
 
           {activeTab === 'logs' ? (
-            <Card>
+            <Card className="coach-task-card">
               <CardContent>
-                <h2>日志 / 报错定位</h2>
+                <div className="coach-card-head">
+                  <div>
+                    <span className="coach-step-index">03</span>
+                    <h2>日志 / 报错定位</h2>
+                    <p>把启动失败、模型调用异常、配置错误这类日志收敛成根因和可重复验证步骤。</p>
+                  </div>
+                  <Bug size={28} />
+                </div>
                 <label>上下文</label>
                 <input value={logContext} onChange={e => setLogContext(e.target.value)} />
                 <label>日志内容</label>
                 <textarea value={logContent} onChange={e => setLogContent(e.target.value)} rows={10} />
                 <button className="primary" type="button" onClick={onDiagnose} disabled={loading || !logContent.trim()}>
                   <Bug size={16} />
-                  定位根因
+                  {loading ? '定位中...' : '定位根因'}
                 </button>
                 {diagnosis ? <DiagnosisResult result={diagnosis} /> : null}
               </CardContent>
@@ -230,7 +273,12 @@ export const CoachWorkspace: React.FC<CoachWorkspaceProps> = ({ api, onBack }) =
             <Layers3 size={16} />
             <h3>最近沉淀</h3>
           </div>
-          {runs.length === 0 ? <p className="muted">还没有开发陪跑记录。</p> : null}
+          {runs.length === 0 ? (
+            <div className="coach-runs-empty">
+              <Sparkles size={24} />
+              <p className="muted">还没有开发陪跑记录。完成一次任务后，这里会形成可复盘的工程记忆。</p>
+            </div>
+          ) : null}
           {runs.map(run => (
             <article key={run.id} className="coach-run-item" onClick={() => handleRunClick(run)} style={{ cursor: 'pointer' }} title="点击还原并复盘该记录">
               <span>{run.runType === 'REQUIREMENT_BREAKDOWN' ? '需求拆解' : run.runType === 'LOG_DIAGNOSIS' ? '日志定位' : '项目脚手架'}</span>
@@ -293,7 +341,7 @@ const ScaffoldResult: React.FC<{ result: ScaffoldResponse; onDownload: () => voi
 
 const ResultList: React.FC<{ title: string; items: string[] }> = ({ title, items }) => (
   <div className="result-list">
-    <h4>{title}</h4>
+    <h4><CheckCircle2 size={14} />{title}</h4>
     {items.length === 0 ? <p className="muted">暂无内容</p> : null}
     <ul>
       {items.map((item, index) => <li key={`${title}-${index}`}>{item}</li>)}
