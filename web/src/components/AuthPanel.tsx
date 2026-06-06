@@ -79,7 +79,13 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
         </div>
       </div>
 
-      <div className="auth-panel panel">
+      <form
+        className="auth-panel panel"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onAuthSubmit();
+        }}
+      >
         <div className="auth-header">
           <p className="badge">{authMode === 'login' ? 'Workspace Access' : 'Create Workspace'}</p>
           <h2>{authMode === 'login' ? '进入工程工作台' : '创建你的陪跑空间'}</h2>
@@ -87,12 +93,14 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
         </div>
         <div className="auth-tabs" role="tablist" aria-label="认证模式">
           <button
+            type="button"
             className={authMode === 'login' ? 'tab active' : 'tab'}
             onClick={() => setAuthMode('login')}
           >
             登录
           </button>
           <button
+            type="button"
             className={authMode === 'register' ? 'tab active' : 'tab'}
             onClick={() => setAuthMode('register')}
           >
@@ -102,7 +110,14 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
         <label className="field-label" htmlFor="email">邮箱</label>
         <div className="input-shell">
           <Mail size={16} />
-          <input id="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+          <input
+            id="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+          />
         </div>
         <label className="field-label" htmlFor="password">密码</label>
         <div className="input-shell">
@@ -110,17 +125,18 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
           <input
             id="password"
             type="password"
+            autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="至少 8 位"
           />
         </div>
-        <button className="primary full-width" onClick={onAuthSubmit} disabled={loading || !email || !password}>
+        <button className="primary full-width" type="submit" disabled={loading || !email || !password}>
           {loading ? <Loader2 className="animate-spin" size={16} /> : null}
           {loading ? '处理中...' : authMode === 'login' ? '进入工作台' : '注册并进入'}
         </button>
         {error ? <div className="error-box">{error}</div> : null}
-      </div>
+      </form>
     </section>
   );
 };

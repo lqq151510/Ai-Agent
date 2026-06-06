@@ -6,6 +6,7 @@ import { defaultModel } from './utils';
 import { MouseFx } from './components/MouseFx';
 import { CoachWorkspace } from './components/CoachWorkspace';
 import { CliLogin } from './components/CliLogin';
+import { Sparkles } from 'lucide-react';
 import { LoginPage } from './pages/LoginPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { useAuthStore } from './stores/authStore';
@@ -44,6 +45,8 @@ export function App() {
   const { tokens, user, setTokens, setUser, clearAuth } = authStore;
   const chat = useChatStore();
   const ui = useUiStore();
+  const effectsEnabled = ui.effectsEnabled;
+  const setEffectsEnabled = ui.setEffectsEnabled;
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -53,9 +56,9 @@ export function App() {
     }
     const rawFx = localStorage.getItem(FX_STORAGE_KEY);
     if (rawFx !== null) {
-      ui.setEffectsEnabled(rawFx === '1');
+      setEffectsEnabled(rawFx === '1');
     }
-  }, [setTokens, tokens, ui]);
+  }, [setEffectsEnabled, setTokens, tokens]);
 
   function updateTokens(next: Tokens | null) {
     setTokens(next);
@@ -106,21 +109,27 @@ export function App() {
         navigate('/login');
       }
     } else {
-      void bootstrapAuth();
+      void bootstrapAuth(api, location.pathname);
     }
   }, []);
 
   function toggleEffects() {
-    const next = !ui.effectsEnabled;
-    ui.setEffectsEnabled(next);
+    const next = !effectsEnabled;
+    setEffectsEnabled(next);
     localStorage.setItem(FX_STORAGE_KEY, next ? '1' : '0');
   }
 
   return (
     <div className="app-shell">
-      {ui.effectsEnabled ? <MouseFx /> : null}
-      <button className="ghost fx-toggle" type="button" onClick={toggleEffects}>
-        {ui.effectsEnabled ? '动态效果: 开' : '动态效果: 关'}
+      {effectsEnabled ? <MouseFx /> : null}
+      <button
+        className="ghost fx-toggle icon-button"
+        type="button"
+        onClick={toggleEffects}
+        aria-label={effectsEnabled ? '关闭动态效果' : '开启动态效果'}
+        title={effectsEnabled ? '关闭动态效果' : '开启动态效果'}
+      >
+        <Sparkles size={15} />
       </button>
       <Routes>
         <Route path="/login" element={

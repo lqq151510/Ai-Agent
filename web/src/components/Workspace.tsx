@@ -5,43 +5,26 @@ import { MessageContainer } from './MessageContainer';
 
 interface WorkspaceProps {
   user: any;
-  api: any;
   ui: any;
   chat: any;
   activeSession: Session | null;
   currentModelOption: ModelOption | null;
   onLogout: () => void;
-  refreshWorkspaceDiagnostics: (client: any, options: any) => void;
-  onExportToolStats: (format: 'json' | 'markdown') => void;
-  onExportReleaseReport: (format: 'json' | 'markdown') => void;
   onCreateSession: (provider: any, model: string, title?: string, contextTokenLimit?: number | null) => void;
   navigate: any;
   onSelectSession: (sessionId: string) => void;
   onSwitchFallbackSession: (defaultModel: any) => void;
   onRetryLast: () => void;
-  onExportSession: (format: 'json' | 'markdown') => void;
   sendMessage: (msg: string) => void;
-  onChangeContextTokenLimit: (rawValue: string) => void;
-  onPersistContextTokenLimit: () => void;
   defaultModel: any;
 }
 
 export function Workspace({
-  user, api, ui, chat, activeSession, currentModelOption,
-  onLogout, refreshWorkspaceDiagnostics, onExportToolStats,
-  onExportReleaseReport, onCreateSession, navigate,
+  user, ui, chat, activeSession, currentModelOption,
+  onLogout, onCreateSession, navigate,
   onSelectSession, onSwitchFallbackSession, onRetryLast,
-  onExportSession, sendMessage, onChangeContextTokenLimit, onPersistContextTokenLimit, defaultModel
+  sendMessage, defaultModel
 }: WorkspaceProps) {
-  const sessionCount = chat.sessions.length;
-  const readinessLabel = ui.releaseReportLoading
-    ? '巡检中'
-    : ui.releaseReport?.readiness?.ready
-      ? 'Ready'
-      : ui.releaseReport
-        ? 'Attention'
-        : 'Standby';
-
   return (
     <div className="workspace-shell">
       <header className="workspace-chrome">
@@ -56,11 +39,6 @@ export function Workspace({
           <button type="button" className="chrome-nav-item active">工作台</button>
           <button type="button" className="chrome-nav-item" onClick={() => navigate('/coach')}>开发陪跑器</button>
         </nav>
-        <div className="chrome-status-grid" aria-label="工作区状态">
-          <span><b>{sessionCount}</b> 会话</span>
-          <span><b>{ui.toolStats?.successRate ?? '--'}%</b> 工具成功率</span>
-          <span className={readinessLabel === 'Attention' ? 'is-warn' : 'is-ok'}><b>{readinessLabel}</b> 巡检</span>
-        </div>
       </header>
       <div className="workspace">
         <aside className="sidebar panel">
@@ -68,25 +46,7 @@ export function Workspace({
             userEmail={user!.email}
             onLogout={onLogout}
             modelOptions={ui.modelOptions}
-            toolStats={ui.toolStats}
-            toolStatsLoading={ui.toolStatsLoading}
-            releaseReport={ui.releaseReport}
-            releaseReportLoading={ui.releaseReportLoading}
-            toolStatsWindowHours={ui.toolStatsWindowHours}
-            toolStatsScope={ui.toolStatsScope}
             contextTokenLimit={ui.contextTokenLimit}
-            hasActiveSession={!!chat.activeSessionId}
-            activeSession={activeSession}
-            currentModelOption={currentModelOption}
-            onRefreshToolStats={() => { void refreshWorkspaceDiagnostics(api, { sessionId: chat.activeSessionId || undefined }); }}
-            onChangeToolStatsWindow={hours => { ui.setToolStatsWindowHours(hours); void refreshWorkspaceDiagnostics(api, { windowHours: hours, sessionId: chat.activeSessionId || undefined }); }}
-            onChangeToolStatsScope={scope => { ui.setToolStatsScope(scope); void refreshWorkspaceDiagnostics(api, { scope, sessionId: chat.activeSessionId || undefined }); }}
-            onExportToolStatsJson={() => { void onExportToolStats('json'); }}
-            onExportToolStatsMarkdown={() => { void onExportToolStats('markdown'); }}
-            onExportReleaseReportJson={() => { void onExportReleaseReport('json'); }}
-            onExportReleaseReportMarkdown={() => { void onExportReleaseReport('markdown'); }}
-            onChangeContextTokenLimit={onChangeContextTokenLimit}
-            onPersistContextTokenLimit={onPersistContextTokenLimit}
             onCreateSession={onCreateSession}
             onNavigateToCoach={() => navigate('/coach')}
           />
@@ -101,13 +61,9 @@ export function Workspace({
           loading={chat.loading}
           error={chat.error}
           streamState={chat.streamState}
-          exporting={chat.exporting}
           currentModelOption={currentModelOption}
           toolStats={ui.toolStats}
-          toolStatsScope={ui.toolStatsScope}
           toolStatsLoading={ui.toolStatsLoading}
-          releaseReport={ui.releaseReport}
-          diagnosticsLoading={ui.releaseReportLoading}
           canRetry={!!chat.lastFailedMessage && !chat.sending && chat.errorKind !== 'rate_limit'}
           errorActionLabel={
             chat.errorKind === 'auth_expired'
@@ -129,8 +85,6 @@ export function Workspace({
               ? () => { chat.setRateLimitRetryArmed(false); chat.setRateLimitRetryInSec(null); void onRetryLast(); }
               : undefined
           }
-          onExportJson={() => { void onExportSession('json'); }}
-          onExportMarkdown={() => { void onExportSession('markdown'); }}
           onRetryLast={onRetryLast}
           onSendMessage={() => { void sendMessage(chat.prompt); }}
         />

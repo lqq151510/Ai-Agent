@@ -13,7 +13,7 @@ export function useAppBootstrap(
   loadModels: (client: any) => Promise<void>,
   refreshWorkspaceDiagnostics: (client: any, options: any) => Promise<void>
 ) {
-  async function bootstrapAuth(client = api) {
+  async function bootstrapAuth(client = api, preferredPath?: string) {
     if (!useAuthStore.getState().tokens && client === api) {
       navigate('/login');
       return;
@@ -25,15 +25,23 @@ export function useAppBootstrap(
       setUser(profile);
       chat.setSessions(list);
       const picked = list.find((s: any) => s.id === chat.activeSessionId) ?? list[0] ?? null;
+      const wantsCoach = preferredPath === '/coach';
+      const wantsSession = preferredPath?.startsWith('/chat/sessions/');
       if (!picked) {
         chat.setActiveSessionId('');
         chat.setMessages([]);
         ui.setContextTokenLimit(null);
         await refreshWorkspaceDiagnostics(client, { sessionId: undefined });
-        navigate('/');
+        navigate(wantsCoach ? '/coach' : '/', { replace: true });
       } else {
         ui.setContextTokenLimit(picked.contextTokenLimit ?? null);
-        navigate(`/chat/sessions/${picked.id}`, { replace: true });
+        if (wantsCoach) {
+          navigate('/coach', { replace: true });
+        } else if (wantsSession && preferredPath) {
+          navigate(preferredPath, { replace: true });
+        } else {
+          navigate(`/chat/sessions/${picked.id}`, { replace: true });
+        }
       }
     } catch (e) {
       updateTokens(null);

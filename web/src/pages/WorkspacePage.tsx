@@ -47,9 +47,6 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
   );
 
   const {
-    onExportSession,
-    onExportToolStats,
-    onExportReleaseReport,
     onSwitchFallbackSession
   } = useChatActions(api, chat, ui, activeSession, applyError, onCreateSession);
 
@@ -87,57 +84,20 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
     }
   }, [urlSessionId, chat.sessions, tokens, user]);
 
-  function onChangeContextTokenLimit(rawValue: string) {
-    const trimmed = rawValue.trim();
-    if (!trimmed) {
-      ui.setContextTokenLimit(null);
-      return;
-    }
-    const parsed = Number(trimmed);
-    if (!Number.isInteger(parsed)) {
-      return;
-    }
-    const normalized = Math.max(500, Math.min(32768, parsed));
-    ui.setContextTokenLimit(normalized);
-  }
-
-  async function onPersistContextTokenLimit() {
-    if (!chat.activeSessionId) {
-      return;
-    }
-    try {
-      const updated = await api.updateSessionContextTokenLimit(chat.activeSessionId, ui.contextTokenLimit ?? null);
-      chat.setSessions(chat.sessions.map(session =>
-        session.id === updated.id
-          ? { ...session, contextTokenLimit: updated.contextTokenLimit ?? null }
-          : session
-      ));
-    } catch (e) {
-      applyError(e);
-    }
-  }
-
   return (
     <Workspace
       user={user}
-      api={api}
       ui={ui}
       chat={chat}
       activeSession={activeSession}
       currentModelOption={currentModelOption}
       onLogout={onLogout}
-      refreshWorkspaceDiagnostics={refreshWorkspaceDiagnostics}
-      onExportToolStats={onExportToolStats}
-      onExportReleaseReport={onExportReleaseReport}
       onCreateSession={onCreateSession}
       navigate={navigate}
       onSelectSession={onSelectSession}
       onSwitchFallbackSession={onSwitchFallbackSession}
       onRetryLast={onRetryLast}
-      onExportSession={onExportSession}
       sendMessage={sendMessage}
-      onChangeContextTokenLimit={onChangeContextTokenLimit}
-      onPersistContextTokenLimit={onPersistContextTokenLimit}
       defaultModel={defaultModel}
     />
   );

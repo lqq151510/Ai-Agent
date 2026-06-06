@@ -1,33 +1,13 @@
 import React from 'react';
-import type { ModelOption, Provider, ReleaseReportResponse, Session, ToolStatsResponse } from '../types';
+import type { ModelOption, Provider } from '../types';
 import { LogOut, Zap } from 'lucide-react';
 import { NewSessionForm } from './settings/NewSessionForm';
-import { WorkspaceContextPanel } from './settings/WorkspaceContextPanel';
-import { ToolStatsDiagnostics } from './settings/ToolStatsDiagnostics';
 
 interface SettingsProps {
   userEmail: string;
   onLogout: () => void;
   modelOptions: ModelOption[];
-  toolStats: ToolStatsResponse | null;
-  toolStatsLoading: boolean;
-  releaseReport: ReleaseReportResponse | null;
-  releaseReportLoading: boolean;
-  toolStatsWindowHours: number;
-  toolStatsScope: 'session' | 'global';
   contextTokenLimit: number | null;
-  hasActiveSession: boolean;
-  activeSession: Session | null;
-  currentModelOption: ModelOption | null;
-  onRefreshToolStats: () => void;
-  onChangeToolStatsWindow: (hours: number) => void;
-  onChangeToolStatsScope: (scope: 'session' | 'global') => void;
-  onExportToolStatsJson: () => void;
-  onExportToolStatsMarkdown: () => void;
-  onExportReleaseReportJson: () => void;
-  onExportReleaseReportMarkdown: () => void;
-  onChangeContextTokenLimit: (rawValue: string) => void;
-  onPersistContextTokenLimit: () => void;
   onCreateSession: (provider: Provider, model: string, title?: string, contextTokenLimit?: number | null) => void;
   onNavigateToCoach: () => void;
 }
@@ -36,25 +16,7 @@ export const Settings: React.FC<SettingsProps> = ({
   userEmail,
   onLogout,
   modelOptions,
-  toolStats,
-  toolStatsLoading,
-  releaseReport,
-  releaseReportLoading,
-  toolStatsWindowHours,
-  toolStatsScope,
   contextTokenLimit,
-  hasActiveSession,
-  activeSession,
-  currentModelOption,
-  onRefreshToolStats,
-  onChangeToolStatsWindow,
-  onChangeToolStatsScope,
-  onExportToolStatsJson,
-  onExportToolStatsMarkdown,
-  onExportReleaseReportJson,
-  onExportReleaseReportMarkdown,
-  onChangeContextTokenLimit,
-  onPersistContextTokenLimit,
   onCreateSession,
   onNavigateToCoach
 }) => {
@@ -89,33 +51,6 @@ export const Settings: React.FC<SettingsProps> = ({
         modelOptions={modelOptions}
         contextTokenLimit={contextTokenLimit}
         onCreateSession={onCreateSession}
-      />
-
-      <WorkspaceContextPanel
-        toolStatsScope={toolStatsScope}
-        hasActiveSession={hasActiveSession}
-        activeSession={activeSession}
-        currentModelOption={currentModelOption}
-        contextTokenLimit={contextTokenLimit}
-        onChangeContextTokenLimit={onChangeContextTokenLimit}
-        onPersistContextTokenLimit={onPersistContextTokenLimit}
-      />
-
-      <ToolStatsDiagnostics
-        toolStats={toolStats}
-        toolStatsLoading={toolStatsLoading}
-        releaseReport={releaseReport}
-        releaseReportLoading={releaseReportLoading}
-        toolStatsWindowHours={toolStatsWindowHours}
-        toolStatsScope={toolStatsScope}
-        hasActiveSession={hasActiveSession}
-        onRefreshToolStats={onRefreshToolStats}
-        onChangeToolStatsWindow={onChangeToolStatsWindow}
-        onChangeToolStatsScope={onChangeToolStatsScope}
-        onExportToolStatsJson={onExportToolStatsJson}
-        onExportToolStatsMarkdown={onExportToolStatsMarkdown}
-        onExportReleaseReportJson={onExportReleaseReportJson}
-        onExportReleaseReportMarkdown={onExportReleaseReportMarkdown}
       />
     </>
   );

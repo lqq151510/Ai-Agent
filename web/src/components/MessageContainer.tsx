@@ -1,9 +1,9 @@
 import React from 'react';
 import { Virtuoso } from 'react-virtuoso';
-import { Message, ModelOption, ReleaseReportResponse, Session, ToolStatsResponse } from '../types';
+import { Message, ModelOption, Session, ToolStatsResponse } from '../types';
 import { MessageItem } from './MessageItem';
 import { SkeletonMessage } from './Skeleton';
-import { AlertCircle, Bot, CheckCircle2, Cpu, Download, Loader2, MessageSquare, RefreshCw, Send, Sparkles, Wrench } from 'lucide-react';
+import { AlertCircle, Bot, Loader2, MessageSquare, RefreshCw, Send, Sparkles } from 'lucide-react';
 import type { StreamState } from '../stores/chatStore';
 
 interface MessageContainerProps {
@@ -15,18 +15,12 @@ interface MessageContainerProps {
   loading: boolean;
   error: string;
   streamState: StreamState;
-  exporting: boolean;
   currentModelOption: ModelOption | null;
   toolStats: ToolStatsResponse | null;
-  toolStatsScope: 'session' | 'global';
   toolStatsLoading: boolean;
-  releaseReport: ReleaseReportResponse | null;
-  diagnosticsLoading: boolean;
   canRetry: boolean;
   errorActionLabel?: string;
   onErrorAction?: () => void;
-  onExportJson: () => void;
-  onExportMarkdown: () => void;
   onRetryLast: () => void;
   onSendMessage: () => void;
 }
@@ -40,18 +34,12 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
   loading,
   error,
   streamState,
-  exporting,
   currentModelOption,
   toolStats,
-  toolStatsScope,
   toolStatsLoading,
-  releaseReport,
-  diagnosticsLoading,
   canRetry,
   errorActionLabel,
   onErrorAction,
-  onExportJson,
-  onExportMarkdown,
   onRetryLast,
   onSendMessage
 }) => {
@@ -87,7 +75,6 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
 
   const totalTraceCount = messages.reduce((sum, message) => sum + parseTraceCount(message.toolTrace), 0);
   const assistantTurns = messages.filter(message => message.role === 'assistant').length;
-  const failedCheckCount = releaseReport?.readiness.checks.filter(check => !check.ok).length ?? 0;
   const modelCapabilities = [
     currentModelOption?.supportsTools ? 'Tools' : null,
     currentModelOption?.supportsReasoning ? 'Reasoning' : null,
@@ -124,16 +111,6 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
             {statusText}
           </div>
         </div>
-        <div className="chat-header-actions">
-          <button type="button" className="ghost export-btn" onClick={onExportJson} disabled={!activeSession || exporting} title="导出 JSON">
-            <Download size={14} />
-            JSON
-          </button>
-          <button type="button" className="ghost export-btn" onClick={onExportMarkdown} disabled={!activeSession || exporting} title="导出 Markdown">
-            <Download size={14} />
-            MD
-          </button>
-        </div>
       </header>
 
       <section className="workspace-summary-grid">
@@ -159,80 +136,6 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
             </div>
           ) : null}
         </article>
-        <article className="workspace-summary-card">
-          <div className="workspace-summary-label">诊断巡检</div>
-          <strong>{diagnosticsLoading ? '生成中...' : releaseReport?.readiness.ready ? 'Ready' : releaseReport ? `${failedCheckCount} 项待处理` : '未获取摘要'}</strong>
-          <p>{releaseReport?.summary || releaseReport?.readiness.checks.find(check => !check.ok)?.detail || '仍可通过导出查看完整 report。'}</p>
-        </article>
-      </section>
-
-      <section className="workspace-insights-row">
-        <div className="insight-panel">
-          <div className="insight-panel-head">
-            <Cpu size={15} />
-            <span>模型 / Provider</span>
-          </div>
-          <div className="insight-panel-body">
-            <div className="insight-kv">
-              <span>Provider</span>
-              <strong>{activeSession?.provider || currentModelOption?.provider || 'OPENAI'}</strong>
-            </div>
-            <div className="insight-kv">
-              <span>Model</span>
-              <strong>{activeSession?.model || currentModelOption?.model || '未选择'}</strong>
-            </div>
-            <div className="insight-kv">
-              <span>Context</span>
-              <strong>{currentModelOption?.contextWindow ? `${currentModelOption.contextWindow}` : 'unknown'}</strong>
-            </div>
-            <div className="insight-kv">
-              <span>Output</span>
-              <strong>{currentModelOption?.maxOutputTokens ? `${currentModelOption.maxOutputTokens}` : 'auto'}</strong>
-            </div>
-          </div>
-        </div>
-        <div className="insight-panel">
-          <div className="insight-panel-head">
-            <Wrench size={15} />
-            <span>状态 / 统计</span>
-          </div>
-          <div className="insight-panel-body">
-            <div className="insight-kv">
-              <span>Scope</span>
-              <strong>{toolStatsScope === 'session' ? 'session' : 'global'}</strong>
-            </div>
-            <div className="insight-kv">
-              <span>P95</span>
-              <strong>{toolStats?.p95DurationMs ? `${toolStats.p95DurationMs}ms` : 'n/a'}</strong>
-            </div>
-            <div className="insight-kv">
-              <span>Total Runs</span>
-              <strong>{toolStats?.totalRuns ?? 0}</strong>
-            </div>
-            <div className="insight-kv">
-              <span>Report</span>
-              <strong>{releaseReport?.readiness.ready ? 'pass' : releaseReport ? 'attention' : 'n/a'}</strong>
-            </div>
-          </div>
-        </div>
-        <div className="insight-panel insight-panel-diagnostics">
-          <div className="insight-panel-head">
-            <CheckCircle2 size={15} />
-            <span>诊断摘要</span>
-          </div>
-          {releaseReport?.readiness.checks?.length ? (
-            <div className="diagnostics-inline-list">
-              {releaseReport.readiness.checks.slice(0, 3).map(check => (
-                <div key={check.name} className={`diagnostics-inline-item ${check.ok ? 'ok' : 'warn'}`}>
-                  <span>{check.name}</span>
-                  <small>{check.ok ? 'OK' : 'WARN'}</small>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="insight-empty-copy">暂无诊断明细，导出 report 时会带上更完整信息。</p>
-          )}
-        </div>
       </section>
 
       <section className="message-list">
