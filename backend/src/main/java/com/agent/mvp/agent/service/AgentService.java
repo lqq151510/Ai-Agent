@@ -42,6 +42,7 @@ public class AgentService {
     private final AppProperties appProperties;
     private final RAGMemoryService ragMemoryService;
     private final ClientToolRegistry clientToolRegistry;
+    private final org.flexagent.langchain4j.FlexAgentChatModel flexAgentChatModel;
 
     public AgentService(SessionService sessionService,
                         ModelRoutingService modelRoutingService,
@@ -51,7 +52,8 @@ public class AgentService {
                         AppProperties appProperties,
                         ObjectMapper objectMapper,
                         RAGMemoryService ragMemoryService,
-                        ClientToolRegistry clientToolRegistry) {
+                        ClientToolRegistry clientToolRegistry,
+                        org.flexagent.langchain4j.FlexAgentChatModel flexAgentChatModel) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
         this.modelGateway = modelGateway;
@@ -61,6 +63,7 @@ public class AgentService {
         this.objectMapper = objectMapper;
         this.ragMemoryService = ragMemoryService;
         this.clientToolRegistry = clientToolRegistry;
+        this.flexAgentChatModel = flexAgentChatModel;
     }
 
     public ChatResponse chat(UUID userId, ChatRequest request) {
@@ -146,58 +149,102 @@ public class AgentService {
         HistoryWindow historyWindow = buildMessages(userId, history, maxContextTokens, systemContext);
         List<ModelChatMessage> messages = historyWindow.messages();
         List<ToolExecutionResult> traces = new ArrayList<>();
-        String reply = "";
-        long totalLatencyMs = 0;
+        StringBuilder replyBuilder = new StringBuilder();
+        long startMs = System.currentTimeMillis();
         int toolRounds = 0;
         String stopReason = "completed";
 
-        for (int step = 0; step < maxToolSteps; step++) {
-            boolean finalStep = step == maxToolSteps - 1;
-            ModelChatRequest modelRequest = new ModelChatRequest(
-                    resolved.model(),
-                    messages,
-                    toolOrchestrator.listToolSpecs(),
-                    "auto"
-            );
-            ModelChatResponse modelResponse = (chunkConsumer != null && finalStep)
-                    ? modelGateway.stream(resolved.provider(), modelRequest, chunkConsumer)
-                    : modelGateway.chat(resolved.provider(), modelRequest);
-            totalLatencyMs += modelResponse.latencyMs();
-            reply = modelResponse.content() == null ? "" : modelResponse.content();
-
-            List<ToolCall> toolCalls = modelResponse.toolCalls() == null ? List.of() : modelResponse.toolCalls();
-            if (toolCalls.isEmpty()) {
-                stopReason = "completed";
-                break;
-            }
-            toolRounds++;
-
-            messages.add(ModelChatMessage.assistantWithToolCalls(reply, toolCalls));
-            persistToolCallMessage(session, resolved, toolCalls, reply);
-
-            if (step == maxToolSteps - 1) {
-                reply = "Stopped safely: reached max tool steps (" + maxToolSteps + ").";
-                stopReason = "max_tool_steps_reached";
-                break;
-            }
-
-            boolean stopForError = false;
-            for (ToolCall call : toolCalls) {
-                ToolResult result = toolOrchestrator.execute(call, clientToolInvoker);
-                ToolExecutionResult trace = toTrace(result);
-                traces.add(trace);
-                messages.add(ModelChatMessage.tool(call.id(), call.name(), result.output()));
-                persistToolResultMessage(session, resolved, trace);
-                if (!"SUCCESS".equalsIgnoreCase(result.status())) {
-                    stopForError = true;
+        org.flexagent.core.runtime.AgentRuntime runtime = flexAgentChatModel.activeRuntime();
+        try {
+            if (runtime.getClass().getName().contains("LangChain4jRuntime")) {
+                List<dev.langchain4j.data.message.ChatMessage> lc4jMessages = new ArrayList<>();
+                for (ModelChatMessage m : messages) {
+                    if ("system".equals(m.role())) {
+                        lc4jMessages.add(dev.langchain4j.data.message.SystemMessage.from(m.content()));
+                    } else if ("user".equals(m.role())) {
+                        lc4jMessages.add(dev.langchain4j.data.message.UserMessage.from(m.content()));
+                    } else if ("assistant".equals(m.role())) {
+                        lc4jMessages.add(dev.langchain4j.data.message.AiMessage.from(m.content() == null ? "" : m.content()));
+                    }
                 }
+                java.lang.reflect.Method setHistory = runtime.getClass().getMethod("setHistoryMessages", List.class);
+                setHistory.invoke(runtime, lc4jMessages);
+                java.lang.reflect.Method setSession = runtime.getClass().getMethod("setSessionId", String.class);
+                setSession.invoke(runtime, session.getId().toString());
             }
-            if (stopForError && stopOnToolError) {
-                reply = "Stopped safely: tool execution returned error.";
-                stopReason = "tool_error";
+        } catch (Exception e) {
+            log.warn("Failed to set flexagent history", e);
+        }
+
+        // Send the last user message to start reasoning stream
+        String lastMessage = "";
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            if ("user".equals(messages.get(i).role())) {
+                lastMessage = messages.get(i).content();
                 break;
             }
         }
+        
+        try {
+            runtime.send(lastMessage);
+
+            boolean running = true;
+            while (running) {
+                org.flexagent.core.model.Step step = runtime.pollStep(100, java.util.concurrent.TimeUnit.MILLISECONDS);
+                if (step == null) continue;
+
+                if (step.status() == org.flexagent.core.model.StepStatus.ERROR) {
+                    stopReason = "flexagent_error";
+                    running = false;
+                }
+
+                if (step.type() == org.flexagent.core.model.StepType.TOOL_CALL && !step.toolCalls().isEmpty()) {
+                    toolRounds++;
+                    if (toolRounds >= maxToolSteps) {
+                        stopReason = "max_tool_steps_reached";
+                        replyBuilder.append("\n[Stopped safely: reached max tool steps]");
+                        running = false;
+                        break;
+                    }
+                    
+                    for (org.flexagent.core.model.ToolCall fcTool : step.toolCalls()) {
+                        ToolCall localTool = new ToolCall(fcTool.id(), fcTool.name(), fcTool.argumentsJson());
+                        ToolResult result = toolOrchestrator.execute(localTool, clientToolInvoker);
+                        ToolExecutionResult trace = toTrace(result);
+                        traces.add(trace);
+                        
+                        org.flexagent.core.model.ToolResult fcResult = new org.flexagent.core.model.ToolResult(
+                                fcTool.id(), fcTool.name(), null, result.output()
+                        );
+                        runtime.sendToolResult(fcResult);
+                        
+                        if (!"SUCCESS".equalsIgnoreCase(result.status()) && stopOnToolError) {
+                            stopReason = "tool_error";
+                            replyBuilder.append("\n[Stopped safely: tool error]");
+                            running = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (step.contentDelta() != null && !step.contentDelta().isEmpty()) {
+                    replyBuilder.append(step.contentDelta());
+                    if (chunkConsumer != null) {
+                        chunkConsumer.accept(step.contentDelta());
+                    }
+                }
+
+                if (Boolean.TRUE.equals(step.isCompleteResponse()) && step.type() == org.flexagent.core.model.StepType.TEXT_RESPONSE) {
+                    running = false;
+                }
+            }
+        } catch (Exception e) {
+            log.error("FlexAgent runtime error", e);
+            stopReason = "exception";
+        }
+
+        String reply = replyBuilder.toString();
+        long totalLatencyMs = System.currentTimeMillis() - startMs;
 
         persistFinalAssistant(session, resolved, reply, traces);
         toolAuditService.saveAll(userId, session.getId(), resolved.provider().name(), resolved.model(), traces);
