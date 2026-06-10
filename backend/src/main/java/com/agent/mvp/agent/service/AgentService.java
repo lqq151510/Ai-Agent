@@ -21,6 +21,12 @@ import com.agent.mvp.config.AppProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.agent.mvp.auth.entity.User;
+import com.agent.mvp.auth.repo.UserRepository;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
+import org.flexagent.core.runtime.RuntimeTypes;
+import org.flexagent.langchain4j.FlexAgentChatModel;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -43,6 +49,7 @@ public class AgentService {
     private final RAGMemoryService ragMemoryService;
     private final ClientToolRegistry clientToolRegistry;
     private final org.flexagent.langchain4j.FlexAgentChatModel flexAgentChatModel;
+    private final UserRepository userRepository;
 
     public AgentService(SessionService sessionService,
                         ModelRoutingService modelRoutingService,
@@ -53,7 +60,8 @@ public class AgentService {
                         ObjectMapper objectMapper,
                         RAGMemoryService ragMemoryService,
                         ClientToolRegistry clientToolRegistry,
-                        org.flexagent.langchain4j.FlexAgentChatModel flexAgentChatModel) {
+                        org.flexagent.langchain4j.FlexAgentChatModel flexAgentChatModel,
+                        UserRepository userRepository) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
         this.modelGateway = modelGateway;
@@ -64,6 +72,7 @@ public class AgentService {
         this.ragMemoryService = ragMemoryService;
         this.clientToolRegistry = clientToolRegistry;
         this.flexAgentChatModel = flexAgentChatModel;
+        this.userRepository = userRepository;
     }
 
     public ChatResponse chat(UUID userId, ChatRequest request) {
@@ -154,7 +163,43 @@ public class AgentService {
         int toolRounds = 0;
         String stopReason = "completed";
 
-        org.flexagent.core.runtime.AgentRuntime runtime = flexAgentChatModel.activeRuntime();
+        User user = userRepository.findById(userId).orElse(null);
+        org.flexagent.core.runtime.AgentRuntime runtime;
+        
+        if (user != null && user.getCustomApiKey() != null && !user.getCustomApiKey().isBlank()) {
+            try {
+                String baseUrl = user.getCustomBaseUrl() != null && !user.getCustomBaseUrl().isBlank() 
+                        ? user.getCustomBaseUrl() 
+                        : appProperties.getOpenai().getBaseUrl();
+                
+                ChatLanguageModel customModel = OpenAiChatModel.builder()
+                        .baseUrl(baseUrl)
+                        .apiKey(user.getCustomApiKey())
+                        .modelName(resolved.model())
+                        .timeout(java.time.Duration.ofMillis(appProperties.getModelRuntime().getReadTimeoutMs()))
+                        .maxRetries(appProperties.getModelRuntime().getIdempotentRetries())
+                        .build();
+
+                java.util.List<Object> tools = new java.util.ArrayList<>();
+                for (com.agent.mvp.agent.tooling.ToolSpec spec : toolOrchestrator.listToolSpecs()) {
+                    String schemaJson = objectMapper.writeValueAsString(spec.inputJsonSchema());
+                    tools.add(new org.flexagent.core.model.ToolDefinition(spec.name(), spec.description(), schemaJson));
+                }
+
+                FlexAgentChatModel customFlex = FlexAgentChatModel.builder()
+                        .runtime(RuntimeTypes.LANGCHAIN4J)
+                        .model(customModel)
+                        .tools(tools.toArray())
+                        .build();
+                runtime = customFlex.activeRuntime();
+            } catch (Exception e) {
+                log.error("Failed to build custom FlexAgentChatModel for user {}", userId, e);
+                runtime = flexAgentChatModel.activeRuntime();
+            }
+        } else {
+            runtime = flexAgentChatModel.activeRuntime();
+        }
+
         try {
             if (runtime.getClass().getName().contains("LangChain4jRuntime")) {
                 List<dev.langchain4j.data.message.ChatMessage> lc4jMessages = new ArrayList<>();

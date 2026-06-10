@@ -6,6 +6,8 @@ import java.util.UUID;
 public record UserProfileResponse(
         UUID id,
         String email,
-        Instant createdAt
+        Instant createdAt,
+        String customBaseUrl,
+        String customApiKey
 ) {
 }

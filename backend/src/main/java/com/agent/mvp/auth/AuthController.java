@@ -106,6 +106,14 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/config")
+    public UserProfileResponse updateConfig(@RequestBody com.agent.mvp.auth.dto.UpdateUserConfigRequest configRequest, Authentication authentication) {
+        AuthenticatedUser user = requireAuthenticatedUser(authentication);
+        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+            return authService.updateConfig(user, configRequest);
+        }
+    }
+
     private String resolveClientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {

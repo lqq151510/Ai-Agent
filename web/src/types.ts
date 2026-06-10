@@ -17,6 +17,8 @@ export interface UserProfile {
   id: string;
   email: string;
   createdAt: string;
+  customBaseUrl?: string | null;
+  customApiKey?: string | null;
 }
 
 export interface Session {

@@ -21,6 +21,8 @@ import com.agent.mvp.coach.dto.ScaffoldRequest;
 import com.agent.mvp.coach.dto.ScaffoldResponse;
 import com.agent.mvp.coach.entity.DevCoachRun;
 import com.agent.mvp.coach.repo.DevCoachRunRepository;
+import com.agent.mvp.auth.entity.User;
+import com.agent.mvp.auth.repo.UserRepository;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.config.AppProperties;
@@ -45,6 +47,7 @@ public class CoachService {
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
     private final RAGMemoryService ragMemoryService;
+    private final UserRepository userRepository;
 
     public CoachService(ModelGateway modelGateway,
                         CoachPromptService promptService,
@@ -53,7 +56,8 @@ public class CoachService {
                         DevCoachRunRepository runRepository,
                         AppProperties appProperties,
                         ObjectMapper objectMapper,
-                        RAGMemoryService ragMemoryService) {
+                        RAGMemoryService ragMemoryService,
+                        UserRepository userRepository) {
         this.modelGateway = modelGateway;
         this.promptService = promptService;
         this.scaffoldTemplateRegistry = scaffoldTemplateRegistry;
@@ -62,14 +66,18 @@ public class CoachService {
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
         this.ragMemoryService = ragMemoryService;
+        this.userRepository = userRepository;
     }
 
     public RequirementBreakdownResponse breakdown(UUID userId, RequirementBreakdownRequest request) {
+        User user = userRepository.findById(userId).orElse(null);
         ModelChatResponse modelResponse = modelGateway.chat(resolveProvider(request.provider()), new ModelChatRequest(
                 resolveModel(request.provider(), request.model()),
                 promptService.requirementMessages(request.requirement()),
                 List.of(),
-                "none"
+                "none",
+                user != null ? user.getCustomBaseUrl() : null,
+                user != null ? user.getCustomApiKey() : null
         ));
         String raw = modelResponse.content() == null ? "" : modelResponse.content();
         Parsed<RequirementBreakdown> parsed = parseRequirementBreakdown(raw);
@@ -78,11 +86,14 @@ public class CoachService {
     }
 
     public LogDiagnosisResponse diagnose(UUID userId, LogDiagnosisRequest request) {
+        User user = userRepository.findById(userId).orElse(null);
         ModelChatResponse modelResponse = modelGateway.chat(resolveProvider(request.provider()), new ModelChatRequest(
                 resolveModel(request.provider(), request.model()),
                 promptService.logDiagnosisMessages(request.logContent(), request.context()),
                 List.of(),
-                "none"
+                "none",
+                user != null ? user.getCustomBaseUrl() : null,
+                user != null ? user.getCustomApiKey() : null
         ));
         String raw = modelResponse.content() == null ? "" : modelResponse.content();
         Parsed<LogDiagnosis> parsed = parseLogDiagnosis(raw);

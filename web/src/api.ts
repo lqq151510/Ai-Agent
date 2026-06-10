@@ -25,6 +25,11 @@ type RegisterInput = {
   password: string;
 };
 
+type UpdateConfigInput = {
+  customBaseUrl?: string | null;
+  customApiKey?: string | null;
+};
+
 type LoginInput = RegisterInput;
 
 type CreateSessionInput = {
@@ -342,6 +347,13 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       return request<UserProfile>('/api/v1/auth/me', { method: 'GET' }, true);
     },
 
+    updateConfig(input: UpdateConfigInput) {
+      return request<UserProfile>('/api/v1/auth/config', {
+        method: 'PUT',
+        body: JSON.stringify(input)
+      }, true);
+    },
+
     async listSessions() {
       const payload = await request<Session[] | PageResult<Session>>('/api/v1/sessions', { method: 'GET' }, true);
       if (Array.isArray(payload)) {
@@ -404,6 +416,10 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
         method: 'PATCH',
         body: JSON.stringify({ contextTokenLimit })
       }, true);
+    },
+
+    deleteSession(sessionId: string) {
+      return request<void>(`/api/v1/sessions/${sessionId}`, { method: 'DELETE' }, true);
     },
 
     listMessages(sessionId: string) {

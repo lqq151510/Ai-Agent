@@ -23,7 +23,7 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
   onLogout,
   armRateLimitAutoRetry,
 }) => {
-  const { user, tokens } = useAuthStore();
+  const { user, tokens, setUser } = useAuthStore();
   const chat = useChatStore();
   const ui = useUiStore();
   const navigate = useNavigate();
@@ -86,7 +86,9 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
 
   return (
     <Workspace
+      api={api}
       user={user}
+      onUserUpdate={setUser}
       ui={ui}
       chat={chat}
       activeSession={activeSession}

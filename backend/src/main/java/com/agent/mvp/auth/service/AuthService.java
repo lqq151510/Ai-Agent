@@ -2,6 +2,7 @@ package com.agent.mvp.auth.service;
 
 import com.agent.mvp.auth.dto.LoginRequest;
 import com.agent.mvp.auth.dto.TokenResponse;
+import com.agent.mvp.auth.dto.UpdateUserConfigRequest;
 import com.agent.mvp.auth.dto.UserProfileResponse;
 import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.auth.repo.UserRepository;
@@ -70,7 +71,7 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(password));
         User saved = userRepository.save(user);
 
-        return new UserProfileResponse(saved.getId(), saved.getEmail(), saved.getCreatedAt());
+        return toProfileResponse(saved);
     }
 
     private void validatePasswordStrength(String password) {
@@ -134,6 +135,36 @@ public class AuthService {
     public UserProfileResponse me(AuthenticatedUser authenticatedUser) {
         User user = userRepository.findById(authenticatedUser.userId())
                 .orElseThrow(() -> new NotFoundException("User not found"));
-        return new UserProfileResponse(user.getId(), user.getEmail(), user.getCreatedAt());
+        return toProfileResponse(user);
+    }
+
+    @Transactional
+    public UserProfileResponse updateConfig(AuthenticatedUser authenticatedUser, UpdateUserConfigRequest configRequest) {
+        User user = userRepository.findById(authenticatedUser.userId())
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        
+        user.setCustomBaseUrl(configRequest.customBaseUrl());
+        user.setCustomApiKey(configRequest.customApiKey());
+        userRepository.save(user);
+
+        return toProfileResponse(user);
+    }
+
+    private UserProfileResponse toProfileResponse(User user) {
+        String maskedKey = null;
+        if (user.getCustomApiKey() != null && !user.getCustomApiKey().isBlank()) {
+            if (user.getCustomApiKey().length() > 6) {
+                maskedKey = user.getCustomApiKey().substring(0, 3) + "***" + user.getCustomApiKey().substring(user.getCustomApiKey().length() - 3);
+            } else {
+                maskedKey = "***";
+            }
+        }
+        return new UserProfileResponse(
+                user.getId(),
+                user.getEmail(),
+                user.getCreatedAt(),
+                user.getCustomBaseUrl(),
+                maskedKey
+        );
     }
 }

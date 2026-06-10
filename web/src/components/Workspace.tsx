@@ -4,7 +4,9 @@ import { ChatList } from './ChatList';
 import { MessageContainer } from './MessageContainer';
 
 interface WorkspaceProps {
+  api: any;
   user: any;
+  onUserUpdate: (user: any) => void;
   ui: any;
   chat: any;
   activeSession: Session | null;
@@ -20,7 +22,7 @@ interface WorkspaceProps {
 }
 
 export function Workspace({
-  user, ui, chat, activeSession, currentModelOption,
+  api, user, onUserUpdate, ui, chat, activeSession, currentModelOption,
   onLogout, onCreateSession, navigate,
   onSelectSession, onSwitchFallbackSession, onRetryLast,
   sendMessage, defaultModel
@@ -43,7 +45,9 @@ export function Workspace({
       <div className="workspace">
         <aside className="sidebar panel">
           <Settings
-            userEmail={user!.email}
+            api={api}
+            user={user}
+            onUserUpdate={onUserUpdate}
             onLogout={onLogout}
             modelOptions={ui.modelOptions}
             contextTokenLimit={ui.contextTokenLimit}

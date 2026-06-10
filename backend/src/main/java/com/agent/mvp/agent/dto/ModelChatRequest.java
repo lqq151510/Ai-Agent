@@ -8,6 +8,8 @@ public record ModelChatRequest(
         String model,
         List<ModelChatMessage> messages,
         List<ToolSpec> tools,
-        String toolChoice
+        String toolChoice,
+        String customBaseUrl,
+        String customApiKey
 ) {
 }

@@ -25,6 +25,12 @@ public class User {
     @Column(name = "token_version", nullable = false)
     private int tokenVersion;
 
+    @Column(name = "custom_base_url")
+    private String customBaseUrl;
+
+    @Column(name = "custom_api_key")
+    private String customApiKey;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -79,5 +85,21 @@ public class User {
 
     public void setTokenVersion(int tokenVersion) {
         this.tokenVersion = tokenVersion;
+    }
+
+    public String getCustomBaseUrl() {
+        return customBaseUrl;
+    }
+
+    public void setCustomBaseUrl(String customBaseUrl) {
+        this.customBaseUrl = customBaseUrl;
+    }
+
+    public String getCustomApiKey() {
+        return customApiKey;
+    }
+
+    public void setCustomApiKey(String customApiKey) {
+        this.customApiKey = customApiKey;
     }
 }

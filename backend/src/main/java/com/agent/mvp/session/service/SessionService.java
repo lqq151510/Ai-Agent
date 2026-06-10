@@ -168,6 +168,13 @@ public class SessionService {
 
         return out.toString();
     }
+    @Transactional
+    public void deleteSession(UUID userId, UUID sessionId) {
+        ConversationSession session = findOwnedSession(userId, sessionId);
+        messageRepository.deleteBySessionId(session.getId());
+        sessionRepository.delete(session);
+        cacheService.evictMessages(session.getId());
+    }
 
     @Transactional
     public Message saveMessage(ConversationSession session,

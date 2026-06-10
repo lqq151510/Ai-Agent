@@ -35,7 +35,8 @@ class CoachServiceTest {
                 repository,
                 new AppProperties(),
                 new ObjectMapper(),
-                ragMemoryService
+                ragMemoryService,
+                mock(com.agent.mvp.auth.repo.UserRepository.class)
         );
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(gateway.chat(eq(ModelProviderType.OPENAI), any()))

@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 import java.util.List;
 import java.util.UUID;
@@ -97,6 +98,17 @@ public class SessionController {
 
             SessionExportResponse exported = sessionService.exportSession(user.userId(), sessionId);
             return ResponseEntity.ok(exported);
+        }
+    }
+
+    @DeleteMapping("/{sessionId}")
+    public ResponseEntity<Void> deleteSession(@PathVariable UUID sessionId,
+                                              Authentication authentication) {
+        AuthenticatedUser user = requireUser(authentication);
+        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
+             MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, sessionId.toString())) {
+            sessionService.deleteSession(user.userId(), sessionId);
+            return ResponseEntity.noContent().build();
         }
     }
 

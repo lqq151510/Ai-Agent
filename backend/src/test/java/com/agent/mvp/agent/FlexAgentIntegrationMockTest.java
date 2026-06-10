@@ -59,7 +59,8 @@ class FlexAgentIntegrationMockTest {
                 new ObjectMapper(),
                 ragMemoryService,
                 clientToolRegistry,
-                flexAgentChatModel
+                flexAgentChatModel,
+                mock(com.agent.mvp.auth.repo.UserRepository.class)
         );
 
         UUID userId = UUID.randomUUID();

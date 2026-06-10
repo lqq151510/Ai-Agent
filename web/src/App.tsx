@@ -9,6 +9,7 @@ import { CliLogin } from './components/CliLogin';
 import { Sparkles } from 'lucide-react';
 import { LoginPage } from './pages/LoginPage';
 import { WorkspacePage } from './pages/WorkspacePage';
+import { UserCenterPage } from './pages/UserCenterPage';
 import { useAuthStore } from './stores/authStore';
 import { useChatStore, type ErrorKind } from './stores/chatStore';
 import { useUiStore } from './stores/uiStore';
@@ -147,6 +148,9 @@ export function App() {
         } />
         <Route path="/coach" element={
           tokens && user ? <CoachWorkspace api={api} onBack={() => navigate('/')} /> : <Navigate to="/login" replace />
+        } />
+        <Route path="/user/*" element={
+          tokens && user ? <UserCenterPage api={api} /> : <Navigate to="/login" replace />
         } />
         <Route path="/cli-login" element={
           <CliLogin tokens={tokens} user={user} />

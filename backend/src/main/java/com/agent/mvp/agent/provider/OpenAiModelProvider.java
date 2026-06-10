@@ -66,7 +66,8 @@ public class OpenAiModelProvider implements ModelProvider {
 
     @Override
     public ModelChatResponse chat(ModelChatRequest request) {
-        String apiKey = resolveApiKey();
+        String apiKey = resolveApiKey(request);
+        String requestUrl = resolveBaseUrl(request) + "/chat/completions";
 
         Instant start = Instant.now();
         Map<String, Object> body = Map.of(
@@ -80,7 +81,7 @@ public class OpenAiModelProvider implements ModelProvider {
         JsonNode response;
         try {
             response = withIdempotentRetry(() -> webClient.post()
-                    .uri("/chat/completions")
+                    .uri(requestUrl)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                     .bodyValue(body)
                     .retrieve()
@@ -116,7 +117,8 @@ public class OpenAiModelProvider implements ModelProvider {
 
     @Override
     public ModelChatResponse stream(ModelChatRequest request, Consumer<String> chunkConsumer) {
-        String apiKey = resolveApiKey();
+        String apiKey = resolveApiKey(request);
+        String requestUrl = resolveBaseUrl(request) + "/chat/completions";
 
         Instant start = Instant.now();
         StringBuilder content = new StringBuilder();
@@ -131,7 +133,7 @@ public class OpenAiModelProvider implements ModelProvider {
 
         try {
             webClient.post()
-                    .uri("/chat/completions")
+                    .uri(requestUrl)
                     .accept(MediaType.TEXT_EVENT_STREAM)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                     .bodyValue(body)
@@ -293,10 +295,20 @@ public class OpenAiModelProvider implements ModelProvider {
         }
     }
 
-    private String resolveApiKey() {
+    private String resolveBaseUrl(ModelChatRequest request) {
+        if (request.customBaseUrl() != null && !request.customBaseUrl().isBlank()) {
+            return request.customBaseUrl();
+        }
+        return this.baseUrl;
+    }
+
+    private String resolveApiKey(ModelChatRequest request) {
+        if (request.customApiKey() != null && !request.customApiKey().isBlank()) {
+            return request.customApiKey();
+        }
         String apiKey = appProperties.getOpenai().getApiKey();
         if (apiKey == null || apiKey.isBlank()) {
-            if (isLocalOrMockEndpoint(baseUrl)) {
+            if (isLocalOrMockEndpoint(resolveBaseUrl(request))) {
                 return "sk-local-mock-placeholder";
             }
             throw new BadRequestException("OPENAI_API_KEY is not configured");
