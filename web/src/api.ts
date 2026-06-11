@@ -126,33 +126,45 @@ function toErrorMessage(payload: unknown, status: number): string {
 export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
   const safeBaseUrl = normalizeBaseUrl(baseUrl);
 
+  let refreshPromise: Promise<boolean> | null = null;
+
   async function tryRefreshToken(): Promise<boolean> {
-    const current = tokenAccessor.getTokens();
-    if (!current?.refreshToken) {
-      tokenAccessor.setTokens(null);
-      return false;
+    if (refreshPromise) {
+      return refreshPromise;
     }
 
-    const response = await fetch(`${safeBaseUrl}/api/v1/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: current.refreshToken })
+    refreshPromise = (async () => {
+      const current = tokenAccessor.getTokens();
+      if (!current?.refreshToken) {
+        tokenAccessor.setTokens(null);
+        return false;
+      }
+
+      const response = await fetch(`${safeBaseUrl}/api/v1/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: current.refreshToken })
+      });
+
+      const payload = await parseBody(response);
+      if (!response.ok || !payload || typeof payload !== 'object') {
+        tokenAccessor.setTokens(null);
+        return false;
+      }
+
+      const next = payload as Tokens;
+      if (!next.accessToken || !next.refreshToken) {
+        tokenAccessor.setTokens(null);
+        return false;
+      }
+
+      tokenAccessor.setTokens(next);
+      return true;
+    })().finally(() => {
+      refreshPromise = null;
     });
 
-    const payload = await parseBody(response);
-    if (!response.ok || !payload || typeof payload !== 'object') {
-      tokenAccessor.setTokens(null);
-      return false;
-    }
-
-    const next = payload as Tokens;
-    if (!next.accessToken || !next.refreshToken) {
-      tokenAccessor.setTokens(null);
-      return false;
-    }
-
-    tokenAccessor.setTokens(next);
-    return true;
+    return refreshPromise;
   }
 
   async function request<T>(
@@ -289,7 +301,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     }
   }
 
-  async function streamChatRequest(input: ChatInput, handlers: StreamHandlers, allowRetry = true): Promise<void> {
+  async function streamChatRequest(input: ChatInput, handlers: StreamHandlers, allowRetry = true, signal?: AbortSignal): Promise<void> {
     const headers = new Headers({ 'Content-Type': 'application/json' });
     const accessToken = tokenAccessor.getTokens()?.accessToken;
     if (accessToken) {
@@ -299,13 +311,14 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     const response = await fetch(`${safeBaseUrl}/api/v1/agent/chat/stream`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(input)
+      body: JSON.stringify(input),
+      signal
     });
 
     if (response.status === 401 && allowRetry) {
       const refreshed = await tryRefreshToken();
       if (refreshed) {
-        return streamChatRequest(input, handlers, false);
+        return streamChatRequest(input, handlers, false, signal);
       }
     }
 
@@ -441,8 +454,8 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       }, true);
     },
 
-    streamChat(input: ChatInput, handlers: StreamHandlers) {
-      return streamChatRequest(input, handlers);
+    streamChat(input: ChatInput, handlers: StreamHandlers, signal?: AbortSignal) {
+      return streamChatRequest(input, handlers, true, signal);
     },
 
     breakdownRequirement(input: RequirementBreakdownInput) {

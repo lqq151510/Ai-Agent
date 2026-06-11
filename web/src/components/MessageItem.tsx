@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import { Message, ToolExecutionResult } from '../types';
 import { Bot, ChevronDown, ChevronUp, Clock3, User, Wrench } from 'lucide-react';
 import { useStreamStore } from '../stores/streamStore';
@@ -51,7 +52,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
       
       <div className="message-bubble">
         <div className="markdown-body">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
             {finalContent}
           </ReactMarkdown>
         </div>

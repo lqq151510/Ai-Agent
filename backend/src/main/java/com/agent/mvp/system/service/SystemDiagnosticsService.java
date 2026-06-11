@@ -235,8 +235,8 @@ public class SystemDiagnosticsService {
 
         Instant start = Instant.now();
         return withRetryProbe(() -> {
-            Map<String, Object> payload = buildClient(baseUrl).get()
-                    .uri("/models")
+            Map<String, Object> payload = getWebClient().get()
+                    .uri(baseUrl + "/models")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
@@ -283,15 +283,23 @@ public class SystemDiagnosticsService {
         return new ModelCatalogProbe(Set.of(), "Model probe failed without a captured exception", 0L);
     }
 
-    private WebClient buildClient(String baseUrl) {
-        int connectTimeoutMs = (int) Math.max(500, appProperties.getModelRuntime().getConnectTimeoutMs());
-        HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
-                .responseTimeout(probeTimeout());
-        return WebClient.builder()
-                .baseUrl(baseUrl)
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .build();
+    private volatile WebClient webClient;
+
+    private WebClient getWebClient() {
+        if (webClient == null) {
+            synchronized (this) {
+                if (webClient == null) {
+                    int connectTimeoutMs = (int) Math.max(500, appProperties.getModelRuntime().getConnectTimeoutMs());
+                    HttpClient httpClient = HttpClient.create()
+                            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
+                            .responseTimeout(probeTimeout());
+                    webClient = WebClient.builder()
+                            .clientConnector(new ReactorClientHttpConnector(httpClient))
+                            .build();
+                }
+            }
+        }
+        return webClient;
     }
 
     private Duration probeTimeout() {

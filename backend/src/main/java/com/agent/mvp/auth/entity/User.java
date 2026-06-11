@@ -29,6 +29,7 @@ public class User {
     private String customBaseUrl;
 
     @Column(name = "custom_api_key")
+    @jakarta.persistence.Convert(converter = StringCryptoConverter.class)
     private String customApiKey;
 
     @Column(name = "created_at", nullable = false)

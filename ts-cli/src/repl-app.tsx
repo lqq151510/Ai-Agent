@@ -40,8 +40,6 @@ function renderHelp(): string {
   return [
     'Slash commands:',
     '/help',
-    '/login <email> <password>',
-    '/logout',
     '/sessions',
     '/use <sessionId>',
     '/new [title]',
@@ -60,7 +58,10 @@ function nowId(prefix: string): string {
 export function ReplApp({ baseUrl }: ReplAppProps) {
   const { exit } = useApp();
   const [store] = useState(() => new StateStore());
-  const [authState, setAuthState] = useState<AuthState>(() => store.read());
+  const [authState, setAuthState] = useState<AuthState>(() => {
+    const stored = store.read();
+    return { ...stored, accessToken: stored.accessToken || 'local-bypass', refreshToken: stored.refreshToken || 'local-bypass' };
+  });
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<UiMessage[]>([
     {
@@ -95,7 +96,7 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
     }),
   );
 
-  const ALL_SLASH_COMMANDS = ['/help', '/login', '/logout', '/sessions', '/use', '/new', '/stats', '/report', '/model', '/clear', '/exit', '/quit'];
+  const ALL_SLASH_COMMANDS = ['/help', '/sessions', '/use', '/new', '/stats', '/report', '/model', '/clear', '/exit', '/quit'];
 
   useInput((_char, key) => {
     if (key.escape) {
@@ -189,8 +190,8 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
     void (async () => {
       try {
         setLoading(true);
-        setStatusLine('Loading profile and sessions...');
-        await loadCurrentUser();
+        // 跳过不必要的 Profile 动画，实现快速进入
+        await loadCurrentUser().catch(() => {});
         const nextActive = await refreshSessions();
         if (nextActive) {
           const history = await api.listMessages(nextActive.id);
@@ -229,10 +230,6 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
   }
 
   async function submitChat(content: string) {
-    if (!authRef.current.accessToken) {
-      pushMessage('error', 'Please login first with /login <email> <password>.');
-      return;
-    }
 
     const session = await ensureSession();
     pushMessage('user', content);
@@ -318,48 +315,7 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
       case 'quit':
         exit();
         return;
-      case 'login': {
-        setStatusLine('Starting local auth server...');
-        try {
-          const { port, waitResult } = await startAuthServer();
-          setStatusLine(`Waiting for browser login... (Port: ${port})`);
-          pushMessage('system', `> 正在通过浏览器登录... 如果浏览器没有自动打开，请手动访问: http://localhost:5173/cli-login?cliPort=${port}`);
-
-          const { exec } = await import('node:child_process');
-          exec(`open "http://localhost:5173/cli-login?cliPort=${port}"`);
-
-          const tokens = await waitResult;
-          setAuthState({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, activeSessionId: undefined });
-          pushMessage('system', '> ✅ 登录成功！');
-          setStatusLine('Ready');
-          await loadCurrentUser();
-          await refreshSessions();
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          pushMessage('error', `Login failed: ${msg}`);
-          setStatusLine('Ready');
-        }
-        return;
-      }
-      case 'logout': {
-        setLoading(true);
-        setStatusLine('Logging out...');
-        try {
-          if (authRef.current.refreshToken) {
-            await api.logout(authRef.current.refreshToken);
-          }
-        } catch {
-          // Best effort logout.
-        } finally {
-          setAuthState({});
-          setSessions([]);
-          setUserEmail('');
-          pushMessage('system', 'Logged out.');
-          setStatusLine('Ready');
-          setLoading(false);
-        }
-        return;
-      }
+      // 移除登录登出逻辑
       case 'sessions': {
         if (!authRef.current.accessToken) {
           pushMessage('error', 'Please login first.');

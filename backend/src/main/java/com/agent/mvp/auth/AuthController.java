@@ -45,45 +45,19 @@ public class AuthController {
 
     @PostMapping("/register")
     public UserProfileResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
-        String ip = resolveClientIp(httpRequest);
-        long limit = Math.max(1, appProperties.getRateLimit().getRegisterPerMinute());
-        boolean allowedByIp = rateLimiterService.allow("ratelimit:register:ip:" + ip, limit, Duration.ofMinutes(1));
-        boolean allowedByEmail = rateLimiterService.allow(
-                "ratelimit:register:email:" + request.email().toLowerCase().trim(),
-                limit,
-                Duration.ofMinutes(1)
-        );
-        if (!allowedByIp || !allowedByEmail) {
-            throw new TooManyRequestsException("Too many register attempts");
-        }
+        checkRateLimit(httpRequest, "register", request.email(), appProperties.getRateLimit().getRegisterPerMinute());
         return authService.register(request.email(), request.password());
     }
 
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        String ip = resolveClientIp(httpRequest);
-        long limit = Math.max(1, appProperties.getRateLimit().getLoginPerMinute());
-        boolean allowedByIp = rateLimiterService.allow("ratelimit:login:ip:" + ip, limit, Duration.ofMinutes(1));
-        boolean allowedByEmail = rateLimiterService.allow(
-                "ratelimit:login:email:" + request.email().toLowerCase().trim(),
-                limit,
-                Duration.ofMinutes(1)
-        );
-        if (!allowedByIp || !allowedByEmail) {
-            throw new TooManyRequestsException("Too many login attempts");
-        }
-
+        checkRateLimit(httpRequest, "login", request.email(), appProperties.getRateLimit().getLoginPerMinute());
         return authService.login(request);
     }
 
     @PostMapping("/refresh")
     public TokenResponse refresh(@Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest) {
-        String ip = resolveClientIp(httpRequest);
-        long limit = Math.max(1, appProperties.getRateLimit().getRefreshPerMinute());
-        boolean allowedByIp = rateLimiterService.allow("ratelimit:refresh:ip:" + ip, limit, Duration.ofMinutes(1));
-        if (!allowedByIp) {
-            throw new TooManyRequestsException("Too many refresh attempts");
-        }
+        checkRateLimit(httpRequest, "refresh", null, appProperties.getRateLimit().getRefreshPerMinute());
         return authService.refresh(request.refreshToken());
     }
 
@@ -107,17 +81,38 @@ public class AuthController {
     }
 
     @PostMapping("/config")
-    public UserProfileResponse updateConfig(@RequestBody com.agent.mvp.auth.dto.UpdateUserConfigRequest configRequest, Authentication authentication) {
+    public UserProfileResponse updateConfig(@Valid @RequestBody com.agent.mvp.auth.dto.UpdateUserConfigRequest configRequest, Authentication authentication) {
         AuthenticatedUser user = requireAuthenticatedUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return authService.updateConfig(user, configRequest);
         }
     }
 
+    private void checkRateLimit(HttpServletRequest request, String action, String email, long limitPerMinute) {
+        String ip = resolveClientIp(request);
+        long limit = Math.max(1, limitPerMinute);
+        
+        boolean allowedByIp = rateLimiterService.allow("ratelimit:" + action + ":ip:" + ip, limit, Duration.ofMinutes(1));
+        if (!allowedByIp) {
+            throw new TooManyRequestsException("Too many " + action + " attempts");
+        }
+        
+        if (email != null) {
+            boolean allowedByEmail = rateLimiterService.allow(
+                    "ratelimit:" + action + ":email:" + email.toLowerCase().trim(),
+                    limit,
+                    Duration.ofMinutes(1)
+            );
+            if (!allowedByEmail) {
+                throw new TooManyRequestsException("Too many " + action + " attempts");
+            }
+        }
+    }
+
     private String resolveClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
         }
         return request.getRemoteAddr();
     }

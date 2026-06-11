@@ -10,13 +10,18 @@ import com.agent.mvp.auth.security.AuthenticatedUser;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.common.exception.UnauthorizedException;
+import io.jsonwebtoken.Claims;
+import java.time.Duration;
+import java.util.Date;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
-    private static final int MIN_PASSWORD_LENGTH = 8;
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -34,26 +39,21 @@ public class AuthService {
     }
 
     public void logout(String accessToken, String refreshToken) {
-        if (accessToken != null && !accessToken.isBlank()) {
+        blacklistIfValid(accessToken);
+        blacklistIfValid(refreshToken);
+    }
+
+    private void blacklistIfValid(String token) {
+        if (token != null && !token.isBlank()) {
             try {
-                io.jsonwebtoken.Claims claims = jwtService.parseToken(accessToken).getBody();
-                java.util.Date expiration = claims.getExpiration();
+                Claims claims = jwtService.parseToken(token).getBody();
+                Date expiration = claims.getExpiration();
                 long diffSeconds = (expiration.getTime() - System.currentTimeMillis()) / 1000;
                 if (diffSeconds > 0) {
-                    tokenBlacklistService.blacklistToken(accessToken, java.time.Duration.ofSeconds(diffSeconds));
+                    tokenBlacklistService.blacklistToken(token, Duration.ofSeconds(diffSeconds));
                 }
-            } catch (Exception ignored) {
-            }
-        }
-        if (refreshToken != null && !refreshToken.isBlank()) {
-            try {
-                io.jsonwebtoken.Claims claims = jwtService.parseToken(refreshToken).getBody();
-                java.util.Date expiration = claims.getExpiration();
-                long diffSeconds = (expiration.getTime() - System.currentTimeMillis()) / 1000;
-                if (diffSeconds > 0) {
-                    tokenBlacklistService.blacklistToken(refreshToken, java.time.Duration.ofSeconds(diffSeconds));
-                }
-            } catch (Exception ignored) {
+            } catch (Exception ex) {
+                log.warn("Logout token parse failed", ex);
             }
         }
     }
@@ -64,7 +64,6 @@ public class AuthService {
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new BadRequestException("Email already exists");
         }
-        validatePasswordStrength(password);
 
         User user = new User();
         user.setEmail(normalizedEmail);
@@ -72,30 +71,6 @@ public class AuthService {
         User saved = userRepository.save(user);
 
         return toProfileResponse(saved);
-    }
-
-    private void validatePasswordStrength(String password) {
-        if (password == null || password.length() < MIN_PASSWORD_LENGTH) {
-            throw new BadRequestException("Password must be at least 8 characters long");
-        }
-        boolean hasUpper = false;
-        boolean hasLower = false;
-        boolean hasDigit = false;
-        boolean hasSpecial = false;
-        for (char c : password.toCharArray()) {
-            if (Character.isUpperCase(c)) {
-                hasUpper = true;
-            } else if (Character.isLowerCase(c)) {
-                hasLower = true;
-            } else if (Character.isDigit(c)) {
-                hasDigit = true;
-            } else if (!Character.isWhitespace(c)) {
-                hasSpecial = true;
-            }
-        }
-        if (!(hasUpper && hasLower && hasDigit && hasSpecial)) {
-            throw new BadRequestException("Password must include upper/lowercase letters, digits and special characters");
-        }
     }
 
     public TokenResponse login(LoginRequest request) {

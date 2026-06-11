@@ -26,7 +26,10 @@ public class MarkItDownService {
     private final RestTemplate restTemplate;
 
     public MarkItDownService() {
-        this.restTemplate = new RestTemplate();
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10000);
+        factory.setReadTimeout(10000);
+        this.restTemplate = new RestTemplate(factory);
     }
 
     /**
@@ -52,7 +55,8 @@ public class MarkItDownService {
             ResponseEntity<Map> response = restTemplate.postForEntity(markItDownUrl, requestEntity, Map.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return (String) response.getBody().get("markdown");
+                Object markdownObj = response.getBody().get("markdown");
+                return markdownObj != null ? String.valueOf(markdownObj) : "";
             } else {
                 throw new RuntimeException("Failed to convert document. Status: " + response.getStatusCode());
             }

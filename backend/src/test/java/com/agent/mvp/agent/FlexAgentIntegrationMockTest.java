@@ -19,7 +19,7 @@ import org.flexagent.core.model.Step;
 import org.flexagent.core.model.StepStatus;
 import org.flexagent.core.model.StepType;
 import org.flexagent.core.runtime.AgentRuntime;
-import org.flexagent.langchain4j.FlexAgentChatModel;
+import com.agent.mvp.agent.service.FlexRuntimeFactory;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -45,9 +45,9 @@ class FlexAgentIntegrationMockTest {
         RAGMemoryService ragMemoryService = mock(RAGMemoryService.class);
         com.agent.mvp.agent.tooling.ClientToolRegistry clientToolRegistry = mock(com.agent.mvp.agent.tooling.ClientToolRegistry.class);
         
-        FlexAgentChatModel flexAgentChatModel = mock(FlexAgentChatModel.class);
+        FlexRuntimeFactory flexRuntimeFactory = mock(FlexRuntimeFactory.class);
         AgentRuntime runtime = mock(AgentRuntime.class);
-        when(flexAgentChatModel.activeRuntime()).thenReturn(runtime);
+        when(flexRuntimeFactory.createRuntime(any(), any(), any())).thenReturn(runtime);
 
         AgentService service = new AgentService(
                 sessionService,
@@ -59,7 +59,7 @@ class FlexAgentIntegrationMockTest {
                 new ObjectMapper(),
                 ragMemoryService,
                 clientToolRegistry,
-                flexAgentChatModel,
+                flexRuntimeFactory,
                 mock(com.agent.mvp.auth.repo.UserRepository.class)
         );
 

@@ -289,13 +289,14 @@ public class CoachService {
     }
 
     private CoachRunResponse toRunResponse(DevCoachRun run) {
+        String downloadUrl = run.getArtifactPath() != null ? "/api/v1/coach/scaffolds/" + run.getId() + "/download" : null;
         return new CoachRunResponse(
                 run.getId(),
                 run.getRunType(),
                 run.getTitle(),
                 run.getInputText(),
                 run.getOutputJson(),
-                run.getArtifactPath(),
+                downloadUrl,
                 run.getCreatedAt()
         );
     }

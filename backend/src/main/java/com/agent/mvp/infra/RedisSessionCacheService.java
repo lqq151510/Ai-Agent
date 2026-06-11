@@ -43,12 +43,14 @@ public class RedisSessionCacheService implements SessionCacheService {
         }
     }
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(RedisSessionCacheService.class);
+
     public void cacheMessages(UUID sessionId, List<MessageResponse> messages) {
         try {
             String payload = objectMapper.writeValueAsString(messages);
             redisTemplate.opsForValue().set(cacheKey(sessionId), payload, CACHE_TTL);
-        } catch (JsonProcessingException ignored) {
-            // Best effort cache
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize session messages for cache, sessionId={}", sessionId, e);
         }
     }
 

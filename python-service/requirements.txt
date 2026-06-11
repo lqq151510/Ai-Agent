@@ -1,4 +1,4 @@
-fastapi
-uvicorn
-markitdown
-python-multipart
+fastapi==0.111.0
+uvicorn==0.30.0
+markitdown==0.0.1a2
+python-multipart==0.0.9

@@ -35,7 +35,7 @@ class StartupValidationRunnerTest {
         StartupValidationRunner runner = new StartupValidationRunner(
                 new AppProperties(),
                 diagnosticsService,
-                ignored -> null
+                mockEnv(null)
         );
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
@@ -50,7 +50,7 @@ class StartupValidationRunnerTest {
         StartupValidationRunner runner = new StartupValidationRunner(
                 new AppProperties(),
                 diagnosticsService,
-                ignored -> "short-secret"
+                mockEnv("short-secret")
         );
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
@@ -73,7 +73,7 @@ class StartupValidationRunnerTest {
         StartupValidationRunner runner = new StartupValidationRunner(
                 appProperties,
                 diagnosticsService,
-                ignored -> "01234567890123456789012345678901"
+                mockEnv("01234567890123456789012345678901")
         );
 
         assertDoesNotThrow(() -> runner.run(mock(ApplicationArguments.class)));
@@ -97,7 +97,7 @@ class StartupValidationRunnerTest {
         StartupValidationRunner runner = new StartupValidationRunner(
                 appProperties,
                 diagnosticsService,
-                ignored -> "01234567890123456789012345678901"
+                mockEnv("01234567890123456789012345678901")
         );
 
         assertDoesNotThrow(() -> runner.run(mock(ApplicationArguments.class)));
@@ -121,7 +121,7 @@ class StartupValidationRunnerTest {
         StartupValidationRunner runner = new StartupValidationRunner(
                 appProperties,
                 diagnosticsService,
-                ignored -> "01234567890123456789012345678901"
+                mockEnv("01234567890123456789012345678901")
         );
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
@@ -143,7 +143,7 @@ class StartupValidationRunnerTest {
         StartupValidationRunner runner = new StartupValidationRunner(
                 appProperties,
                 diagnosticsService,
-                ignored -> "01234567890123456789012345678901"
+                mockEnv("01234567890123456789012345678901")
         );
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
@@ -159,8 +159,15 @@ class StartupValidationRunnerTest {
 
     private boolean isProductionConstructor(Constructor<?> constructor) {
         Class<?>[] parameterTypes = constructor.getParameterTypes();
-        return parameterTypes.length == 2
+        return parameterTypes.length == 3
                 && parameterTypes[0] == AppProperties.class
-                && parameterTypes[1] == SystemDiagnosticsService.class;
+                && parameterTypes[1] == SystemDiagnosticsService.class
+                && parameterTypes[2] == org.springframework.core.env.Environment.class;
+    }
+
+    private org.springframework.core.env.Environment mockEnv(String secret) {
+        org.springframework.core.env.Environment env = mock(org.springframework.core.env.Environment.class);
+        when(env.getProperty("security.jwt.secret")).thenReturn(secret);
+        return env;
     }
 }

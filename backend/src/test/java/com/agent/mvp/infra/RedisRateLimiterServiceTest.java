@@ -17,11 +17,9 @@ class RedisRateLimiterServiceTest {
     @Test
     void shouldAllowWithinLimitAndRejectOverLimit() {
         StringRedisTemplate template = Mockito.mock(StringRedisTemplate.class);
-        @SuppressWarnings("unchecked")
-        ValueOperations<String, String> valueOperations = Mockito.mock(ValueOperations.class);
-
-        Mockito.when(template.opsForValue()).thenReturn(valueOperations);
-        Mockito.when(valueOperations.increment("ratelimit:key")).thenReturn(1L, 2L, 3L);
+        
+        Mockito.when(template.execute(any(org.springframework.data.redis.core.script.RedisScript.class), any(), any()))
+               .thenReturn(1L, 2L, 3L);
 
         RedisRateLimiterService service = new RedisRateLimiterService(template);
 
@@ -29,6 +27,6 @@ class RedisRateLimiterServiceTest {
         assertTrue(service.allow("ratelimit:key", 2, Duration.ofMinutes(1)));
         assertFalse(service.allow("ratelimit:key", 2, Duration.ofMinutes(1)));
 
-        Mockito.verify(template).expire(eq("ratelimit:key"), any(Duration.class));
+        Mockito.verify(template, Mockito.times(3)).execute(any(org.springframework.data.redis.core.script.RedisScript.class), any(), any());
     }
 }

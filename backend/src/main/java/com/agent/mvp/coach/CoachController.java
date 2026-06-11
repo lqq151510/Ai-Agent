@@ -45,7 +45,7 @@ public class CoachController {
     @PostMapping("/requirements/breakdown")
     public RequirementBreakdownResponse breakdown(@Valid @RequestBody RequirementBreakdownRequest request,
                                                  Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return coachService.breakdown(user.userId(), request);
         }
@@ -54,7 +54,7 @@ public class CoachController {
     @PostMapping("/logs/diagnose")
     public LogDiagnosisResponse diagnose(@Valid @RequestBody LogDiagnosisRequest request,
                                          Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return coachService.diagnose(user.userId(), request);
         }
@@ -63,7 +63,7 @@ public class CoachController {
     @PostMapping("/scaffolds")
     public ScaffoldResponse scaffold(@Valid @RequestBody ScaffoldRequest request,
                                      Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return coachService.generateScaffold(user.userId(), request);
         }
@@ -72,7 +72,7 @@ public class CoachController {
     @GetMapping("/scaffolds/{runId}/download")
     public ResponseEntity<InputStreamResource> downloadScaffold(@PathVariable UUID runId,
                                                                 Authentication authentication) throws IOException {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             Path artifact = coachService.findScaffoldArtifact(user.userId(), runId);
             return ResponseEntity.ok()
@@ -86,16 +86,10 @@ public class CoachController {
     @GetMapping("/runs")
     public List<CoachRunResponse> runs(@RequestParam(defaultValue = "20") int limit,
                                        Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return coachService.listRuns(user.userId(), limit);
         }
     }
 
-    private AuthenticatedUser requireUser(Authentication authentication) {
-        if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
-            throw new UnauthorizedException("Authentication required");
-        }
-        return principal;
-    }
 }

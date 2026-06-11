@@ -41,32 +41,12 @@ public class RAGMemoryService {
     public RAGMemoryService(AppProperties appProperties, MarkItDownService markItDownService) {
         this.appProperties = appProperties;
         this.markItDownService = markItDownService;
-        // 自定义轻量级的 EmbeddingModel 接口实现，完全消除外部大型 onnx 库依赖，并在本地生成确定性向量
-        this.embeddingModel = new EmbeddingModel() {
-            @Override
-            public Response<Embedding> embed(String text) {
-                float[] vector = new float[384];
-                int hashCode = text != null ? text.hashCode() : 0;
-                for (int i = 0; i < 384; i++) {
-                    vector[i] = (float) Math.sin(hashCode + i);
-                }
-                return Response.from(Embedding.from(vector));
-            }
-
-            @Override
-            public Response<Embedding> embed(TextSegment textSegment) {
-                return embed(textSegment.text());
-            }
-
-            @Override
-            public Response<List<Embedding>> embedAll(List<TextSegment> textSegments) {
-                List<Embedding> list = new ArrayList<>();
-                for (TextSegment ts : textSegments) {
-                    list.add(embed(ts).content());
-                }
-                return Response.from(list);
-            }
-        };
+        this.embeddingModel = dev.langchain4j.model.openai.OpenAiEmbeddingModel.builder()
+                .apiKey(appProperties.getOpenai().getApiKey() != null && !appProperties.getOpenai().getApiKey().isBlank() ? appProperties.getOpenai().getApiKey() : "demo")
+                .baseUrl(appProperties.getOpenai().getBaseUrl())
+                .modelName("text-embedding-3-small")
+                .dimensions(384)
+                .build();
     }
 
     @PostConstruct

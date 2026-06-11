@@ -83,7 +83,7 @@ public class AgentController {
     @PostMapping("/chat")
     public ChatResponse chat(@Valid @RequestBody ChatRequest request,
                              Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
              MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, request.sessionId().toString())) {
             enforceChatRateLimit(user);
@@ -95,15 +95,15 @@ public class AgentController {
     @PostMapping("/chat/tool_result")
     public ResponseEntity<Void> submitToolResult(@Valid @RequestBody ClientToolResultRequest request,
                                                  Authentication authentication) {
-        requireUser(authentication);
-        clientToolRegistry.complete(request.callId(), request.result());
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
+        clientToolRegistry.complete(user.userId().toString(), request.callId(), request.result());
         return ResponseEntity.ok().build();
     }
 
     @PostMapping(value = "/chat/stream", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<Object>> stream(@Valid @RequestBody ChatRequest request,
                                                 Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         enforceChatRateLimit(user);
 
         return Flux.create(sink -> {
@@ -123,10 +123,7 @@ public class AgentController {
                     TimeUnit.MILLISECONDS
             );
 
-            sink.onDispose(() -> {
-                done.set(true);
-                heartbeat.cancel(true);
-            });
+            sink.onDispose(() -> done.set(true));
 
             try {
                 inFlightStreams.incrementAndGet();
@@ -214,10 +211,4 @@ public class AgentController {
         return false;
     }
 
-    private AuthenticatedUser requireUser(Authentication authentication) {
-        if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
-            throw new UnauthorizedException("Authentication required");
-        }
-        return principal;
-    }
 }

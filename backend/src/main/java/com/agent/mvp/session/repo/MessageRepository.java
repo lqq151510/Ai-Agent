@@ -13,6 +13,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
 
     List<Message> findBySessionIdOrderByCreatedAtDesc(UUID sessionId, Pageable pageable);
 
+    @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query("DELETE FROM Message m WHERE m.session.id = :sessionId")
     void deleteBySessionId(@org.springframework.data.repository.query.Param("sessionId") UUID sessionId);

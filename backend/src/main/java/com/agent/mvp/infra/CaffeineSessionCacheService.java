@@ -23,12 +23,14 @@ public class CaffeineSessionCacheService implements SessionCacheService {
 
     @Override
     public Optional<List<MessageResponse>> getCachedMessages(UUID sessionId) {
-        return Optional.ofNullable(cache.getIfPresent(sessionId));
+        return Optional.ofNullable(cache.getIfPresent(sessionId)).map(List::copyOf);
     }
 
     @Override
     public void cacheMessages(UUID sessionId, List<MessageResponse> messages) {
-        cache.put(sessionId, messages);
+        if (messages != null) {
+            cache.put(sessionId, List.copyOf(messages));
+        }
     }
 
     @Override

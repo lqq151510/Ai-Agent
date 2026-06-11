@@ -31,7 +31,7 @@ public class ReleaseReportController {
     public ReleaseReportResponse report(@RequestParam(defaultValue = "24") int windowHours,
                                         @RequestParam(required = false) UUID sessionId,
                                         Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return releaseReportService.build(user.userId(), windowHours, sessionId);
         }
@@ -42,7 +42,7 @@ public class ReleaseReportController {
                                           @RequestParam(required = false) UUID sessionId,
                                           @RequestParam(defaultValue = "markdown") String format,
                                           Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             String normalized = format == null ? "markdown" : format.trim().toLowerCase();
             if ("json".equals(normalized)) {
@@ -61,10 +61,4 @@ public class ReleaseReportController {
         }
     }
 
-    private AuthenticatedUser requireUser(Authentication authentication) {
-        if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
-            throw new UnauthorizedException("Authentication required");
-        }
-        return principal;
-    }
 }

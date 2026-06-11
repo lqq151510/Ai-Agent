@@ -25,28 +25,27 @@ public class CaffeineRateLimiterService implements RateLimiterService {
     }
 
     private static class RateLimitBucket {
-        private final long windowMs;
+        private final long windowNanos;
         private final AtomicLong count;
         private volatile long windowStart;
 
         RateLimitBucket(Duration window) {
-            this.windowMs = window.toMillis();
+            this.windowNanos = window.toNanos();
             this.count = new AtomicLong(0);
-            this.windowStart = System.currentTimeMillis();
+            this.windowStart = System.nanoTime();
         }
 
         boolean allow(long limit) {
-            long now = System.currentTimeMillis();
-            if (now - windowStart >= windowMs) {
-                synchronized (this) {
-                    if (now - windowStart >= windowMs) {
-                        windowStart = now;
-                        count.set(0);
-                    }
+            synchronized (this) {
+                long now = System.nanoTime();
+                // Subtraction handles nanoTime overflow correctly
+                if (now - windowStart >= windowNanos || now - windowStart < 0) {
+                    windowStart = now;
+                    count.set(0);
                 }
+                long current = count.incrementAndGet();
+                return current <= limit;
             }
-            long current = count.incrementAndGet();
-            return current <= limit;
         }
     }
 }

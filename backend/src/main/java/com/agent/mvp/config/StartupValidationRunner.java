@@ -10,7 +10,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-import java.util.function.Function;
+import org.springframework.core.env.Environment;
 import java.util.function.Supplier;
 
 @Component
@@ -20,20 +20,15 @@ public class StartupValidationRunner implements ApplicationRunner {
 
     private final AppProperties appProperties;
     private final SystemDiagnosticsService diagnosticsService;
-    private final Function<String, String> envReader;
+    private final Environment env;
 
     @Autowired
     public StartupValidationRunner(AppProperties appProperties,
-                                   SystemDiagnosticsService diagnosticsService) {
-        this(appProperties, diagnosticsService, System::getenv);
-    }
-
-    StartupValidationRunner(AppProperties appProperties,
-                            SystemDiagnosticsService diagnosticsService,
-                            Function<String, String> envReader) {
+                                   SystemDiagnosticsService diagnosticsService,
+                                   Environment env) {
         this.appProperties = appProperties;
         this.diagnosticsService = diagnosticsService;
-        this.envReader = envReader;
+        this.env = env;
     }
 
     @Override
@@ -70,12 +65,12 @@ public class StartupValidationRunner implements ApplicationRunner {
     }
 
     private void validateJwtSecret() {
-        String jwtSecret = envReader.apply("JWT_SECRET");
+        String jwtSecret = env.getProperty("security.jwt.secret");
         if (jwtSecret == null || jwtSecret.isBlank()) {
-            throw new IllegalStateException("JWT_SECRET environment variable is required and must be at least 32 characters.");
+            throw new IllegalStateException("JWT_SECRET or security.jwt.secret is required and must be at least 32 characters.");
         }
         if (jwtSecret.length() < 32) {
-            throw new IllegalStateException("JWT_SECRET environment variable must be at least 32 characters.");
+            throw new IllegalStateException("JWT_SECRET or security.jwt.secret must be at least 32 characters.");
         }
     }
 

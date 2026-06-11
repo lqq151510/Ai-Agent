@@ -22,7 +22,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService;
 
-    public JwtAuthenticationFilter(JwtService jwtService, com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService) {
+    public JwtAuthenticationFilter(JwtService jwtService, 
+                                   com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService) {
         this.jwtService = jwtService;
         this.tokenBlacklistService = tokenBlacklistService;
     }
@@ -45,14 +46,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         return path.equals("/api/v1/auth/login")
                 || path.equals("/api/v1/auth/register")
-                || path.equals("/api/v1/auth/refresh")
-                || path.equals("/api/v1/auth/logout");
+                || path.equals("/api/v1/auth/refresh");
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
+
+        // 线上环境或非开发环境，走正规 Token 校验
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
@@ -66,14 +68,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 throw new UnauthorizedException("Token has been revoked");
             }
 
-            if (!jwtService.isAccessToken(token)) {
-                throw new UnauthorizedException("Access token required");
-            }
-
-            AuthenticatedUser principal = new AuthenticatedUser(
-                    jwtService.extractUserId(token),
-                    jwtService.extractEmail(token)
-            );
+            AuthenticatedUser principal = jwtService.parseAccessToken(token);
 
             UsernamePasswordAuthenticationToken authToken =
                     new UsernamePasswordAuthenticationToken(principal, null, List.of());

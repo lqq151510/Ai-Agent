@@ -31,7 +31,7 @@ public class ToolStatsController {
     public ToolStatsResponse stats(@RequestParam(defaultValue = "24") int windowHours,
                                    @RequestParam(required = false) UUID sessionId,
                                    Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return toolAuditService.stats(user.userId(), windowHours, sessionId);
         }
@@ -42,7 +42,7 @@ public class ToolStatsController {
                                          @RequestParam(required = false) UUID sessionId,
                                          @RequestParam(defaultValue = "json") String format,
                                          Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             String normalizedFormat = format == null ? "json" : format.trim().toLowerCase();
             if ("markdown".equals(normalizedFormat) || "md".equals(normalizedFormat)) {
@@ -60,10 +60,4 @@ public class ToolStatsController {
         }
     }
 
-    private AuthenticatedUser requireUser(Authentication authentication) {
-        if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
-            throw new UnauthorizedException("Authentication required");
-        }
-        return principal;
-    }
 }

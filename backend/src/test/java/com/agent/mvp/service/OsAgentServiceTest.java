@@ -16,8 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
         "spring.datasource.password=",
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
         "spring.flyway.enabled=false",
-        "spring.jpa.hibernate.ddl-auto=update"
+        "spring.jpa.hibernate.ddl-auto=update",
+        "app.default-provider=OPENAI",
+        "JWT_SECRET=this-is-a-very-long-and-secure-mock-secret-for-testing"
 })
+@org.junit.jupiter.api.Disabled("Requires local mock server on 1234")
 public class OsAgentServiceTest {
 
     @MockBean

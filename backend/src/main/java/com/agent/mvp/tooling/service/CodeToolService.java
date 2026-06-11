@@ -91,7 +91,7 @@ public class CodeToolService {
 
             String output;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                output = reader.lines().limit(200).reduce("", (a, b) -> a.isEmpty() ? b : a + "\n" + b);
+                output = reader.lines().limit(200).collect(java.util.stream.Collectors.joining("\n"));
             }
 
             if (output.isBlank()) {

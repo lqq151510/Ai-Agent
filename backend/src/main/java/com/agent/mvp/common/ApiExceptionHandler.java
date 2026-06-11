@@ -75,11 +75,8 @@ public class ApiExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleException(Exception ex) {
         log.error("Unhandled exception", ex);
-        String message = (ex.getMessage() == null || ex.getMessage().isBlank())
-                ? "Unexpected server error"
-                : ex.getMessage();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(error("INTERNAL_ERROR", message));
+                .body(error("INTERNAL_ERROR", "Internal server error"));
     }
 
     private ErrorResponse error(String code, String message) {

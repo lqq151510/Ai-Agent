@@ -42,7 +42,7 @@ public class SessionController {
     @PostMapping
     public SessionResponse createSession(@Valid @RequestBody CreateSessionRequest request,
                                          Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return sessionService.createSession(user.userId(), request);
         }
@@ -53,7 +53,7 @@ public class SessionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return sessionService.listSessions(user.userId(), page, size);
         }
@@ -62,7 +62,7 @@ public class SessionController {
     @GetMapping("/{sessionId}/messages")
     public List<MessageResponse> listMessages(@PathVariable UUID sessionId,
                                               Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
              MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, sessionId.toString())) {
             return sessionService.listMessages(user.userId(), sessionId);
@@ -73,7 +73,7 @@ public class SessionController {
     public SessionResponse updateContextTokenLimit(@PathVariable UUID sessionId,
                                                    @Valid @RequestBody UpdateSessionContextTokenLimitRequest request,
                                                    Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
              MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, sessionId.toString())) {
             return sessionService.updateContextTokenLimit(user.userId(), sessionId, request.contextTokenLimit());
@@ -84,7 +84,7 @@ public class SessionController {
     public ResponseEntity<?> exportSession(@PathVariable UUID sessionId,
                                            @RequestParam(defaultValue = "json") String format,
                                            Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
              MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, sessionId.toString())) {
             String normalized = format == null ? "json" : format.trim().toLowerCase();
@@ -104,7 +104,7 @@ public class SessionController {
     @DeleteMapping("/{sessionId}")
     public ResponseEntity<Void> deleteSession(@PathVariable UUID sessionId,
                                               Authentication authentication) {
-        AuthenticatedUser user = requireUser(authentication);
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
              MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, sessionId.toString())) {
             sessionService.deleteSession(user.userId(), sessionId);
@@ -112,10 +112,4 @@ public class SessionController {
         }
     }
 
-    private AuthenticatedUser requireUser(Authentication authentication) {
-        if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser principal)) {
-            throw new UnauthorizedException("Authentication required");
-        }
-        return principal;
-    }
 }

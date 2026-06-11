@@ -71,12 +71,17 @@ public class AgentToolOrchestrator {
         if ("execute_cli_command".equals(name)) {
             long start = System.currentTimeMillis();
             String res = null;
+            String status = "SUCCESS";
             try {
                 res = clientToolInvoker.apply(call);
+                if (res != null && res.startsWith("ERROR:")) {
+                    status = "ERROR";
+                }
             } catch (Exception ex) {
                 res = "ERROR: " + ex.getMessage();
+                status = "ERROR";
             }
-            return new ToolResult(call.id(), name, call.argumentsJson(), "SUCCESS", System.currentTimeMillis() - start, res);
+            return new ToolResult(call.id(), name, call.argumentsJson(), status, System.currentTimeMillis() - start, res);
         }
 
         output = switch (name) {

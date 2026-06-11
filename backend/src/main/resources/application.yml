@@ -17,7 +17,7 @@ spring:
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_DATABASE:ai_agent}}
     username: ${PG_USERNAME:postgres}
-    password: ${PG_PASSWORD:}
+    password: ${PG_PASSWORD:change-me}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -40,7 +40,7 @@ spring:
 
 security:
   jwt:
-    secret: ${JWT_SECRET:my_super_secret_jwt_key_that_is_at_least_32_characters_long}
+    secret: ${JWT_SECRET}
     access-exp-seconds: ${JWT_ACCESS_EXP_SECONDS:3600}
     refresh-exp-seconds: ${JWT_REFRESH_EXP_SECONDS:2592000}
 
@@ -67,5 +67,5 @@ app:
     model-probe-timeout-ms: ${MODEL_PROBE_TIMEOUT_MS:3000}
     model-probe-retries: ${MODEL_PROBE_RETRIES:1}
   openai:
-    base-url: ${OPENAI_BASE_URL:http://10.115.10.220:1234/v1}
+    base-url: ${OPENAI_BASE_URL:http://localhost:1234/v1}
     api-key: ${OPENAI_API_KEY:sk-placeholder}

@@ -1,4 +1,5 @@
 import { Provider } from '../types';
+import { useChatStore } from '../stores/chatStore';
 
 export function useSessionManager(api: any, chat: any, ui: any, applyError: (e: any) => void, navigate: any, refreshWorkspaceDiagnostics: any) {
   async function reloadSessions(nextActiveId?: string) {
@@ -14,7 +15,12 @@ export function useSessionManager(api: any, chat: any, ui: any, applyError: (e: 
     }
     chat.setActiveSessionId(picked.id);
     ui.setContextTokenLimit(picked.contextTokenLimit ?? null);
-    chat.setMessages(await api.listMessages(picked.id));
+    
+    const messages = await api.listMessages(picked.id);
+    if (useChatStore.getState().activeSessionId === picked.id) {
+      chat.setMessages(messages);
+    }
+    
     await refreshWorkspaceDiagnostics(api, { sessionId: picked.id });
   }
 
@@ -50,12 +56,19 @@ export function useSessionManager(api: any, chat: any, ui: any, applyError: (e: 
     try {
       const session = chat.sessions.find((item: any) => item.id === sessionId);
       ui.setContextTokenLimit(session?.contextTokenLimit ?? null);
-      chat.setMessages(await api.listMessages(sessionId));
+      
+      const messages = await api.listMessages(sessionId);
+      if (useChatStore.getState().activeSessionId === sessionId) {
+        chat.setMessages(messages);
+      }
+      
       await refreshWorkspaceDiagnostics(api, { sessionId });
     } catch (e) {
       applyError(e);
     } finally {
-      chat.setLoading(false);
+      if (useChatStore.getState().activeSessionId === sessionId) {
+        chat.setLoading(false);
+      }
     }
   }
 

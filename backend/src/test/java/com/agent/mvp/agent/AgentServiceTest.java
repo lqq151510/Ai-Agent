@@ -213,7 +213,7 @@ class AgentServiceTest {
                 new ObjectMapper(),
                 ragMemoryService,
                 mock(com.agent.mvp.agent.tooling.ClientToolRegistry.class),
-                mock(org.flexagent.langchain4j.FlexAgentChatModel.class),
+                mock(com.agent.mvp.agent.service.FlexRuntimeFactory.class),
                 mock(com.agent.mvp.auth.repo.UserRepository.class)
         );
         final UUID userId = UUID.randomUUID();

@@ -37,9 +37,9 @@ public class AgentConfiguration {
     @Primary
     public ChatLanguageModel primaryChatModel(AppProperties appProperties, 
                                               @Qualifier("langChain4jOpenAiChatModel") ChatLanguageModel openAiModel, 
-                                              @Qualifier("vertexAiChatModel") ChatLanguageModel vertexAiModel) {
+                                              @Qualifier("vertexAiChatModel") org.springframework.beans.factory.ObjectProvider<ChatLanguageModel> vertexAiModelProvider) {
         if (appProperties.getDefaultProvider() == ModelProviderType.VERTEXAI) {
-            return vertexAiModel;
+            return vertexAiModelProvider.getIfAvailable();
         } else {
             return openAiModel;
         }

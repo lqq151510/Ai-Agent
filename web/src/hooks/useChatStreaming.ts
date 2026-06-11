@@ -1,5 +1,7 @@
+import { useEffect, useRef } from 'react';
 import { Session } from '../types';
 import { useStreamStore } from '../stores/streamStore';
+import { useChatStore } from '../stores/chatStore';
 
 export function useChatStreaming(
   api: any,
@@ -10,8 +12,24 @@ export function useChatStreaming(
   armRateLimitAutoRetry: (msg?: string) => void,
   reloadSessions: (nextActiveId?: string) => Promise<void>
 ) {
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, [chat.activeSessionId]);
+
   async function sendMessage(outgoing: string) {
     if (!chat.activeSessionId || !outgoing.trim()) return;
+    
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+    
+    const initialSessionId = chat.activeSessionId;
     const content = outgoing.trim();
     const assistantMessageId = `stream-assistant-${Date.now()}`;
     const now = new Date().toISOString();
@@ -31,13 +49,14 @@ export function useChatStreaming(
     
     try {
       await api.streamChat({
-        sessionId: chat.activeSessionId,
+        sessionId: initialSessionId,
         message: content,
         provider: activeSession?.provider,
         model: activeSession?.model,
         maxContextTokens: contextTokenLimit ?? undefined
       }, {
         onChunk: (chunk: string) => {
+          if (useChatStore.getState().activeSessionId !== initialSessionId) return;
           if (!streamedAnyChunk) {
             streamedAnyChunk = true;
             chat.setStreamState('streaming');
@@ -45,11 +64,15 @@ export function useChatStreaming(
           useStreamStore.getState().setStream(assistantMessageId, chunk);
         },
         onError: (message: string) => {
+          if (useChatStore.getState().activeSessionId !== initialSessionId) return;
           const kind = applyError(message);
           if (kind === 'rate_limit') armRateLimitAutoRetry(content);
           chat.setStreamState('error');
         }
-      });
+      }, abortControllerRef.current.signal);
+      
+      if (useChatStore.getState().activeSessionId !== initialSessionId) return;
+      
       chat.setStreamState('idle');
       chat.setLastFailedMessage('');
       
@@ -57,19 +80,24 @@ export function useChatStreaming(
       chat.setMessages((prev: any[]) => prev.map(msg => msg.id === assistantMessageId ? { ...msg, content: finalBuffer } : msg));
       useStreamStore.getState().resetStream();
       
-      await reloadSessions(chat.activeSessionId);
-    } catch (e) {
+      await reloadSessions(initialSessionId);
+    } catch (e: any) {
+      if (e.name === 'AbortError' || useChatStore.getState().activeSessionId !== initialSessionId) {
+        return; // Ignore errors from aborted fetch due to session switch
+      }
       chat.setStreamState('error');
       chat.setLastFailedMessage(content);
       const kind = applyError(e);
       if (kind === 'rate_limit') armRateLimitAutoRetry();
       try {
-        await reloadSessions(chat.activeSessionId);
+        await reloadSessions(initialSessionId);
       } catch {
         // keep stream failure message.
       }
     } finally {
-      chat.setSending(false);
+      if (useChatStore.getState().activeSessionId === initialSessionId) {
+        chat.setSending(false);
+      }
     }
   }
 

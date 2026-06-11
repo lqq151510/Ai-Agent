@@ -5,31 +5,27 @@ import com.agent.mvp.agent.dto.ChatResponse;
 import com.agent.mvp.agent.dto.ChatStreamMeta;
 import com.agent.mvp.agent.dto.AgentExecutionDiagnostics;
 import com.agent.mvp.agent.dto.ModelChatMessage;
-import com.agent.mvp.agent.dto.ModelChatRequest;
-import com.agent.mvp.agent.dto.ModelChatResponse;
 import com.agent.mvp.agent.dto.ResolvedModelConfig;
 import com.agent.mvp.agent.tooling.AgentToolOrchestrator;
 import com.agent.mvp.agent.tooling.ToolCall;
 import com.agent.mvp.agent.tooling.ToolResult;
+import com.agent.mvp.agent.tooling.ClientToolRegistry;
+import com.agent.mvp.auth.entity.User;
+import com.agent.mvp.auth.repo.UserRepository;
+import com.agent.mvp.config.AppProperties;
 import com.agent.mvp.session.dto.MessageResponse;
 import com.agent.mvp.session.entity.ConversationSession;
 import com.agent.mvp.session.service.SessionService;
 import com.agent.mvp.tooling.dto.ToolExecutionResult;
 import com.agent.mvp.tooling.service.ToolAuditService;
-import com.agent.mvp.agent.tooling.ClientToolRegistry;
-import com.agent.mvp.config.AppProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.flexagent.core.runtime.AgentRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.agent.mvp.auth.entity.User;
-import com.agent.mvp.auth.repo.UserRepository;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.openai.OpenAiChatModel;
-import org.flexagent.core.runtime.RuntimeTypes;
-import org.flexagent.langchain4j.FlexAgentChatModel;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -48,7 +44,7 @@ public class AgentService {
     private final AppProperties appProperties;
     private final RAGMemoryService ragMemoryService;
     private final ClientToolRegistry clientToolRegistry;
-    private final org.flexagent.langchain4j.FlexAgentChatModel flexAgentChatModel;
+    private final FlexRuntimeFactory flexRuntimeFactory;
     private final UserRepository userRepository;
 
     public AgentService(SessionService sessionService,
@@ -60,7 +56,7 @@ public class AgentService {
                         ObjectMapper objectMapper,
                         RAGMemoryService ragMemoryService,
                         ClientToolRegistry clientToolRegistry,
-                        org.flexagent.langchain4j.FlexAgentChatModel flexAgentChatModel,
+                        FlexRuntimeFactory flexRuntimeFactory,
                         UserRepository userRepository) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
@@ -71,7 +67,7 @@ public class AgentService {
         this.objectMapper = objectMapper;
         this.ragMemoryService = ragMemoryService;
         this.clientToolRegistry = clientToolRegistry;
-        this.flexAgentChatModel = flexAgentChatModel;
+        this.flexRuntimeFactory = flexRuntimeFactory;
         this.userRepository = userRepository;
     }
 
@@ -114,14 +110,16 @@ public class AgentService {
 
         java.util.function.Function<ToolCall, String> clientToolInvoker = (call) -> {
             try {
-                java.util.concurrent.CompletableFuture<String> future = clientToolRegistry.register(call.id());
+                java.util.concurrent.CompletableFuture<String> future = clientToolRegistry.register(userId.toString(), call.id());
                 if (clientToolConsumer != null) {
                     clientToolConsumer.accept(call);
                 }
-                // Wait up to 5 minutes for the client to execute the command and POST the result back
-                return future.get(5, java.util.concurrent.TimeUnit.MINUTES);
+                // Wait up to streamTimeoutMs for the client to execute the command and POST the result back
+                return future.get(appProperties.getAgent().getStreamTimeoutMs(), java.util.concurrent.TimeUnit.MILLISECONDS);
             } catch (Exception e) {
                 return "ERROR: Client execution timed out or failed: " + e.getMessage();
+            } finally {
+                clientToolRegistry.remove(userId.toString(), call.id());
             }
         };
 
@@ -164,62 +162,8 @@ public class AgentService {
         String stopReason = "completed";
 
         User user = userRepository.findById(userId).orElse(null);
-        org.flexagent.core.runtime.AgentRuntime runtime;
-        
-        if (user != null && user.getCustomApiKey() != null && !user.getCustomApiKey().isBlank()) {
-            try {
-                String baseUrl = user.getCustomBaseUrl() != null && !user.getCustomBaseUrl().isBlank() 
-                        ? user.getCustomBaseUrl() 
-                        : appProperties.getOpenai().getBaseUrl();
-                
-                ChatLanguageModel customModel = OpenAiChatModel.builder()
-                        .baseUrl(baseUrl)
-                        .apiKey(user.getCustomApiKey())
-                        .modelName(resolved.model())
-                        .timeout(java.time.Duration.ofMillis(appProperties.getModelRuntime().getReadTimeoutMs()))
-                        .maxRetries(appProperties.getModelRuntime().getIdempotentRetries())
-                        .build();
-
-                java.util.List<Object> tools = new java.util.ArrayList<>();
-                for (com.agent.mvp.agent.tooling.ToolSpec spec : toolOrchestrator.listToolSpecs()) {
-                    String schemaJson = objectMapper.writeValueAsString(spec.inputJsonSchema());
-                    tools.add(new org.flexagent.core.model.ToolDefinition(spec.name(), spec.description(), schemaJson));
-                }
-
-                FlexAgentChatModel customFlex = FlexAgentChatModel.builder()
-                        .runtime(RuntimeTypes.LANGCHAIN4J)
-                        .model(customModel)
-                        .tools(tools.toArray())
-                        .build();
-                runtime = customFlex.activeRuntime();
-            } catch (Exception e) {
-                log.error("Failed to build custom FlexAgentChatModel for user {}", userId, e);
-                runtime = flexAgentChatModel.activeRuntime();
-            }
-        } else {
-            runtime = flexAgentChatModel.activeRuntime();
-        }
-
-        try {
-            if (runtime.getClass().getName().contains("LangChain4jRuntime")) {
-                List<dev.langchain4j.data.message.ChatMessage> lc4jMessages = new ArrayList<>();
-                for (ModelChatMessage m : messages) {
-                    if ("system".equals(m.role())) {
-                        lc4jMessages.add(dev.langchain4j.data.message.SystemMessage.from(m.content()));
-                    } else if ("user".equals(m.role())) {
-                        lc4jMessages.add(dev.langchain4j.data.message.UserMessage.from(m.content()));
-                    } else if ("assistant".equals(m.role())) {
-                        lc4jMessages.add(dev.langchain4j.data.message.AiMessage.from(m.content() == null ? "" : m.content()));
-                    }
-                }
-                java.lang.reflect.Method setHistory = runtime.getClass().getMethod("setHistoryMessages", List.class);
-                setHistory.invoke(runtime, lc4jMessages);
-                java.lang.reflect.Method setSession = runtime.getClass().getMethod("setSessionId", String.class);
-                setSession.invoke(runtime, session.getId().toString());
-            }
-        } catch (Exception e) {
-            log.warn("Failed to set flexagent history", e);
-        }
+        AgentRuntime runtime = flexRuntimeFactory.createRuntime(user, resolved, toolOrchestrator.listToolSpecs());
+        flexRuntimeFactory.injectHistory(runtime, session.getId().toString(), messages);
 
         // Send the last user message to start reasoning stream
         String lastMessage = "";
@@ -286,6 +230,7 @@ public class AgentService {
         } catch (Exception e) {
             log.error("FlexAgent runtime error", e);
             stopReason = "exception";
+            throw new RuntimeException("FlexAgent execution failed: " + e.getMessage(), e);
         }
 
         String reply = replyBuilder.toString();
@@ -362,33 +307,6 @@ public class AgentService {
         return new HistoryWindow(messages, historyWindow.historyMessagesUsed(), historyWindow.historyTruncated());
     }
 
-    private void persistToolCallMessage(ConversationSession session,
-                                        ResolvedModelConfig resolved,
-                                        List<ToolCall> calls,
-                                        String assistantDraft) {
-        sessionService.saveMessage(
-                session,
-                "assistant",
-                assistantDraft == null ? "" : assistantDraft,
-                toJson(calls),
-                resolved.provider().name(),
-                resolved.model()
-        );
-    }
-
-    private void persistToolResultMessage(ConversationSession session,
-                                          ResolvedModelConfig resolved,
-                                          ToolExecutionResult trace) {
-        sessionService.saveMessage(
-                session,
-                "tool",
-                trace.output() == null ? "" : trace.output(),
-                toJson(trace),
-                resolved.provider().name(),
-                resolved.model()
-        );
-    }
-
     private void persistFinalAssistant(ConversationSession session,
                                        ResolvedModelConfig resolved,
                                        String reply,
@@ -432,11 +350,8 @@ public class AgentService {
             used += messageTokens;
             reversed.add(ModelChatMessage.of(msg.role(), content));
         }
-        List<ModelChatMessage> sliced = new ArrayList<>(reversed.size());
-        for (int i = reversed.size() - 1; i >= 0; i--) {
-            sliced.add(reversed.get(i));
-        }
-        return new HistoryWindow(sliced, sliced.size(), truncated);
+        Collections.reverse(reversed);
+        return new HistoryWindow(reversed, reversed.size(), truncated);
     }
 
     private String sanitizeSystemContext(String systemContext, int tokenBudget) {
@@ -453,6 +368,11 @@ public class AgentService {
                 .replaceAll("\\n{3,}", "\n\n")
                 .trim();
 
+        int targetLen = tokenBudget * 4;
+        if (sanitized.length() > targetLen) {
+            sanitized = sanitized.substring(0, targetLen);
+        }
+
         while (!sanitized.isBlank() && TokenCounter.countTokens(sanitized) > tokenBudget) {
             sanitized = sanitized.substring(0, Math.max(0, sanitized.length() - 120)).trim();
         }
@@ -467,8 +387,7 @@ public class AgentService {
         if (session != null && session.getContextTokenLimit() != null) {
             return Math.max(MIN_CONTEXT_TOKENS, session.getContextTokenLimit());
         }
-        int fallback = Math.max(MIN_CONTEXT_TOKENS, appProperties.getAgent().getMaxContextTokens());
-        return fallback;
+        return Math.max(MIN_CONTEXT_TOKENS, appProperties.getAgent().getMaxContextTokens());
     }
 
     private int maxToolSteps() {

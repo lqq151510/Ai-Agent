@@ -326,6 +326,6 @@ public class OpenAiModelProvider implements ModelProvider {
                 || lower.contains("0.0.0.0")
                 || lower.contains("host.docker.internal")
                 || lower.contains("192.168.")
-                || lower.contains("10.");
+                || lower.matches(".*\\b10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\b.*");
     }
 }

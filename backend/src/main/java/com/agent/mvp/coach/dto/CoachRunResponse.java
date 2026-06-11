@@ -9,7 +9,7 @@ public record CoachRunResponse(
         String title,
         String inputText,
         String outputJson,
-        String artifactPath,
+        String downloadUrl,
         Instant createdAt
 ) {
 }

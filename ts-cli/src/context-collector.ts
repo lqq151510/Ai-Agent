@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 const CONTEXT_CHAR_LIMIT = 1500;
-const FILE_CHAR_LIMIT = 400;
+const FILE_CHAR_LIMIT = 800;
 const FILES_TO_CHECK = ['AGENTS.md', 'README.md', '.cursorrules', '.agentrules'];
 const REDACT_LINE = /(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie)/i;
 
@@ -54,12 +54,15 @@ export async function collectSystemContext(): Promise<string | undefined> {
   const sections: string[] = [];
   sections.push(`Current time: ${new Date().toISOString()}`);
 
-  const gitStatus = await safeExec('git', ['--no-optional-locks', 'status', '--short']);
+  const [gitStatus, recentCommits] = await Promise.all([
+    safeExec('git', ['--no-optional-locks', 'status', '--short']),
+    safeExec('git', ['--no-optional-locks', 'log', '--oneline', '-n', '5'])
+  ]);
+
   if (gitStatus) {
     sections.push(`Git status:\n${gitStatus.split('\n').slice(0, 20).join('\n')}`);
   }
 
-  const recentCommits = await safeExec('git', ['--no-optional-locks', 'log', '--oneline', '-n', '5']);
   if (recentCommits) {
     sections.push(`Recent commits:\n${recentCommits}`);
   }

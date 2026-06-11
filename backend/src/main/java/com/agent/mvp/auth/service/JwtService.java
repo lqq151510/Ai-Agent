@@ -1,6 +1,7 @@
 package com.agent.mvp.auth.service;
 
 import com.agent.mvp.auth.entity.User;
+import com.agent.mvp.auth.security.AuthenticatedUser;
 import com.agent.mvp.common.exception.UnauthorizedException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
@@ -22,7 +23,7 @@ public class JwtService {
 
     private static final String CLAIM_TOKEN_TYPE = "tokenType";
     private static final String CLAIM_USER_ID = "uid";
-    private static final String CLAIM_TOKEN_VERSION = "tv";
+    private static final String CLAIM_TOKEN_VERSION = "tokenVersion";
 
     @Value("${security.jwt.secret}")
     private String jwtSecret;
@@ -59,6 +60,17 @@ public class JwtService {
 
     public boolean isAccessToken(String token) {
         return "access".equals(parseToken(token).getBody().get(CLAIM_TOKEN_TYPE, String.class));
+    }
+
+    public AuthenticatedUser parseAccessToken(String token) {
+        Claims claims = parseToken(token).getBody();
+        if (!"access".equals(claims.get(CLAIM_TOKEN_TYPE, String.class))) {
+            throw new UnauthorizedException("Access token required");
+        }
+        return new AuthenticatedUser(
+                UUID.fromString(claims.get(CLAIM_USER_ID, String.class)),
+                claims.getSubject()
+        );
     }
 
     public boolean isRefreshToken(String token) {

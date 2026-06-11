@@ -47,6 +47,9 @@ public class ConversationSession {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @jakarta.persistence.Version
+    private Long version;
+
     @PrePersist
     public void onCreate() {
         if (id == null) {
@@ -128,5 +131,13 @@ public class ConversationSession {
 
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }

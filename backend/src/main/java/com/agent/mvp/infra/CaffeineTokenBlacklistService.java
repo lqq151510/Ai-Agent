@@ -14,6 +14,23 @@ public class CaffeineTokenBlacklistService implements TokenBlacklistService {
     public CaffeineTokenBlacklistService(long maximumSize) {
         this.cache = Caffeine.newBuilder()
                 .maximumSize(maximumSize)
+                .expireAfter(new com.github.benmanes.caffeine.cache.Expiry<String, BlacklistEntry>() {
+                    @Override
+                    public long expireAfterCreate(String key, BlacklistEntry value, long currentTime) {
+                        long diff = value.expireTimeMs() - System.currentTimeMillis();
+                        return diff > 0 ? Duration.ofMillis(diff).toNanos() : 0;
+                    }
+
+                    @Override
+                    public long expireAfterUpdate(String key, BlacklistEntry value, long currentTime, long currentDuration) {
+                        return currentDuration;
+                    }
+
+                    @Override
+                    public long expireAfterRead(String key, BlacklistEntry value, long currentTime, long currentDuration) {
+                        return currentDuration;
+                    }
+                })
                 .build();
     }
 
