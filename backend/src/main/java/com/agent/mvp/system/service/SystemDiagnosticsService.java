@@ -143,6 +143,20 @@ public class SystemDiagnosticsService {
                         metadata
                 );
             }
+            case VERTEXAI -> {
+                Map<String, String> metadata = new LinkedHashMap<>();
+                metadata.put("provider", ModelProviderType.VERTEXAI.providerId());
+                metadata.put("apiStyle", ModelProviderType.VERTEXAI.apiStyle());
+                metadata.put("defaultModel", defaultModelFor(ModelProviderType.VERTEXAI));
+                yield new ReadinessCheck(
+                        "model",
+                        true,
+                        "Vertex AI endpoint configured",
+                        "OK",
+                        0L,
+                        metadata
+                );
+            }
         };
     }
 

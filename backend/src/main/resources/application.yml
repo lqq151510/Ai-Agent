@@ -46,7 +46,7 @@ security:
 
 app:
   workspace-root: ${WORKSPACE_ROOT:.}
-  default-provider: ${MODEL_PROVIDER:OPENAI}
+  default-provider: ${MODEL_PROVIDER:VERTEXAI}
   default-openai-model: ${OPENAI_MODEL:qwen/qwen3.5-9b}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}

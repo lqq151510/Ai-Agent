@@ -12,6 +12,10 @@ import { StateStore } from './state-store.js';
 import { tokenize } from './tokenize.js';
 import type { AuthState, Message, Session } from './types.js';
 
+import { Header } from './components/Header.js';
+import { MessageBubble } from './components/MessageBubble.js';
+import { InputArea } from './components/InputArea.js';
+
 type UiMessage = {
   id: string;
   role: 'system' | 'user' | 'assistant' | 'error';
@@ -506,44 +510,25 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Box borderStyle="round" borderColor="cyan" paddingX={1} flexDirection="column">
-        <Text color="cyan">AI Agent TS CLI</Text>
-        <Text color="gray">
-          user={userEmail || 'anonymous'} session={activeSessionLabel} status={statusLine}
-        </Text>
-      </Box>
+      <Header 
+        userEmail={userEmail} 
+        activeSessionId={activeSessionId} 
+        statusLine={statusLine} 
+      />
 
       <Box flexDirection="column" marginTop={1}>
         {visibleMessages.map(message => (
-          <Box key={message.id} flexDirection="row">
-            <Text color={message.role === 'user' ? 'green' : message.role === 'assistant' ? 'blue' : message.role === 'error' ? 'red' : 'yellow'}>
-              {message.role === 'user'
-                ? 'you > '
-                : message.role === 'assistant'
-                  ? 'ai  > '
-                  : message.role === 'error'
-                    ? 'err > '
-                    : 'sys > '}
-            </Text>
-            <Text>{message.role === 'assistant' ? cliMd(message.content) : message.content}</Text>
-          </Box>
+          <MessageBubble key={message.id} role={message.role} content={message.content} />
         ))}
       </Box>
 
-      <Box marginTop={1}>
-        {loading ? (
-          <Text color="yellow">
-            <Spinner type="dots" /> {statusLine}
-          </Text>
-        ) : (
-          <Text color="gray">{statusLine}</Text>
-        )}
-      </Box>
-
-      <Box marginTop={1}>
-        <Text color="green">❯ </Text>
-        <TextInput value={input} onChange={setInput} onSubmit={value => void handleSubmit(value)} placeholder="Ask something or type /help" />
-      </Box>
+      <InputArea 
+        input={input} 
+        setInput={setInput} 
+        onSubmit={value => void handleSubmit(value)} 
+        loading={loading} 
+        statusLine={statusLine} 
+      />
     </Box>
   );
 }

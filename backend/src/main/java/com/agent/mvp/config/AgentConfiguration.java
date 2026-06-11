@@ -10,6 +10,10 @@ import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
 
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Primary;
+import com.agent.mvp.agent.ModelProviderType;
+
 @Configuration
 public class AgentConfiguration {
 
@@ -27,6 +31,18 @@ public class AgentConfiguration {
                 .timeout(Duration.ofMillis(appProperties.getModelRuntime().getReadTimeoutMs()))
                 .maxRetries(appProperties.getModelRuntime().getIdempotentRetries())
                 .build();
+    }
+
+    @Bean
+    @Primary
+    public ChatLanguageModel primaryChatModel(AppProperties appProperties, 
+                                              @Qualifier("langChain4jOpenAiChatModel") ChatLanguageModel openAiModel, 
+                                              @Qualifier("vertexAiChatModel") ChatLanguageModel vertexAiModel) {
+        if (appProperties.getDefaultProvider() == ModelProviderType.VERTEXAI) {
+            return vertexAiModel;
+        } else {
+            return openAiModel;
+        }
     }
 
     @Bean

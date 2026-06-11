@@ -73,6 +73,7 @@ public class AppProperties {
         }
         return switch (provider) {
             case OPENAI -> defaultOpenaiModel;
+            case VERTEXAI -> "gemini-2.5-pro";
         };
     }
 

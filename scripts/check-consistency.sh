@@ -8,7 +8,7 @@ COMPOSE_FILE="${ROOT_DIR}/docker-compose.yml"
 SMOKE_SCRIPT="${ROOT_DIR}/scripts/smoke.sh"
 DESKTOP_HEALTH_FILE="${ROOT_DIR}/desktop/src/main/backend-manager.ts"
 WEB_API_FILE="${ROOT_DIR}/web/src/api.ts"
-CLI_API_FILE="${ROOT_DIR}/cli/src/main/java/com/agent/cli/client/ApiClient.java"
+CLI_API_FILE="${ROOT_DIR}/ts-cli/src/api-client.ts"
 
 require_file() {
   local file="$1"

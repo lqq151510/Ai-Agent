@@ -1,7 +1,8 @@
 package com.agent.mvp.agent;
 
 public enum ModelProviderType {
-    OPENAI("openai", "OpenAI Compatible", "chat.completions", true);
+    OPENAI("openai", "OpenAI Compatible", "chat.completions", true),
+    VERTEXAI("vertexai", "Vertex AI (Gemini)", "gemini", false);
 
     private final String providerId;
     private final String displayName;
