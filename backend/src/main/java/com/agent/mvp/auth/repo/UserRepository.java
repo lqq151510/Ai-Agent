@@ -1,14 +1,12 @@
 package com.agent.mvp.auth.repo;
 
 import com.agent.mvp.auth.entity.User;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
 
 import java.util.Optional;
 import java.util.UUID;
 
-public interface UserRepository extends JpaRepository<User, UUID> {
-
-    Optional<User> findByEmail(String email);
-
-    boolean existsByEmail(String email);
+@Mapper
+public interface UserRepository extends BaseMapper<User> {
 }

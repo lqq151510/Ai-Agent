@@ -72,7 +72,7 @@ public class CodeToolService {
             return new ToolCallOutput("searchCode", toJson(args("query", query)), "ERROR", 0, "Query is empty");
         }
 
-        List<String> command = new ArrayList<>(List.of("rg", "-n", "--no-heading", "--hidden", "--max-count", String.valueOf(Math.max(1, Math.min(maxResults, 100))), safeQuery, workspaceRoot.toString()));
+        List<String> command = new ArrayList<>(List.of("rg", "-n", "--no-heading", "--hidden", "--max-count", String.valueOf(Math.max(1, Math.min(maxResults, 100))), "--regexp", safeQuery, "--", workspaceRoot.toString()));
         if (glob != null && !glob.isBlank()) {
             command.add("-g");
             command.add(glob);

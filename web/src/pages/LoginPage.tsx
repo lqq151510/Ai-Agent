@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthPanel } from '../components/AuthPanel';
 import { useAuthStore } from '../stores/authStore';
@@ -10,15 +10,16 @@ import { defaultModel } from '../utils';
 
 interface LoginPageProps {
   api: any;
+  apiBase: string;
   updateTokens: (tokens: any) => void;
   applyError: (raw: unknown) => string;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
-
-export const LoginPage: React.FC<LoginPageProps> = ({ api, updateTokens, applyError }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ api, apiBase, updateTokens, applyError }) => {
   const authStore = useAuthStore();
-  const { tokens, authMode, email, password, setAuthMode, setEmail, setPassword, setUser } = authStore;
+  const { tokens, authMode, setAuthMode, setUser } = authStore;
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const chat = useChatStore();
   const ui = useUiStore();
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ api, updateTokens, applyEr
   );
 
   const { onAuthSubmit } = useAuthSubmit(
-    api, API_BASE, chat, authStore, updateTokens, setUser, navigate, applyError, loadModels, refreshWorkspaceDiagnostics, ui
+    api, apiBase, chat, updateTokens, setUser, navigate, applyError, loadModels, refreshWorkspaceDiagnostics, ui
   );
 
   return (
@@ -42,7 +43,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ api, updateTokens, applyEr
       setEmail={setEmail}
       password={password}
       setPassword={setPassword}
-      onAuthSubmit={onAuthSubmit}
+      onAuthSubmit={() => onAuthSubmit(authMode, email, password, setPassword)}
     />
   );
 };

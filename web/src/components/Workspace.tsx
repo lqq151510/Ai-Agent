@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { Session, ModelOption } from '../types';
 import { Settings } from './Settings';
 import { ChatList } from './ChatList';
@@ -27,6 +28,8 @@ export function Workspace({
   onSelectSession, onSwitchFallbackSession, onRetryLast,
   sendMessage, defaultModel
 }: WorkspaceProps) {
+  const [prompt, setPrompt] = useState('');
+
   return (
     <div className="workspace-shell">
       <header className="workspace-chrome">
@@ -59,8 +62,8 @@ export function Workspace({
         <MessageContainer
           activeSession={activeSession}
           messages={chat.messages}
-          prompt={chat.prompt}
-          setPrompt={chat.setPrompt}
+          prompt={prompt}
+          setPrompt={setPrompt}
           sending={chat.sending}
           loading={chat.loading}
           error={chat.error}
@@ -90,7 +93,7 @@ export function Workspace({
               : undefined
           }
           onRetryLast={onRetryLast}
-          onSendMessage={() => { void sendMessage(chat.prompt); }}
+          onSendMessage={() => { void sendMessage(prompt); setPrompt(''); }}
         />
       </div>
       <footer className="workspace-statusbar">

@@ -11,7 +11,7 @@ import com.agent.mvp.agent.tooling.ToolCall;
 import com.agent.mvp.agent.tooling.ToolResult;
 import com.agent.mvp.agent.tooling.ClientToolRegistry;
 import com.agent.mvp.auth.entity.User;
-import com.agent.mvp.auth.repo.UserRepository;
+import com.agent.mvp.auth.service.UserService;
 import com.agent.mvp.config.AppProperties;
 import com.agent.mvp.session.dto.MessageResponse;
 import com.agent.mvp.session.entity.ConversationSession;
@@ -29,6 +29,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class AgentService {
@@ -45,7 +47,7 @@ public class AgentService {
     private final RAGMemoryService ragMemoryService;
     private final ClientToolRegistry clientToolRegistry;
     private final FlexRuntimeFactory flexRuntimeFactory;
-    private final UserRepository userRepository;
+    private final UserService userService;
 
     public AgentService(SessionService sessionService,
                         ModelRoutingService modelRoutingService,
@@ -57,7 +59,7 @@ public class AgentService {
                         RAGMemoryService ragMemoryService,
                         ClientToolRegistry clientToolRegistry,
                         FlexRuntimeFactory flexRuntimeFactory,
-                        UserRepository userRepository) {
+                        UserService userService) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
         this.modelGateway = modelGateway;
@@ -68,7 +70,7 @@ public class AgentService {
         this.ragMemoryService = ragMemoryService;
         this.clientToolRegistry = clientToolRegistry;
         this.flexRuntimeFactory = flexRuntimeFactory;
-        this.userRepository = userRepository;
+        this.userService = userService;
     }
 
     public ChatResponse chat(UUID userId, ChatRequest request) {
@@ -76,7 +78,7 @@ public class AgentService {
         ResolvedModelConfig resolved = modelRoutingService.resolve(request.provider(), request.model(), session);
         sessionService.saveMessage(session, "user", request.message(), null, resolved.provider().name(), resolved.model());
         int maxContextTokens = resolveContextTokenBudget(request.maxContextTokens(), session);
-        java.util.function.Function<ToolCall, String> rejectClientTool = (call) -> "ERROR: execute_cli_command is only available via streaming chat (/api/v1/agent/chat/stream)";
+        java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> rejectClientTool = (call) -> java.util.concurrent.CompletableFuture.completedFuture("ERROR: execute_cli_command is only available via streaming chat (/api/v1/agent/chat/stream)");
         AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, null, request.systemContext(), rejectClientTool);
         return new ChatResponse(
                 session.getId(),
@@ -108,18 +110,16 @@ public class AgentService {
                 initialExecutionDiagnostics(maxContextTokens)
         ));
 
-        java.util.function.Function<ToolCall, String> clientToolInvoker = (call) -> {
+        java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> clientToolInvoker = (call) -> {
             try {
                 java.util.concurrent.CompletableFuture<String> future = clientToolRegistry.register(userId.toString(), call.id());
                 if (clientToolConsumer != null) {
                     clientToolConsumer.accept(call);
                 }
-                // Wait up to streamTimeoutMs for the client to execute the command and POST the result back
-                return future.get(appProperties.getAgent().getStreamTimeoutMs(), java.util.concurrent.TimeUnit.MILLISECONDS);
+                return future.orTimeout(appProperties.getAgent().getStreamTimeoutMs(), java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .whenComplete((res, ex) -> clientToolRegistry.remove(userId.toString(), call.id()));
             } catch (Exception e) {
-                return "ERROR: Client execution timed out or failed: " + e.getMessage();
-            } finally {
-                clientToolRegistry.remove(userId.toString(), call.id());
+                return java.util.concurrent.CompletableFuture.completedFuture("ERROR: Client execution timed out or failed: " + e.getMessage());
             }
         };
 
@@ -149,7 +149,7 @@ public class AgentService {
                                         int maxContextTokens,
                                         Consumer<String> chunkConsumer,
                                         String systemContext,
-                                        java.util.function.Function<ToolCall, String> clientToolInvoker) {
+                                        java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> clientToolInvoker) {
         List<MessageResponse> history = sessionService.listMessages(userId, session.getId());
         int maxToolSteps = maxToolSteps();
         boolean stopOnToolError = appProperties.getAgent().isStopOnToolError();
@@ -161,7 +161,7 @@ public class AgentService {
         int toolRounds = 0;
         String stopReason = "completed";
 
-        User user = userRepository.findById(userId).orElse(null);
+        User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
         AgentRuntime runtime = flexRuntimeFactory.createRuntime(user, resolved, toolOrchestrator.listToolSpecs());
         flexRuntimeFactory.injectHistory(runtime, session.getId().toString(), messages);
 
@@ -196,17 +196,31 @@ public class AgentService {
                         break;
                     }
                     
-                    for (org.flexagent.core.model.ToolCall fcTool : step.toolCalls()) {
+                    List<CompletableFuture<ToolResult>> futures = new ArrayList<>();
+                    List<org.flexagent.core.model.ToolCall> fcTools = step.toolCalls();
+                    for (org.flexagent.core.model.ToolCall fcTool : fcTools) {
                         ToolCall localTool = new ToolCall(fcTool.id(), fcTool.name(), fcTool.argumentsJson());
-                        ToolResult result = toolOrchestrator.execute(localTool, clientToolInvoker);
+                        futures.add(toolOrchestrator.execute(localTool, clientToolInvoker));
+                    }
+
+                    // Wait for all tool calls to complete before sending results to runtime
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+                    for (int i = 0; i < futures.size(); i++) {
+                        ToolResult result = futures.get(i).join();
+                        org.flexagent.core.model.ToolCall fcTool = fcTools.get(i);
                         ToolExecutionResult trace = toTrace(result);
                         traces.add(trace);
-                        
+
                         org.flexagent.core.model.ToolResult fcResult = new org.flexagent.core.model.ToolResult(
                                 fcTool.id(), fcTool.name(), null, result.output()
                         );
-                        runtime.sendToolResult(fcResult);
-                        
+                        try {
+                            runtime.sendToolResult(fcResult);
+                        } catch (Exception e) {
+                            log.error("Failed to send tool result to runtime", e);
+                        }
+
                         if (!"SUCCESS".equalsIgnoreCase(result.status()) && stopOnToolError) {
                             stopReason = "tool_error";
                             replyBuilder.append("\n[Stopped safely: tool error]");
@@ -354,27 +368,39 @@ public class AgentService {
         return new HistoryWindow(reversed, reversed.size(), truncated);
     }
 
-    private String sanitizeSystemContext(String systemContext, int tokenBudget) {
+        private String sanitizeSystemContext(String systemContext, int tokenBudget) {
         if (systemContext == null || systemContext.isBlank()) {
             return "";
         }
 
-        String sanitized = systemContext
-                .replace("\r\n", "\n")
+        String[] lines = systemContext.replace("\r\n", "\n").split("\n");
+        StringBuilder sb = new StringBuilder();
+        java.util.regex.Pattern sensitivePattern = java.util.regex.Pattern.compile("(?i)(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie)");
+        
+        for (String line : lines) {
+            if (sensitivePattern.matcher(line).find()) {
+                sb.append("[redacted sensitive line]\n");
+            } else {
+                sb.append(line).append("\n");
+            }
+        }
+        String sanitized = sb.toString();
+
+        sanitized = sanitized
                 .replaceAll("Bearer\\s+[A-Za-z0-9._-]+", "Bearer [redacted]")
                 .replaceAll("(?i)sk-[A-Za-z0-9]+", "sk-[redacted]")
-                .replaceAll("(?im)^.*(?:token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie).*$", "[redacted sensitive line]")
                 .replaceAll("[^\\x09\\x0A\\x0D\\x20-\\x7E]", "")
-                .replaceAll("\\n{3,}", "\n\n")
+                .replaceAll("\\n{3,}", "\\n\\n")
                 .trim();
 
-        int targetLen = tokenBudget * 4;
-        if (sanitized.length() > targetLen) {
-            sanitized = sanitized.substring(0, targetLen);
-        }
-
-        while (!sanitized.isBlank() && TokenCounter.countTokens(sanitized) > tokenBudget) {
-            sanitized = sanitized.substring(0, Math.max(0, sanitized.length() - 120)).trim();
+        int currentTokens = TokenCounter.countTokens(sanitized);
+        if (currentTokens > tokenBudget) {
+            double ratio = (double) tokenBudget / currentTokens;
+            int estimatedSafeLength = (int) (sanitized.length() * ratio * 0.95);
+            sanitized = sanitized.substring(0, Math.max(0, estimatedSafeLength)).trim();
+            while (!sanitized.isBlank() && TokenCounter.countTokens(sanitized) > tokenBudget) {
+                sanitized = sanitized.substring(0, Math.max(0, sanitized.length() - 50)).trim();
+            }
         }
 
         return sanitized;

@@ -31,7 +31,7 @@ class ToolAuditServiceTest {
     @Test
     void shouldReturnEmptyStatsWhenNoData() {
         UUID userId = UUID.randomUUID();
-        when(toolAuditRepository.findByUserIdAndCreatedAtAfterOrderByCreatedAtDesc(eq(userId), any()))
+        when(toolAuditRepository.selectList(any()))
                 .thenReturn(List.of());
 
         ToolStatsResponse stats = toolAuditService.stats(userId, 24, null);
@@ -56,7 +56,7 @@ class ToolAuditServiceTest {
                 row(userId, sessionId, "readFile", "success", 3580)
         );
 
-        when(toolAuditRepository.findByUserIdAndCreatedAtAfterOrderByCreatedAtDesc(eq(userId), any()))
+        when(toolAuditRepository.selectList(any()))
                 .thenReturn(rows);
 
         ToolStatsResponse stats = toolAuditService.stats(userId, 24, null);

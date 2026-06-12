@@ -63,25 +63,29 @@ public class AgentToolOrchestrator {
         );
     }
 
-    public ToolResult execute(ToolCall call, java.util.function.Function<ToolCall, String> clientToolInvoker) {
+    public java.util.concurrent.CompletableFuture<ToolResult> execute(ToolCall call, java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> clientToolInvoker) {
         CodeToolService.ToolCallOutput output;
         JsonNode args = parseArgs(call.argumentsJson());
         String name = call.name() == null ? "" : call.name();
 
         if ("execute_cli_command".equals(name)) {
             long start = System.currentTimeMillis();
-            String res = null;
-            String status = "SUCCESS";
             try {
-                res = clientToolInvoker.apply(call);
-                if (res != null && res.startsWith("ERROR:")) {
-                    status = "ERROR";
-                }
+                return clientToolInvoker.apply(call).handle((res, ex) -> {
+                    String status = "SUCCESS";
+                    if (ex != null) {
+                        res = "ERROR: " + ex.getMessage();
+                        status = "ERROR";
+                    } else if (res != null && res.startsWith("ERROR:")) {
+                        status = "ERROR";
+                    }
+                    return new ToolResult(call.id(), name, call.argumentsJson(), status, System.currentTimeMillis() - start, res);
+                });
             } catch (Exception ex) {
-                res = "ERROR: " + ex.getMessage();
-                status = "ERROR";
+                return java.util.concurrent.CompletableFuture.completedFuture(
+                        new ToolResult(call.id(), name, call.argumentsJson(), "ERROR", System.currentTimeMillis() - start, "ERROR: " + ex.getMessage())
+                );
             }
-            return new ToolResult(call.id(), name, call.argumentsJson(), status, System.currentTimeMillis() - start, res);
         }
 
         output = switch (name) {
@@ -103,14 +107,14 @@ public class AgentToolOrchestrator {
             default -> new CodeToolService.ToolCallOutput(name, call.argumentsJson(), "ERROR", 0, "Unknown tool: " + name);
         };
 
-        return new ToolResult(
+        return java.util.concurrent.CompletableFuture.completedFuture(new ToolResult(
                 call.id(),
                 output.toolName(),
                 output.argsJson(),
                 output.status(),
                 output.durationMs(),
                 output.output()
-        );
+        ));
     }
 
     private JsonNode parseArgs(String argumentsJson) {

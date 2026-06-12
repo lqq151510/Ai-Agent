@@ -140,6 +140,7 @@ function setupIpc() {
   ipcMain.handle('app:open-data-dir', () => {
     shell.openPath(getDataDir());
   });
+  ipcMain.handle('backend:port', () => activePort);
   ipcMain.handle('cli:execute', (_event, args: string[]) => {
     return cliManager.execute(getCliEntryPath(), args);
   });

@@ -61,14 +61,22 @@ export const WorkspacePage: React.FC<WorkspacePageProps> = ({
       return;
     }
     if (chat.rateLimitRetryInSec <= 0) {
+      if (chat.rateLimitRetryCount >= 3) {
+        chat.setRateLimitRetryArmed(false);
+        chat.setRateLimitRetryInSec(null);
+        chat.setRateLimitRetryCount(0);
+        chat.setError('请求过于频繁，请稍后手动重试。');
+        return;
+      }
       chat.setRateLimitRetryArmed(false);
       chat.setRateLimitRetryInSec(null);
+      chat.setRateLimitRetryCount(chat.rateLimitRetryCount + 1);
       void onRetryLast();
       return;
     }
     const timer = window.setTimeout(() => chat.setRateLimitRetryInSec(prev => (prev === null ? null : prev - 1)), 1000);
     return () => window.clearTimeout(timer);
-  }, [chat.rateLimitRetryArmed, chat.rateLimitRetryInSec, chat.errorKind, chat.lastFailedMessage, onRetryLast]);
+  }, [chat.rateLimitRetryArmed, chat.rateLimitRetryInSec, chat.errorKind, chat.lastFailedMessage, chat.rateLimitRetryCount, onRetryLast]);
 
   useEffect(() => {
     if (!tokens || !user) return;

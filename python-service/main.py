@@ -17,8 +17,8 @@ async def parse_document(file: UploadFile = File(...)):
         # Create a temporary file to save the uploaded file
         suffix = os.path.splitext(file.filename)[1] if file.filename else ""
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            content = await file.read()
-            tmp.write(content)
+            while chunk := await file.read(8192):
+                tmp.write(chunk)
             tmp_path = tmp.name
 
         try:

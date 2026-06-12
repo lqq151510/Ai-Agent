@@ -267,7 +267,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
         } else if (event === 'error') {
           const message = typeof payload?.message === 'string' ? payload.message : 'Stream failed';
           handlers.onError?.(message);
-          throw new Error(message);
+          // do not re-throw — the stream is already ending and onError already reported
         }
       } catch (error) {
         if (error instanceof Error) {

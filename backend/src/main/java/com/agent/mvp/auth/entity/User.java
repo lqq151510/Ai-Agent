@@ -1,41 +1,49 @@
 package com.agent.mvp.auth.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.IdType;
+
+
 
 import java.time.Instant;
 import java.util.UUID;
 
-@Entity
-@Table(name = "users")
+@TableName("users")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class User {
 
-    @Id
+    @TableId
     private UUID id;
 
-    @Column(nullable = false, unique = true)
+    
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
+    @TableField("password_hash")
     private String passwordHash;
 
-    @Column(name = "token_version", nullable = false)
+    @TableField("token_version")
     private int tokenVersion;
 
-    @Column(name = "custom_base_url")
+    @TableField("custom_base_url")
     private String customBaseUrl;
 
-    @Column(name = "custom_api_key")
-    @jakarta.persistence.Convert(converter = StringCryptoConverter.class)
+    @TableField(value = "custom_api_key", typeHandler = StringCryptoTypeHandler.class)
     private String customApiKey;
 
-    @Column(name = "created_at", nullable = false)
+    @TableField("created_at")
     private Instant createdAt;
 
-    @PrePersist
+    
     public void onCreate() {
         if (id == null) {
             id = UUID.randomUUID();
@@ -48,59 +56,31 @@ public class User {
         }
     }
 
-    public UUID getId() {
-        return id;
-    }
+    
 
-    public void setId(UUID id) {
-        this.id = id;
-    }
+    
 
-    public String getEmail() {
-        return email;
-    }
+    
 
-    public void setEmail(String email) {
-        this.email = email;
-    }
+    
 
-    public String getPasswordHash() {
-        return passwordHash;
-    }
+    
 
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
-    }
+    
 
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
+    
 
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
-    }
+    
 
-    public int getTokenVersion() {
-        return tokenVersion;
-    }
+    
 
-    public void setTokenVersion(int tokenVersion) {
-        this.tokenVersion = tokenVersion;
-    }
+    
 
-    public String getCustomBaseUrl() {
-        return customBaseUrl;
-    }
+    
 
-    public void setCustomBaseUrl(String customBaseUrl) {
-        this.customBaseUrl = customBaseUrl;
-    }
+    
 
-    public String getCustomApiKey() {
-        return customApiKey;
-    }
+    
 
-    public void setCustomApiKey(String customApiKey) {
-        this.customApiKey = customApiKey;
-    }
+    
 }

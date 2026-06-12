@@ -7,6 +7,8 @@ import com.agent.mvp.tooling.dto.ToolStatsResponse;
 import com.agent.mvp.tooling.entity.ToolAudit;
 import com.agent.mvp.tooling.repo.ToolAuditRepository;
 import org.springframework.stereotype.Service;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import org.springframework.scheduling.annotation.Async;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -14,10 +16,11 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.stream.Collectors;
 
 @Service
-public class ToolAuditService {
+public class ToolAuditService extends ServiceImpl<ToolAuditRepository, ToolAudit> {
 
     private final ToolAuditRepository toolAuditRepository;
 
@@ -25,6 +28,7 @@ public class ToolAuditService {
         this.toolAuditRepository = toolAuditRepository;
     }
 
+    @Async
     public void saveAll(UUID userId,
                         UUID sessionId,
                         String provider,
@@ -44,18 +48,26 @@ public class ToolAuditService {
             audit.setDurationMs(trace.durationMs());
             audit.setProvider(provider);
             audit.setModel(model);
+            audit.onCreate();
             return audit;
         }).toList();
 
-        toolAuditRepository.saveAll(audits);
+        saveBatch(audits);
     }
 
     public ToolStatsResponse stats(UUID userId, int windowHours, UUID sessionId) {
         int safeWindowHours = Math.max(1, Math.min(168, windowHours));
         Instant cutoff = Instant.now().minusSeconds(safeWindowHours * 3600L);
         List<ToolAudit> audits = sessionId == null
-                ? toolAuditRepository.findByUserIdAndCreatedAtAfterOrderByCreatedAtDesc(userId, cutoff)
-                : toolAuditRepository.findByUserIdAndSessionIdAndCreatedAtAfterOrderByCreatedAtDesc(userId, sessionId, cutoff);
+                ? toolAuditRepository.selectList(new LambdaQueryWrapper<ToolAudit>()
+                        .eq(ToolAudit::getUserId, userId)
+                        .gt(ToolAudit::getCreatedAt, cutoff)
+                        .orderByDesc(ToolAudit::getCreatedAt))
+                : toolAuditRepository.selectList(new LambdaQueryWrapper<ToolAudit>()
+                        .eq(ToolAudit::getUserId, userId)
+                        .eq(ToolAudit::getSessionId, sessionId)
+                        .gt(ToolAudit::getCreatedAt, cutoff)
+                        .orderByDesc(ToolAudit::getCreatedAt));
 
         if (audits.isEmpty()) {
             return new ToolStatsResponse(

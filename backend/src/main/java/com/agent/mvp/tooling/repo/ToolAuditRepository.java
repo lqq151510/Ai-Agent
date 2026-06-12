@@ -1,14 +1,13 @@
 package com.agent.mvp.tooling.repo;
 
 import com.agent.mvp.tooling.entity.ToolAudit;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-public interface ToolAuditRepository extends JpaRepository<ToolAudit, UUID> {
-    List<ToolAudit> findByUserIdAndCreatedAtAfterOrderByCreatedAtDesc(UUID userId, Instant createdAt);
-
-    List<ToolAudit> findByUserIdAndSessionIdAndCreatedAtAfterOrderByCreatedAtDesc(UUID userId, UUID sessionId, Instant createdAt);
+@Mapper
+public interface ToolAuditRepository extends BaseMapper<ToolAudit> {
 }

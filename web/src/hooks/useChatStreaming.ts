@@ -55,6 +55,9 @@ export function useChatStreaming(
         model: activeSession?.model,
         maxContextTokens: contextTokenLimit ?? undefined
       }, {
+        onMeta: (_meta: any) => {
+          // stream metadata received (session, model, diagnostics) — mostly informational
+        },
         onChunk: (chunk: string) => {
           if (useChatStore.getState().activeSessionId !== initialSessionId) return;
           if (!streamedAnyChunk) {
@@ -62,6 +65,9 @@ export function useChatStreaming(
             chat.setStreamState('streaming');
           }
           useStreamStore.getState().setStream(assistantMessageId, chunk);
+        },
+        onDone: (_done: any) => {
+          // stream completed — handled by the normal flow after streamChat resolves
         },
         onError: (message: string) => {
           if (useChatStore.getState().activeSessionId !== initialSessionId) return;

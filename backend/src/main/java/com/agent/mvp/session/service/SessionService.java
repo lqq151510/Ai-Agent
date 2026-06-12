@@ -2,7 +2,10 @@ package com.agent.mvp.session.service;
 
 import com.agent.mvp.agent.ModelProviderType;
 import com.agent.mvp.auth.entity.User;
-import com.agent.mvp.auth.repo.UserRepository;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import java.util.Optional;
+import com.agent.mvp.auth.service.UserService;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.common.dto.PageResult;
@@ -16,7 +19,6 @@ import com.agent.mvp.session.entity.ConversationSession;
 import com.agent.mvp.session.entity.Message;
 import com.agent.mvp.session.repo.ConversationSessionRepository;
 import com.agent.mvp.session.repo.MessageRepository;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,25 +34,25 @@ public class SessionService {
 
     private final ConversationSessionRepository sessionRepository;
     private final MessageRepository messageRepository;
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final AppProperties appProperties;
     private final SessionCacheService cacheService;
 
     public SessionService(ConversationSessionRepository sessionRepository,
                           MessageRepository messageRepository,
-                          UserRepository userRepository,
+                          UserService userService,
                           AppProperties appProperties,
                           SessionCacheService cacheService) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
-        this.userRepository = userRepository;
+        this.userService = userService;
         this.appProperties = appProperties;
         this.cacheService = cacheService;
     }
 
     @Transactional
     public SessionResponse createSession(UUID userId, CreateSessionRequest request) {
-        User user = userRepository.findById(userId)
+        User user = Optional.ofNullable(userService.getUserById(userId))
                 .orElseThrow(() -> new NotFoundException("User not found"));
 
         ModelProviderType provider = request.provider() != null ? request.provider() : appProperties.getDefaultProvider();
@@ -65,30 +67,32 @@ public class SessionService {
         }
 
         ConversationSession session = new ConversationSession();
-        session.setUser(user);
+        session.setUserId(user.getId());
         session.setTitle(title);
         session.setProvider(provider);
         session.setModel(model);
         session.setContextTokenLimit(request.contextTokenLimit());
 
-        return toResponse(sessionRepository.save(session));
+        return toResponse(saveSession(session));
     }
 
     @Transactional(readOnly = true)
     public PageResult<SessionResponse> listSessions(UUID userId, int page, int size) {
-        org.springframework.data.domain.Page<ConversationSession> sessionPage = sessionRepository.findByUser_IdOrderByUpdatedAtDesc(
-                userId,
-                PageRequest.of(Math.max(0, page), Math.max(1, size))
+        Page<ConversationSession> sessionPage = sessionRepository.selectPage(
+                new Page<>(Math.max(1, page + 1), Math.max(1, size)),
+                new LambdaQueryWrapper<ConversationSession>()
+                        .eq(ConversationSession::getUserId, userId)
+                        .orderByDesc(ConversationSession::getUpdatedAt)
         );
-        List<SessionResponse> content = sessionPage.getContent().stream()
+        List<SessionResponse> content = sessionPage.getRecords().stream()
                 .map(this::toResponse)
                 .toList();
         return new PageResult<>(
                 content,
-                sessionPage.getNumber(),
-                sessionPage.getSize(),
-                sessionPage.getTotalElements(),
-                sessionPage.getTotalPages()
+                ((int) sessionPage.getCurrent() - 1),
+                (int) sessionPage.getSize(),
+                sessionPage.getTotal(),
+                (int) sessionPage.getPages()
         );
     }
 
@@ -96,12 +100,12 @@ public class SessionService {
     public SessionResponse updateContextTokenLimit(UUID userId, UUID sessionId, Integer contextTokenLimit) {
         ConversationSession session = findOwnedSession(userId, sessionId);
         session.setContextTokenLimit(contextTokenLimit);
-        return toResponse(sessionRepository.save(session));
+        return toResponse(saveSession(session));
     }
 
     @Transactional(readOnly = true)
     public ConversationSession findOwnedSession(UUID userId, UUID sessionId) {
-        return sessionRepository.findByIdAndUser_Id(sessionId, userId)
+        return Optional.ofNullable(sessionRepository.selectOne(new LambdaQueryWrapper<ConversationSession>().eq(ConversationSession::getId, sessionId).eq(ConversationSession::getUserId, userId)))
                 .orElseThrow(() -> new ForbiddenException("Session does not exist or no permission"));
     }
 
@@ -110,7 +114,7 @@ public class SessionService {
         ConversationSession session = findOwnedSession(userId, sessionId);
         return cacheService.getCachedMessages(session.getId())
                 .orElseGet(() -> {
-                    List<MessageResponse> data = messageRepository.findBySessionIdOrderByCreatedAtAsc(session.getId())
+                    List<MessageResponse> data = messageRepository.selectList(new LambdaQueryWrapper<Message>().eq(Message::getSessionId, session.getId()).orderByAsc(Message::getCreatedAt))
                             .stream()
                             .map(this::toResponse)
                             .toList();
@@ -122,10 +126,10 @@ public class SessionService {
     @Transactional(readOnly = true)
     public List<MessageResponse> listRecentMessages(UUID userId, UUID sessionId, int limit) {
         ConversationSession session = findOwnedSession(userId, sessionId);
-        return messageRepository.findBySessionIdOrderByCreatedAtDesc(
-                        session.getId(),
-                        PageRequest.of(0, Math.max(1, limit))
-                )
+        return messageRepository.selectPage(
+                        new Page<>(1, Math.max(1, limit)),
+                        new LambdaQueryWrapper<Message>().eq(Message::getSessionId, session.getId()).orderByDesc(Message::getCreatedAt)
+                ).getRecords()
                 .stream()
                 .sorted(Comparator.comparing(Message::getCreatedAt))
                 .map(this::toResponse)
@@ -135,7 +139,7 @@ public class SessionService {
     @Transactional(readOnly = true)
     public SessionExportResponse exportSession(UUID userId, UUID sessionId) {
         ConversationSession session = findOwnedSession(userId, sessionId);
-        List<MessageResponse> messages = messageRepository.findBySessionIdOrderByCreatedAtAsc(session.getId())
+        List<MessageResponse> messages = messageRepository.selectList(new LambdaQueryWrapper<Message>().eq(Message::getSessionId, session.getId()).orderByAsc(Message::getCreatedAt))
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -171,8 +175,8 @@ public class SessionService {
     @Transactional
     public void deleteSession(UUID userId, UUID sessionId) {
         ConversationSession session = findOwnedSession(userId, sessionId);
-        messageRepository.deleteBySessionId(session.getId());
-        sessionRepository.delete(session);
+        messageRepository.delete(new LambdaQueryWrapper<Message>().eq(Message::getSessionId, session.getId()));
+        sessionRepository.deleteById(session.getId());
         cacheService.evictMessages(session.getId());
     }
 
@@ -184,18 +188,19 @@ public class SessionService {
                                String provider,
                                String model) {
         Message message = new Message();
-        message.setSession(session);
+        message.setSessionId(session.getId());
         message.setRole(role);
         message.setContent(content);
         message.setToolTrace(toolTrace);
         message.setProvider(provider);
         message.setModel(model);
 
-        session.setUpdatedAt(Instant.now());
-        sessionRepository.save(session);
-
-        Message saved = messageRepository.save(message);
+        Message saved = saveMessage(message);
         cacheService.evictMessages(session.getId());
+
+        session.setUpdatedAt(Instant.now());
+        saveSession(session);
+
         return saved;
     }
 
@@ -222,4 +227,26 @@ public class SessionService {
                 message.getCreatedAt()
         );
     }
+
+    private ConversationSession saveSession(ConversationSession session) {
+        if (session.getId() == null) {
+            session.onCreate();
+            sessionRepository.insert(session);
+        } else {
+            session.onUpdate();
+            sessionRepository.updateById(session);
+        }
+        return session;
+    }
+
+    private Message saveMessage(Message message) {
+        if (message.getId() == null) {
+            message.onCreate();
+            messageRepository.insert(message);
+        } else {
+            messageRepository.updateById(message);
+        }
+        return message;
+    }
+
 }

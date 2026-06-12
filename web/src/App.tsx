@@ -1,22 +1,23 @@
-import { useEffect, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { createApiClient } from './api';
 import type { Tokens } from './types';
 import { defaultModel } from './utils';
 import { MouseFx } from './components/MouseFx';
-import { CoachWorkspace } from './components/CoachWorkspace';
-import { CliLogin } from './components/CliLogin';
-import { Sparkles } from 'lucide-react';
-import { LoginPage } from './pages/LoginPage';
-import { WorkspacePage } from './pages/WorkspacePage';
-import { UserCenterPage } from './pages/UserCenterPage';
+import { Sparkles, Loader2 } from 'lucide-react';
 import { useAuthStore } from './stores/authStore';
 import { useChatStore, type ErrorKind } from './stores/chatStore';
 import { useUiStore } from './stores/uiStore';
 import { useAppBootstrap } from './hooks/useAppBootstrap';
 import { useWorkspaceDiagnostics } from './hooks/useWorkspaceDiagnostics';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+const CoachWorkspace = lazy(() => import('./components/CoachWorkspace').then(m => ({ default: m.CoachWorkspace })));
+const CliLogin = lazy(() => import('./components/CliLogin').then(m => ({ default: m.CliLogin })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
+const WorkspacePage = lazy(() => import('./pages/WorkspacePage').then(m => ({ default: m.WorkspacePage })));
+const UserCenterPage = lazy(() => import('./pages/UserCenterPage').then(m => ({ default: m.UserCenterPage })));
+
 const STORAGE_KEY = 'ai_agent_web_tokens_v1';
 const FX_STORAGE_KEY = 'ai_agent_ui_fx_enabled_v1';
 const RATE_LIMIT_AUTO_RETRY_SECONDS = 6;
@@ -51,6 +52,25 @@ export function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [apiBase, setApiBase] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function initApiBase() {
+      if ((window as any).electronAPI && (window as any).electronAPI.backendPort) {
+        try {
+          const port = await (window as any).electronAPI.backendPort();
+          setApiBase(`http://localhost:${port}`);
+        } catch (e) {
+          console.warn('Failed to get backend port via IPC', e);
+          setApiBase(import.meta.env.VITE_API_BASE || 'http://localhost:8080');
+        }
+      } else {
+        setApiBase(import.meta.env.VITE_API_BASE || '/api');
+      }
+    }
+    initApiBase();
+  }, []);
+
   useEffect(() => {
     if (!tokens) {
       setTokens(readStoredTokens());
@@ -70,7 +90,10 @@ export function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  const api = useMemo(() => createApiClient(API_BASE, { getTokens: () => useAuthStore.getState().tokens, setTokens: updateTokens }), [tokens]);
+  const api = useMemo(() => {
+    if (!apiBase) return null;
+    return createApiClient(apiBase, { getTokens: () => useAuthStore.getState().tokens, setTokens: updateTokens });
+  }, [tokens, apiBase]);
 
   function applyError(raw: unknown): ErrorKind {
     const text = raw instanceof Error ? raw.message : String(raw);
@@ -120,6 +143,17 @@ export function App() {
     localStorage.setItem(FX_STORAGE_KEY, next ? '1' : '0');
   }
 
+  if (!apiBase || !api) {
+    return (
+      <div className="app-shell loading">
+        <div className="loading-indicator">
+          <Loader2 className="animate-spin" size={24} />
+          <span>Initializing...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       {effectsEnabled ? <MouseFx /> : null}
@@ -132,31 +166,35 @@ export function App() {
       >
         <Sparkles size={15} />
       </button>
-      <Routes>
-        <Route path="/login" element={
-          !tokens || !user ? (
-            <LoginPage api={api} updateTokens={updateTokens} applyError={applyError} />
-          ) : (
-            <Navigate to="/" replace />
-          )
-        } />
-        <Route path="/" element={
-          tokens && user ? <WorkspacePage api={api} applyError={applyError} onLogout={onLogout} armRateLimitAutoRetry={armRateLimitAutoRetry} /> : <Navigate to="/login" replace />
-        } />
-        <Route path="/chat/sessions/:urlSessionId" element={
-          tokens && user ? <WorkspacePage api={api} applyError={applyError} onLogout={onLogout} armRateLimitAutoRetry={armRateLimitAutoRetry} /> : <Navigate to="/login" replace />
-        } />
-        <Route path="/coach" element={
-          tokens && user ? <CoachWorkspace api={api} onBack={() => navigate('/')} /> : <Navigate to="/login" replace />
-        } />
-        <Route path="/user/*" element={
-          tokens && user ? <UserCenterPage api={api} /> : <Navigate to="/login" replace />
-        } />
-        <Route path="/cli-login" element={
-          <CliLogin tokens={tokens} user={user} />
-        } />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <ErrorBoundary>
+        <Suspense fallback={<div className="loading-indicator"><Loader2 className="animate-spin" size={24} /></div>}>
+          <Routes>
+            <Route path="/login" element={
+              !tokens || !user ? (
+                <LoginPage api={api} apiBase={apiBase} updateTokens={updateTokens} applyError={applyError} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            } />
+            <Route path="/" element={
+              tokens && user ? <WorkspacePage api={api} applyError={applyError} onLogout={onLogout} armRateLimitAutoRetry={armRateLimitAutoRetry} /> : <Navigate to="/login" replace />
+            } />
+            <Route path="/chat/sessions/:urlSessionId" element={
+              tokens && user ? <WorkspacePage api={api} applyError={applyError} onLogout={onLogout} armRateLimitAutoRetry={armRateLimitAutoRetry} /> : <Navigate to="/login" replace />
+            } />
+            <Route path="/coach" element={
+              tokens && user ? <CoachWorkspace api={api} onBack={() => navigate('/')} /> : <Navigate to="/login" replace />
+            } />
+            <Route path="/user/*" element={
+              tokens && user ? <UserCenterPage api={api} /> : <Navigate to="/login" replace />
+            } />
+            <Route path="/cli-login" element={
+              <CliLogin tokens={tokens} user={user} />
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
       {chat.error && user ? <div className="toast">{chat.error}</div> : null}
     </div>
   );

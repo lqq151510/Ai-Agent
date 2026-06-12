@@ -36,9 +36,11 @@ class CoachServiceTest {
                 new AppProperties(),
                 new ObjectMapper(),
                 ragMemoryService,
-                mock(com.agent.mvp.auth.repo.UserRepository.class)
+                mock(com.agent.mvp.auth.service.UserService.class)
         );
-        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.insert(any(com.agent.mvp.coach.entity.DevCoachRun.class))).thenAnswer(invocation -> {
+            return 1;
+        });
         when(gateway.chat(eq(ModelProviderType.OPENAI), any()))
                 .thenReturn(new ModelChatResponse("""
                         {

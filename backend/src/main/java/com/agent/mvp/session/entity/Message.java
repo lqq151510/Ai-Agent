@@ -1,47 +1,52 @@
 package com.agent.mvp.session.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.IdType;
+
+
 
 import java.time.Instant;
 import java.util.UUID;
 
-@Entity
-@Table(name = "messages")
+@TableName("messages")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Message {
 
-    @Id
+    @TableId
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "session_id", nullable = false)
-    private ConversationSession session;
+    @TableField("session_id")
+    private UUID sessionId;
 
-    @Column(nullable = false)
+    
     private String role;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
+    
     private String content;
 
-    @Column(name = "tool_trace", columnDefinition = "TEXT")
+    @TableField("tool_trace")
     private String toolTrace;
 
-    @Column(nullable = false)
+    
     private String provider;
 
-    @Column(nullable = false)
+    
     private String model;
 
-    @Column(name = "created_at", nullable = false)
+    @TableField("created_at")
     private Instant createdAt;
 
-    @PrePersist
+    
     public void onCreate() {
         if (id == null) {
             id = UUID.randomUUID();
@@ -51,67 +56,35 @@ public class Message {
         }
     }
 
-    public UUID getId() {
-        return id;
-    }
+    
 
-    public void setId(UUID id) {
-        this.id = id;
-    }
+    
 
-    public ConversationSession getSession() {
-        return session;
-    }
+    
 
-    public void setSession(ConversationSession session) {
-        this.session = session;
-    }
+    
 
-    public String getRole() {
-        return role;
-    }
+    
 
-    public void setRole(String role) {
-        this.role = role;
-    }
+    
 
-    public String getContent() {
-        return content;
-    }
+    
 
-    public void setContent(String content) {
-        this.content = content;
-    }
+    
 
-    public String getToolTrace() {
-        return toolTrace;
-    }
+    
 
-    public void setToolTrace(String toolTrace) {
-        this.toolTrace = toolTrace;
-    }
+    
 
-    public String getProvider() {
-        return provider;
-    }
+    
 
-    public void setProvider(String provider) {
-        this.provider = provider;
-    }
+    
 
-    public String getModel() {
-        return model;
-    }
+    
 
-    public void setModel(String model) {
-        this.model = model;
-    }
+    
 
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
+    
 
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
-    }
+    
 }

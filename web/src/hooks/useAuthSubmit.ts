@@ -5,7 +5,6 @@ export function useAuthSubmit(
   api: any,
   API_BASE: string,
   chat: any,
-  authStore: any,
   updateTokens: (tokens: Tokens | null) => void,
   setUser: any,
   navigate: any,
@@ -14,9 +13,7 @@ export function useAuthSubmit(
   refreshWorkspaceDiagnostics: (client: any, options: any) => Promise<void>,
   ui: any
 ) {
-  const { authMode, email, password, setPassword } = authStore;
-
-  async function onAuthSubmit() {
+  async function onAuthSubmit(authMode: string, email: string, password: string, setPassword: (p: string) => void) {
     chat.clearError();
     chat.setLoading(true);
     try {

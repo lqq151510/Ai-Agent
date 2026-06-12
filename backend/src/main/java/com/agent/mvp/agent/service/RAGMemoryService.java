@@ -14,6 +14,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Async;
+import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.splitter.DocumentSplitters;
+import dev.langchain4j.data.document.DocumentSplitter;
 
 import jakarta.annotation.PostConstruct;
 import java.io.File;
@@ -101,30 +105,21 @@ public class RAGMemoryService {
         return results;
     }
 
-    /**
-     * Ingest a document file by converting it to Markdown using MarkItDown,
-     * splitting it into segments, and storing it in the vector database.
-     */
+    @Async
     public void ingestDocument(File documentFile) {
         try {
             log.info("Starting ingestion of document: {}", documentFile.getName());
             String markdown = markItDownService.convertDocumentToMarkdown(documentFile);
             
-            // Simple text splitting by double newlines (paragraphs) for demonstration
-            String[] paragraphs = markdown.split("\n\n");
+            Document document = Document.from(markdown, Metadata.from("filename", documentFile.getName()));
+            DocumentSplitter splitter = DocumentSplitters.recursive(1000, 100);
+            List<TextSegment> segments = splitter.split(document);
             
-            for (int i = 0; i < paragraphs.length; i++) {
-                String para = paragraphs[i].trim();
-                if (para.isEmpty()) continue;
-                
-                TextSegment segment = TextSegment.from(para, Metadata.from(Map.of(
-                    "filename", documentFile.getName(),
-                    "chunkIndex", String.valueOf(i)
-                )));
-                Embedding embedding = embeddingModel.embed(segment).content();
-                embeddingStore.add(embedding, segment);
+            if (!segments.isEmpty()) {
+                Response<List<Embedding>> embeddingResponse = embeddingModel.embedAll(segments);
+                embeddingStore.addAll(embeddingResponse.content(), segments);
             }
-            log.info("Successfully ingested document: {}", documentFile.getName());
+            log.info("Successfully ingested document: {} with {} segments", documentFile.getName(), segments.size());
         } catch (Exception ex) {
             log.error("Failed to ingest document {}. Error: {}", documentFile.getName(), ex.getMessage());
             throw new RuntimeException("Document ingestion failed", ex);

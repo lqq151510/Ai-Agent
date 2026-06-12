@@ -60,7 +60,7 @@ class FlexAgentIntegrationMockTest {
                 ragMemoryService,
                 clientToolRegistry,
                 flexRuntimeFactory,
-                mock(com.agent.mvp.auth.repo.UserRepository.class)
+                mock(com.agent.mvp.auth.service.UserService.class)
         );
 
         UUID userId = UUID.randomUUID();
@@ -89,7 +89,7 @@ class FlexAgentIntegrationMockTest {
                 .thenReturn(textStep);
 
         when(toolOrchestrator.execute(any(ToolCall.class), any()))
-                .thenReturn(new ToolResult("1", "searchCode", "{}", "SUCCESS", 10, "result"));
+                .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(new ToolResult("1", "searchCode", "{}", "SUCCESS", 10, "result")));
 
         ChatResponse response = service.chat(userId, new ChatRequest(session.getId(), "hello", null, null, null, null));
 

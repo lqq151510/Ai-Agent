@@ -6,8 +6,19 @@
         </encoder>
     </appender>
 
+    <appender name="ROLLING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/application.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/application-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>{"ts":"%date{ISO8601}","level":"%level","logger":"%logger{36}","thread":"%thread","requestId":"%X{requestId:-}","userId":"%X{userId:-}","sessionId":"%X{sessionId:-}","message":"%replace(%msg){'"','\\"'}","exception":"%replace(%replace(%xThrowable){'\r',''}){'\n','\\n'}"}%n</pattern>
+        </encoder>
+    </appender>
+
     <root level="INFO">
         <appender-ref ref="JSON_CONSOLE"/>
+        <appender-ref ref="ROLLING_FILE"/>
     </root>
 </configuration>
-

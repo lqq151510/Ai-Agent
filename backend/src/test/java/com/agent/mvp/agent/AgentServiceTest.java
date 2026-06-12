@@ -53,7 +53,7 @@ class AgentServiceTest {
                 .thenReturn(new ModelChatResponse("", 10, List.of(call), "tool_calls"))
                 .thenReturn(new ModelChatResponse("final answer", 12, List.of(), "stop"));
         when(f.toolOrchestrator.execute(eq(call), any()))
-                .thenReturn(new ToolResult("call_1", "searchCode", "{\"query\":\"AgentService\"}", "SUCCESS", 6, "match"));
+                .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(new ToolResult("call_1", "searchCode", "{\"query\":\"AgentService\"}", "SUCCESS", 6, "match")));
 
         ChatResponse response = f.service.chat(f.userId, new ChatRequest(f.session.getId(), "find AgentService", null, null, null, null));
 
@@ -74,7 +74,7 @@ class AgentServiceTest {
                 .thenReturn(new ModelChatResponse("", 8, List.of(call), "tool_calls"))
                 .thenReturn(new ModelChatResponse("", 8, List.of(call), "tool_calls"));
         when(f.toolOrchestrator.execute(eq(call), any()))
-                .thenReturn(new ToolResult("call_overflow", "searchCode", "{\"query\":\"x\"}", "SUCCESS", 3, "ok"));
+                .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(new ToolResult("call_overflow", "searchCode", "{\"query\":\"x\"}", "SUCCESS", 3, "ok")));
 
         ChatResponse response = f.service.chat(f.userId, new ChatRequest(f.session.getId(), "loop", null, null, null, null));
 
@@ -90,7 +90,7 @@ class AgentServiceTest {
         when(f.modelGateway.chat(eq(ModelProviderType.OPENAI), any()))
                 .thenReturn(new ModelChatResponse("", 9, List.of(call), "tool_calls"));
         when(f.toolOrchestrator.execute(eq(call), any()))
-                .thenReturn(new ToolResult("call_err", "readFile", "{\"path\":\"missing\"}", "ERROR", 4, "failed"));
+                .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(new ToolResult("call_err", "readFile", "{\"path\":\"missing\"}", "ERROR", 4, "failed")));
 
         ChatResponse response = f.service.chat(f.userId, new ChatRequest(f.session.getId(), "read missing", null, null, null, null));
 
@@ -111,7 +111,7 @@ class AgentServiceTest {
                 .thenReturn(new ModelChatResponse("", 8, List.of(call), "tool_calls"))
                 .thenReturn(new ModelChatResponse("", 8, List.of(call), "tool_calls"));
         when(f.toolOrchestrator.execute(eq(call), any()))
-                .thenReturn(new ToolResult("call_overflow", "searchCode", "{\"query\":\"x\"}", "SUCCESS", 3, "ok"));
+                .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(new ToolResult("call_overflow", "searchCode", "{\"query\":\"x\"}", "SUCCESS", 3, "ok")));
 
         ChatResponse response = f.service.chat(f.userId, new ChatRequest(f.session.getId(), "loop", null, null, null, null));
 
@@ -214,7 +214,7 @@ class AgentServiceTest {
                 ragMemoryService,
                 mock(com.agent.mvp.agent.tooling.ClientToolRegistry.class),
                 mock(com.agent.mvp.agent.service.FlexRuntimeFactory.class),
-                mock(com.agent.mvp.auth.repo.UserRepository.class)
+                mock(com.agent.mvp.auth.service.UserService.class)
         );
         final UUID userId = UUID.randomUUID();
         final ConversationSession session = new ConversationSession();

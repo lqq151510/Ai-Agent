@@ -5,7 +5,9 @@ import com.agent.mvp.auth.dto.TokenResponse;
 import com.agent.mvp.auth.dto.UpdateUserConfigRequest;
 import com.agent.mvp.auth.dto.UserProfileResponse;
 import com.agent.mvp.auth.entity.User;
-import com.agent.mvp.auth.repo.UserRepository;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import java.util.Optional;
+import com.agent.mvp.auth.service.UserService;
 import com.agent.mvp.auth.security.AuthenticatedUser;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.common.exception.NotFoundException;
@@ -23,16 +25,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService;
 
-    public AuthService(UserRepository userRepository,
+    public AuthService(UserService userService,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService) {
-        this.userRepository = userRepository;
+        this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.tokenBlacklistService = tokenBlacklistService;
@@ -61,21 +63,21 @@ public class AuthService {
     @Transactional
     public UserProfileResponse register(String email, String password) {
         String normalizedEmail = email.toLowerCase().trim();
-        if (userRepository.existsByEmail(normalizedEmail)) {
+        if (userService.existsByEmail(normalizedEmail)) {
             throw new BadRequestException("Email already exists");
         }
 
         User user = new User();
         user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(password));
-        User saved = userRepository.save(user);
+        User saved = userService.createUser(user);
 
         return toProfileResponse(saved);
     }
 
     public TokenResponse login(LoginRequest request) {
         String normalizedEmail = request.email().toLowerCase().trim();
-        User user = userRepository.findByEmail(normalizedEmail)
+        User user = Optional.ofNullable(userService.getUserByEmail(normalizedEmail))
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
@@ -92,7 +94,7 @@ public class AuthService {
             throw new UnauthorizedException("Refresh token required");
         }
 
-        User user = userRepository.findById(jwtService.extractUserId(refreshToken))
+        User user = Optional.ofNullable(userService.getUserById(jwtService.extractUserId(refreshToken)))
                 .orElseThrow(() -> new UnauthorizedException("User not found"));
 
         int tokenVersion = jwtService.extractTokenVersion(refreshToken);
@@ -101,26 +103,26 @@ public class AuthService {
         }
 
         user.setTokenVersion(user.getTokenVersion() + 1);
-        userRepository.save(user);
+        if(user.getId() == null) { userService.createUser(user); } else { userService.updateUser(user); }
 
         JwtService.TokenPair pair = jwtService.issueTokens(user);
         return new TokenResponse(pair.accessToken(), pair.refreshToken(), pair.accessTokenExpiresInSeconds());
     }
 
     public UserProfileResponse me(AuthenticatedUser authenticatedUser) {
-        User user = userRepository.findById(authenticatedUser.userId())
+        User user = Optional.ofNullable(userService.getUserById(authenticatedUser.userId()))
                 .orElseThrow(() -> new NotFoundException("User not found"));
         return toProfileResponse(user);
     }
 
     @Transactional
     public UserProfileResponse updateConfig(AuthenticatedUser authenticatedUser, UpdateUserConfigRequest configRequest) {
-        User user = userRepository.findById(authenticatedUser.userId())
+        User user = Optional.ofNullable(userService.getUserById(authenticatedUser.userId()))
                 .orElseThrow(() -> new NotFoundException("User not found"));
         
         user.setCustomBaseUrl(configRequest.customBaseUrl());
         user.setCustomApiKey(configRequest.customApiKey());
-        userRepository.save(user);
+        if(user.getId() == null) { userService.createUser(user); } else { userService.updateUser(user); }
 
         return toProfileResponse(user);
     }

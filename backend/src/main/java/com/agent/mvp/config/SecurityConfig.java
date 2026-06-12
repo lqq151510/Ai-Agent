@@ -105,7 +105,7 @@ public class SecurityConfig {
     @org.springframework.context.annotation.Profile("desktop")
     public CorsConfigurationSource desktopCorsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(java.util.List.of("tauri://localhost"));
+        configuration.setAllowedOriginPatterns(java.util.List.of("file://*", "http://localhost:5173"));
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("*"));
         configuration.setAllowCredentials(true);

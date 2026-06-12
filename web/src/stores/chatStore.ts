@@ -8,7 +8,6 @@ interface ChatState {
   sessions: Session[];
   activeSessionId: string;
   messages: Message[];
-  prompt: string;
   sending: boolean;
   loading: boolean;
   exporting: boolean;
@@ -18,10 +17,10 @@ interface ChatState {
   lastFailedMessage: string;
   rateLimitRetryInSec: number | null;
   rateLimitRetryArmed: boolean;
+  rateLimitRetryCount: number;
   setSessions: (sessions: Session[]) => void;
   setActiveSessionId: (sessionId: string) => void;
   setMessages: (messages: Message[] | ((prev: Message[]) => Message[])) => void;
-  setPrompt: (prompt: string) => void;
   setSending: (sending: boolean) => void;
   setLoading: (loading: boolean) => void;
   setExporting: (exporting: boolean) => void;
@@ -31,6 +30,7 @@ interface ChatState {
   setLastFailedMessage: (message: string) => void;
   setRateLimitRetryInSec: (seconds: number | null | ((prev: number | null) => number | null)) => void;
   setRateLimitRetryArmed: (armed: boolean) => void;
+  setRateLimitRetryCount: (count: number) => void;
   clearError: () => void;
   resetChat: () => void;
 }
@@ -39,7 +39,6 @@ const initialState = {
   sessions: [],
   activeSessionId: '',
   messages: [],
-  prompt: '',
   sending: false,
   loading: false,
   exporting: false,
@@ -48,7 +47,8 @@ const initialState = {
   errorKind: null as ErrorKind | null,
   lastFailedMessage: '',
   rateLimitRetryInSec: null as number | null,
-  rateLimitRetryArmed: false
+  rateLimitRetryArmed: false,
+  rateLimitRetryCount: 0
 };
 
 export const useChatStore = create<ChatState>(set => ({
@@ -56,7 +56,6 @@ export const useChatStore = create<ChatState>(set => ({
   setSessions: sessions => set({ sessions }),
   setActiveSessionId: activeSessionId => set({ activeSessionId }),
   setMessages: messages => set(state => ({ messages: typeof messages === 'function' ? messages(state.messages) : messages })),
-  setPrompt: prompt => set({ prompt }),
   setSending: sending => set({ sending }),
   setLoading: loading => set({ loading }),
   setExporting: exporting => set({ exporting }),
@@ -72,12 +71,14 @@ export const useChatStore = create<ChatState>(set => ({
           : rateLimitRetryInSec
     })),
   setRateLimitRetryArmed: rateLimitRetryArmed => set({ rateLimitRetryArmed }),
+  setRateLimitRetryCount: rateLimitRetryCount => set({ rateLimitRetryCount }),
   clearError: () =>
     set({
       error: '',
       errorKind: null,
       rateLimitRetryInSec: null,
-      rateLimitRetryArmed: false
+      rateLimitRetryArmed: false,
+      rateLimitRetryCount: 0
     }),
   resetChat: () => set({ ...initialState })
 }));

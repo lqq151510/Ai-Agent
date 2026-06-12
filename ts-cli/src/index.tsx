@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import React from 'react';
 import { render } from 'ink';
+import chalk from 'chalk';
 
 import { createApiClient } from './api-client.js';
 import { collectSystemContext } from './context-collector.js';
@@ -291,7 +292,10 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  console.error(error instanceof Error ? error.message : String(error));
+try {
+  await main();
+} catch (error) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  console.error(chalk.red(`\nError: ${errorMessage}\n`));
   process.exitCode = 1;
-});
+}

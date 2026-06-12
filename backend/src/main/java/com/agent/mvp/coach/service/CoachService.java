@@ -22,13 +22,15 @@ import com.agent.mvp.coach.dto.ScaffoldResponse;
 import com.agent.mvp.coach.entity.DevCoachRun;
 import com.agent.mvp.coach.repo.DevCoachRunRepository;
 import com.agent.mvp.auth.entity.User;
-import com.agent.mvp.auth.repo.UserRepository;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import java.util.Optional;
+import com.agent.mvp.auth.service.UserService;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.config.AppProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
@@ -47,7 +49,7 @@ public class CoachService {
     private final AppProperties appProperties;
     private final ObjectMapper objectMapper;
     private final RAGMemoryService ragMemoryService;
-    private final UserRepository userRepository;
+    private final UserService userService;
 
     public CoachService(ModelGateway modelGateway,
                         CoachPromptService promptService,
@@ -57,7 +59,7 @@ public class CoachService {
                         AppProperties appProperties,
                         ObjectMapper objectMapper,
                         RAGMemoryService ragMemoryService,
-                        UserRepository userRepository) {
+                        UserService userService) {
         this.modelGateway = modelGateway;
         this.promptService = promptService;
         this.scaffoldTemplateRegistry = scaffoldTemplateRegistry;
@@ -66,11 +68,11 @@ public class CoachService {
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
         this.ragMemoryService = ragMemoryService;
-        this.userRepository = userRepository;
+        this.userService = userService;
     }
 
     public RequirementBreakdownResponse breakdown(UUID userId, RequirementBreakdownRequest request) {
-        User user = userRepository.findById(userId).orElse(null);
+        User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
         ModelChatResponse modelResponse = modelGateway.chat(resolveProvider(request.provider()), new ModelChatRequest(
                 resolveModel(request.provider(), request.model()),
                 promptService.requirementMessages(request.requirement()),
@@ -86,7 +88,7 @@ public class CoachService {
     }
 
     public LogDiagnosisResponse diagnose(UUID userId, LogDiagnosisRequest request) {
-        User user = userRepository.findById(userId).orElse(null);
+        User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
         ModelChatResponse modelResponse = modelGateway.chat(resolveProvider(request.provider()), new ModelChatRequest(
                 resolveModel(request.provider(), request.model()),
                 promptService.logDiagnosisMessages(request.logContent(), request.context()),
@@ -116,7 +118,7 @@ public class CoachService {
     }
 
     public Path findScaffoldArtifact(UUID userId, UUID runId) {
-        DevCoachRun run = runRepository.findById(runId)
+        DevCoachRun run = Optional.ofNullable(runRepository.selectById(runId))
                 .orElseThrow(() -> new NotFoundException("Coach run not found"));
         if (!run.getUserId().equals(userId)) {
             throw new ForbiddenException("Cannot download another user's scaffold");
@@ -129,7 +131,10 @@ public class CoachService {
 
     public List<CoachRunResponse> listRuns(UUID userId, int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 50));
-        return runRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, safeLimit))
+        return runRepository.selectPage(
+                        new Page<>(1, safeLimit),
+                        new LambdaQueryWrapper<DevCoachRun>().eq(DevCoachRun::getUserId, userId).orderByDesc(DevCoachRun::getCreatedAt)
+                ).getRecords()
                 .stream()
                 .map(this::toRunResponse)
                 .toList();
@@ -285,7 +290,9 @@ public class CoachService {
         run.setInputText(inputText);
         run.setOutputJson(outputJson);
         run.setArtifactPath(artifactPath);
-        return runRepository.save(run);
+        run.onCreate();
+        runRepository.insert(run);
+        return run;
     }
 
     private CoachRunResponse toRunResponse(DevCoachRun run) {

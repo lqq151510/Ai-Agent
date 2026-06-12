@@ -11,8 +11,6 @@ describe('authStore', () => {
     expect(state.tokens).toBeNull();
     expect(state.user).toBeNull();
     expect(state.authMode).toBe('login');
-    expect(state.email).toBe('');
-    expect(state.password).toBe('');
   });
 
   it('should set tokens correctly', () => {
@@ -22,9 +20,9 @@ describe('authStore', () => {
   });
 
   it('should clear authentication correctly', () => {
-    useAuthStore.getState().setEmail('test@example.com');
+    useAuthStore.getState().setAuthMode('register');
     useAuthStore.getState().clearAuth();
-    expect(useAuthStore.getState().email).toBe('');
+    expect(useAuthStore.getState().authMode).toBe('login');
     expect(useAuthStore.getState().tokens).toBeNull();
   });
 });

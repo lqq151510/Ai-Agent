@@ -159,9 +159,9 @@ class AgentFlowIntegrationTest {
         assertTrue(messagesResponse.getBody().stream().anyMatch(m -> "assistant".equals(m.get("role"))));
         assertTrue(messagesResponse.getBody().stream().anyMatch(m -> "OPENAI".equals(m.get("provider"))));
 
-        List<Message> persisted = messageRepository.findBySessionIdOrderByCreatedAtAsc(UUID.fromString(sessionId));
+        List<Message> persisted = messageRepository.selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Message>().eq(Message::getSessionId, UUID.fromString(sessionId)).orderByAsc(Message::getCreatedAt));
         assertTrue(persisted.size() >= 2);
-        assertTrue(toolAuditRepository.findAll().stream()
+        assertTrue(toolAuditRepository.selectList(null).stream()
                 .anyMatch(audit -> UUID.fromString(sessionId).equals(audit.getSessionId())));
     }
 
