@@ -48,6 +48,7 @@ public class AgentService {
     private final ClientToolRegistry clientToolRegistry;
     private final FlexRuntimeFactory flexRuntimeFactory;
     private final UserService userService;
+    private final SemanticCacheService semanticCacheService;
 
     public AgentService(SessionService sessionService,
                         ModelRoutingService modelRoutingService,
@@ -59,7 +60,8 @@ public class AgentService {
                         RAGMemoryService ragMemoryService,
                         ClientToolRegistry clientToolRegistry,
                         FlexRuntimeFactory flexRuntimeFactory,
-                        UserService userService) {
+                        UserService userService,
+                        SemanticCacheService semanticCacheService) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
         this.modelGateway = modelGateway;
@@ -71,6 +73,7 @@ public class AgentService {
         this.clientToolRegistry = clientToolRegistry;
         this.flexRuntimeFactory = flexRuntimeFactory;
         this.userService = userService;
+        this.semanticCacheService = semanticCacheService;
     }
 
     public ChatResponse chat(UUID userId, ChatRequest request) {
@@ -78,8 +81,37 @@ public class AgentService {
         ResolvedModelConfig resolved = modelRoutingService.resolve(request.provider(), request.model(), session);
         sessionService.saveMessage(session, "user", request.message(), null, resolved.provider().name(), resolved.model());
         int maxContextTokens = resolveContextTokenBudget(request.maxContextTokens(), session);
+
+        Optional<String> cachedResponseOpt = semanticCacheService.findCachedResponse(request.message());
+        if (cachedResponseOpt.isPresent()) {
+            String cachedResponse = cachedResponseOpt.get();
+            sessionService.saveMessage(session, "assistant", cachedResponse, null, resolved.provider().name(), resolved.model());
+            AgentExecutionDiagnostics execution = new AgentExecutionDiagnostics(
+                    maxContextTokens,
+                    maxToolSteps(),
+                    0,
+                    false,
+                    0,
+                    "completed_from_cache"
+            );
+            return new ChatResponse(
+                    session.getId(),
+                    resolved.provider(),
+                    resolved.model(),
+                    cachedResponse,
+                    0,
+                    List.of(),
+                    execution
+            );
+        }
+
         java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> rejectClientTool = (call) -> java.util.concurrent.CompletableFuture.completedFuture("ERROR: execute_cli_command is only available via streaming chat (/api/v1/agent/chat/stream)");
         AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, null, request.systemContext(), rejectClientTool);
+        
+        if (loop.reply() != null && !loop.reply().isBlank()) {
+            semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
+        }
+
         return new ChatResponse(
                 session.getId(),
                 resolved.provider(),
@@ -110,6 +142,40 @@ public class AgentService {
                 initialExecutionDiagnostics(maxContextTokens)
         ));
 
+        Optional<String> cachedResponseOpt = semanticCacheService.findCachedResponse(request.message());
+        if (cachedResponseOpt.isPresent()) {
+            String cachedResponse = cachedResponseOpt.get();
+            sessionService.saveMessage(session, "assistant", cachedResponse, null, resolved.provider().name(), resolved.model());
+            if (chunkConsumer != null) {
+                chunkConsumer.accept(cachedResponse);
+            }
+            AgentExecutionDiagnostics execution = new AgentExecutionDiagnostics(
+                    maxContextTokens,
+                    maxToolSteps(),
+                    0,
+                    false,
+                    0,
+                    "completed_from_cache"
+            );
+            metaConsumer.accept(new ChatStreamMeta(
+                    session.getId(),
+                    resolved.provider(),
+                    resolved.model(),
+                    List.of(),
+                    "completed_from_cache",
+                    execution
+            ));
+            return new ChatResponse(
+                    session.getId(),
+                    resolved.provider(),
+                    resolved.model(),
+                    cachedResponse,
+                    0,
+                    List.of(),
+                    execution
+            );
+        }
+
         java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> clientToolInvoker = (call) -> {
             try {
                 java.util.concurrent.CompletableFuture<String> future = clientToolRegistry.register(userId.toString(), call.id());
@@ -124,6 +190,11 @@ public class AgentService {
         };
 
         AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, chunkConsumer, request.systemContext(), clientToolInvoker);
+        
+        if (loop.reply() != null && !loop.reply().isBlank()) {
+            semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
+        }
+
         metaConsumer.accept(new ChatStreamMeta(
                 session.getId(),
                 resolved.provider(),
@@ -163,17 +234,23 @@ public class AgentService {
 
         User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
         AgentRuntime runtime = flexRuntimeFactory.createRuntime(user, resolved, toolOrchestrator.listToolSpecs());
-        flexRuntimeFactory.injectHistory(runtime, session.getId().toString(), messages);
 
-        // Send the last user message to start reasoning stream
+        // The last user message has already been saved by the caller and will be
+        // sent separately via runtime.send() below — exclude it from injected history
+        // to avoid duplicating it in the model's context window.
         String lastMessage = "";
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            if ("user".equals(messages.get(i).role())) {
-                lastMessage = messages.get(i).content();
-                break;
+        List<ModelChatMessage> historyForRuntime = new ArrayList<>(messages.size());
+        for (int i = 0; i < messages.size(); i++) {
+            ModelChatMessage msg = messages.get(i);
+            boolean isLast = (i == messages.size() - 1);
+            if (isLast && "user".equals(msg.role())) {
+                lastMessage = msg.content();
+            } else {
+                historyForRuntime.add(msg);
             }
         }
-        
+        flexRuntimeFactory.injectHistory(runtime, session.getId().toString(), historyForRuntime);
+
         try {
             runtime.send(lastMessage);
 
