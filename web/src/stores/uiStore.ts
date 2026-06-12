@@ -14,6 +14,7 @@ interface UiState {
   releaseReportLoading: boolean;
   toolStatsWindowHours: number;
   toolStatsScope: ToolStatsScope;
+  useLocalAi: boolean;
   setEffectsEnabled: (enabled: boolean) => void;
   setModelOptions: (options: ModelOption[]) => void;
   setContextTokenLimit: (limit: number | null) => void;
@@ -23,6 +24,7 @@ interface UiState {
   setReleaseReportLoading: (loading: boolean) => void;
   setToolStatsWindowHours: (hours: number) => void;
   setToolStatsScope: (scope: ToolStatsScope) => void;
+  setUseLocalAi: (useLocal: boolean) => void;
   resetUi: () => void;
 }
 
@@ -39,7 +41,8 @@ const initialState = {
   releaseReport: null as ReleaseReportResponse | null,
   releaseReportLoading: false,
   toolStatsWindowHours: 24,
-  toolStatsScope: 'session' as ToolStatsScope
+  toolStatsScope: 'session' as ToolStatsScope,
+  useLocalAi: false
 };
 
 export const useUiStore = create<UiState>(set => ({
@@ -53,5 +56,6 @@ export const useUiStore = create<UiState>(set => ({
   setReleaseReportLoading: releaseReportLoading => set({ releaseReportLoading }),
   setToolStatsWindowHours: toolStatsWindowHours => set({ toolStatsWindowHours }),
   setToolStatsScope: toolStatsScope => set({ toolStatsScope }),
+  setUseLocalAi: useLocalAi => set({ useLocalAi }),
   resetUi: () => set({ ...initialState })
 }));

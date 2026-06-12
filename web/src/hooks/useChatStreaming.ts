@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Session } from '../types';
 import { useStreamStore } from '../stores/streamStore';
 import { useChatStore } from '../stores/chatStore';
+import { useUiStore } from '../stores/uiStore';
 
 export function useChatStreaming(
   api: any,
@@ -48,12 +49,15 @@ export function useChatStreaming(
     ]);
     
     try {
+      const { useLocalAi } = useUiStore.getState();
       await api.streamChat({
         sessionId: initialSessionId,
         message: content,
         provider: activeSession?.provider,
-        model: activeSession?.model,
-        maxContextTokens: contextTokenLimit ?? undefined
+        model: useLocalAi ? 'Qwen3.5-9B' : activeSession?.model,
+        maxContextTokens: contextTokenLimit ?? undefined,
+        customBaseUrl: useLocalAi ? 'http://localhost:1234/v1' : undefined,
+        customApiKey: useLocalAi ? 'local' : undefined
       }, {
         onMeta: (_meta: any) => {
           // stream metadata received (session, model, diagnostics) — mostly informational
@@ -93,6 +97,12 @@ export function useChatStreaming(
       }
       chat.setStreamState('error');
       chat.setLastFailedMessage(content);
+      
+      const currentBuffer = useStreamStore.getState().buffer;
+      const errorNotice = "\n\n💥 服务意外中断 (Generation interrupted)";
+      chat.setMessages((prev: any[]) => prev.map(msg => msg.id === assistantMessageId ? { ...msg, content: currentBuffer + errorNotice } : msg));
+      useStreamStore.getState().resetStream();
+      
       const kind = applyError(e);
       if (kind === 'rate_limit') armRateLimitAutoRetry();
       try {

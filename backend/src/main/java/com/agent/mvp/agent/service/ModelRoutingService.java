@@ -15,12 +15,14 @@ public class ModelRoutingService {
         this.appProperties = appProperties;
     }
 
-    public ResolvedModelConfig resolve(ModelProviderType requestProvider,
-                                       String requestModel,
-                                       ConversationSession session) {
-        ModelProviderType provider = requestProvider != null ? requestProvider
-                : session != null && session.getProvider() != null ? session.getProvider()
-                : appProperties.getDefaultProvider();
+    public ResolvedModelConfig resolve(
+            ModelProviderType requestProvider, String requestModel, ConversationSession session) {
+        ModelProviderType provider =
+                requestProvider != null
+                        ? requestProvider
+                        : session != null && session.getProvider() != null
+                                ? session.getProvider()
+                                : appProperties.getDefaultProvider();
 
         String model = requestModel;
         if (model == null || model.isBlank()) {

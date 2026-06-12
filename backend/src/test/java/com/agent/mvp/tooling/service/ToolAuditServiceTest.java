@@ -1,38 +1,33 @@
 package com.agent.mvp.tooling.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
 import com.agent.mvp.tooling.dto.ToolStatsResponse;
 import com.agent.mvp.tooling.entity.ToolAudit;
 import com.agent.mvp.tooling.repo.ToolAuditRepository;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
-
 @ExtendWith(MockitoExtension.class)
 class ToolAuditServiceTest {
 
-    @Mock
-    private ToolAuditRepository toolAuditRepository;
+    @Mock private ToolAuditRepository toolAuditRepository;
 
-    @InjectMocks
-    private ToolAuditService toolAuditService;
+    @InjectMocks private ToolAuditService toolAuditService;
 
     @Test
     void shouldReturnEmptyStatsWhenNoData() {
         UUID userId = UUID.randomUUID();
-        when(toolAuditRepository.selectList(any()))
-                .thenReturn(List.of());
+        when(toolAuditRepository.selectList(any())).thenReturn(List.of());
 
         ToolStatsResponse stats = toolAuditService.stats(userId, 24, null);
 
@@ -49,15 +44,14 @@ class ToolAuditServiceTest {
         UUID userId = UUID.randomUUID();
         UUID sessionId = UUID.randomUUID();
 
-        List<ToolAudit> rows = List.of(
-                row(userId, sessionId, "searchCode", "success", 320),
-                row(userId, sessionId, "searchCode", "success", 880),
-                row(userId, sessionId, "readFile", "error", 1280),
-                row(userId, sessionId, "readFile", "success", 3580)
-        );
+        List<ToolAudit> rows =
+                List.of(
+                        row(userId, sessionId, "searchCode", "success", 320),
+                        row(userId, sessionId, "searchCode", "success", 880),
+                        row(userId, sessionId, "readFile", "error", 1280),
+                        row(userId, sessionId, "readFile", "success", 3580));
 
-        when(toolAuditRepository.selectList(any()))
-                .thenReturn(rows);
+        when(toolAuditRepository.selectList(any())).thenReturn(rows);
 
         ToolStatsResponse stats = toolAuditService.stats(userId, 24, null);
 
@@ -69,13 +63,24 @@ class ToolAuditServiceTest {
         assertEquals(880, stats.p50DurationMs());
         assertEquals(3580, stats.p95DurationMs());
         assertEquals(2, stats.topTools().size());
-        assertTrue(stats.topTools().stream().anyMatch(item ->
-                "searchCode".equals(item.toolName()) && item.runs() == 2 && item.successRate() == 100.0));
-        assertTrue(stats.topTools().stream().anyMatch(item ->
-                "readFile".equals(item.toolName()) && item.runs() == 2 && item.successRate() == 50.0));
+        assertTrue(
+                stats.topTools().stream()
+                        .anyMatch(
+                                item ->
+                                        "searchCode".equals(item.toolName())
+                                                && item.runs() == 2
+                                                && item.successRate() == 100.0));
+        assertTrue(
+                stats.topTools().stream()
+                        .anyMatch(
+                                item ->
+                                        "readFile".equals(item.toolName())
+                                                && item.runs() == 2
+                                                && item.successRate() == 50.0));
     }
 
-    private ToolAudit row(UUID userId, UUID sessionId, String toolName, String status, long durationMs) {
+    private ToolAudit row(
+            UUID userId, UUID sessionId, String toolName, String status, long durationMs) {
         ToolAudit audit = new ToolAudit();
         audit.setUserId(userId);
         audit.setSessionId(sessionId);

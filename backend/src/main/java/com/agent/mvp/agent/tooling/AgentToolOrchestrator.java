@@ -3,10 +3,9 @@ package com.agent.mvp.agent.tooling;
 import com.agent.mvp.tooling.service.CodeToolService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Component;
-
 import java.util.List;
 import java.util.Map;
+import org.springframework.stereotype.Component;
 
 @Component
 public class AgentToolOrchestrator {
@@ -23,47 +22,50 @@ public class AgentToolOrchestrator {
         return List.of(
                 new ToolSpec(
                         "execute_cli_command",
-                        "Run a bash command on the user's local machine via the CLI client. Use this to read files, run tests, list dirs, or edit code locally.",
-                        schema(List.of("command"), "command", type("string"), "cwd", type("string"))
-                ),
+                        "Run a bash command on the user's local machine via the CLI client. Use"
+                            + " this to read files, run tests, list dirs, or edit code locally.",
+                        schema(
+                                List.of("command"),
+                                "command",
+                                type("string"),
+                                "cwd",
+                                type("string"))),
                 new ToolSpec(
                         "searchCode",
                         "Search source code by regex-like pattern.",
                         schema(
                                 List.of("query"),
-                                "query", type("string"),
-                                "glob", type("string"),
-                                "maxResults", integerType(1, 100)
-                        )
-                ),
+                                "query",
+                                type("string"),
+                                "glob",
+                                type("string"),
+                                "maxResults",
+                                integerType(1, 100))),
                 new ToolSpec(
                         "readFile",
                         "Read a file from workspace by path and optional line range.",
                         schema(
                                 List.of("path"),
-                                "path", type("string"),
-                                "startLine", integerType(1, null),
-                                "endLine", integerType(1, null)
-                        )
-                ),
+                                "path",
+                                type("string"),
+                                "startLine",
+                                integerType(1, null),
+                                "endLine",
+                                integerType(1, null))),
                 new ToolSpec(
                         "listRepoTree",
                         "List repository tree from a relative path with max depth.",
-                        schema(
-                                List.of(),
-                                "path", type("string"),
-                                "depth", integerType(1, 5)
-                        )
-                ),
+                        schema(List.of(), "path", type("string"), "depth", integerType(1, 5))),
                 new ToolSpec(
                         "analyzePom",
                         "Summarize pom.xml dependencies and artifact info.",
-                        schema(List.of(), "path", type("string"))
-                )
-        );
+                        schema(List.of(), "path", type("string"))));
     }
 
-    public java.util.concurrent.CompletableFuture<ToolResult> execute(ToolCall call, java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> clientToolInvoker) {
+    public java.util.concurrent.CompletableFuture<ToolResult> execute(
+            ToolCall call,
+            java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>>
+                    clientToolInvoker) {
         CodeToolService.ToolCallOutput output;
         JsonNode args = parseArgs(call.argumentsJson());
         String name = call.name() == null ? "" : call.name();
@@ -71,50 +73,71 @@ public class AgentToolOrchestrator {
         if ("execute_cli_command".equals(name)) {
             long start = System.currentTimeMillis();
             try {
-                return clientToolInvoker.apply(call).handle((res, ex) -> {
-                    String status = "SUCCESS";
-                    if (ex != null) {
-                        res = "ERROR: " + ex.getMessage();
-                        status = "ERROR";
-                    } else if (res != null && res.startsWith("ERROR:")) {
-                        status = "ERROR";
-                    }
-                    return new ToolResult(call.id(), name, call.argumentsJson(), status, System.currentTimeMillis() - start, res);
-                });
+                return clientToolInvoker
+                        .apply(call)
+                        .handle(
+                                (res, ex) -> {
+                                    String status = "SUCCESS";
+                                    if (ex != null) {
+                                        res = "ERROR: " + ex.getMessage();
+                                        status = "ERROR";
+                                    } else if (res != null && res.startsWith("ERROR:")) {
+                                        status = "ERROR";
+                                    }
+                                    return new ToolResult(
+                                            call.id(),
+                                            name,
+                                            call.argumentsJson(),
+                                            status,
+                                            System.currentTimeMillis() - start,
+                                            res);
+                                });
             } catch (Exception ex) {
                 return java.util.concurrent.CompletableFuture.completedFuture(
-                        new ToolResult(call.id(), name, call.argumentsJson(), "ERROR", System.currentTimeMillis() - start, "ERROR: " + ex.getMessage())
-                );
+                        new ToolResult(
+                                call.id(),
+                                name,
+                                call.argumentsJson(),
+                                "ERROR",
+                                System.currentTimeMillis() - start,
+                                "ERROR: " + ex.getMessage()));
             }
         }
 
-        output = switch (name) {
-            case "searchCode" -> codeToolService.searchCode(
-                    text(args, "query"),
-                    text(args, "glob"),
-                    integer(args, "maxResults", 40)
-            );
-            case "readFile" -> codeToolService.readFile(
-                    text(args, "path"),
-                    boxedInt(args, "startLine"),
-                    boxedInt(args, "endLine")
-            );
-            case "listRepoTree" -> codeToolService.listRepoTree(
-                    fallback(text(args, "path"), "."),
-                    integer(args, "depth", 3)
-            );
-            case "analyzePom" -> codeToolService.analyzePom(fallback(text(args, "path"), "pom.xml"));
-            default -> new CodeToolService.ToolCallOutput(name, call.argumentsJson(), "ERROR", 0, "Unknown tool: " + name);
-        };
+        output =
+                switch (name) {
+                    case "searchCode" ->
+                            codeToolService.searchCode(
+                                    text(args, "query"),
+                                    text(args, "glob"),
+                                    integer(args, "maxResults", 40));
+                    case "readFile" ->
+                            codeToolService.readFile(
+                                    text(args, "path"),
+                                    boxedInt(args, "startLine"),
+                                    boxedInt(args, "endLine"));
+                    case "listRepoTree" ->
+                            codeToolService.listRepoTree(
+                                    fallback(text(args, "path"), "."), integer(args, "depth", 3));
+                    case "analyzePom" ->
+                            codeToolService.analyzePom(fallback(text(args, "path"), "pom.xml"));
+                    default ->
+                            new CodeToolService.ToolCallOutput(
+                                    name,
+                                    call.argumentsJson(),
+                                    "ERROR",
+                                    0,
+                                    "Unknown tool: " + name);
+                };
 
-        return java.util.concurrent.CompletableFuture.completedFuture(new ToolResult(
-                call.id(),
-                output.toolName(),
-                output.argsJson(),
-                output.status(),
-                output.durationMs(),
-                output.output()
-        ));
+        return java.util.concurrent.CompletableFuture.completedFuture(
+                new ToolResult(
+                        call.id(),
+                        output.toolName(),
+                        output.argsJson(),
+                        output.status(),
+                        output.durationMs(),
+                        output.output()));
     }
 
     private JsonNode parseArgs(String argumentsJson) {

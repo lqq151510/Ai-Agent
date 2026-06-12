@@ -1,7 +1,6 @@
 package com.agent.mvp.system.dto;
 
 import com.agent.mvp.tooling.dto.ToolStatsResponse;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -11,6 +10,4 @@ public record ReleaseReportResponse(
         ReadinessResponse readiness,
         ModelsResponse models,
         ToolStatsResponse toolStats,
-        Instant generatedAt
-) {
-}
+        Instant generatedAt) {}

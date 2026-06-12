@@ -9,14 +9,13 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
-import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;
+import javax.crypto.SecretKey;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 @Service
 public class JwtService {
@@ -68,9 +67,7 @@ public class JwtService {
             throw new UnauthorizedException("Access token required");
         }
         return new AuthenticatedUser(
-                UUID.fromString(claims.get(CLAIM_USER_ID, String.class)),
-                claims.getSubject()
-        );
+                UUID.fromString(claims.get(CLAIM_USER_ID, String.class)), claims.getSubject());
     }
 
     public boolean isRefreshToken(String token) {
@@ -84,10 +81,7 @@ public class JwtService {
 
     public Jws<Claims> parseToken(String token) {
         try {
-            return Jwts.parser()
-                    .verifyWith(secretKey)
-                    .build()
-                    .parseSignedClaims(token);
+            return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token);
         } catch (JwtException | IllegalArgumentException ex) {
             throw new UnauthorizedException("Invalid or expired token");
         }
@@ -106,6 +100,6 @@ public class JwtService {
                 .compact();
     }
 
-    public record TokenPair(String accessToken, String refreshToken, long accessTokenExpiresInSeconds) {
-    }
+    public record TokenPair(
+            String accessToken, String refreshToken, long accessTokenExpiresInSeconds) {}
 }

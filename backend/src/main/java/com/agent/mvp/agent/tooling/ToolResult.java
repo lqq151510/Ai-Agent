@@ -6,6 +6,4 @@ public record ToolResult(
         String argsJson,
         String status,
         long durationMs,
-        String output
-) {
-}
+        String output) {}

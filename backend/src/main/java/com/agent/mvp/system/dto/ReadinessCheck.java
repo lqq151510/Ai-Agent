@@ -8,6 +8,4 @@ public record ReadinessCheck(
         String detail,
         String code,
         Long latencyMs,
-        Map<String, String> metadata
-) {
-}
+        Map<String, String> metadata) {}

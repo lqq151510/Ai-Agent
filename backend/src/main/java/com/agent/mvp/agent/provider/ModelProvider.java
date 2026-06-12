@@ -3,7 +3,6 @@ package com.agent.mvp.agent.provider;
 import com.agent.mvp.agent.ModelProviderType;
 import com.agent.mvp.agent.dto.ModelChatRequest;
 import com.agent.mvp.agent.dto.ModelChatResponse;
-
 import java.util.function.Consumer;
 
 public interface ModelProvider {

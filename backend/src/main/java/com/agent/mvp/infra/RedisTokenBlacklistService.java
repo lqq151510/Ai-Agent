@@ -1,14 +1,12 @@
 package com.agent.mvp.infra;
 
-import org.springframework.context.annotation.Profile;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Service;
-
-import java.time.Duration;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
 
 @Service
 @Profile("!desktop")

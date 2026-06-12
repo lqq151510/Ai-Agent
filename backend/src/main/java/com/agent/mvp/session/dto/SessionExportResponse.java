@@ -4,8 +4,4 @@ import java.time.Instant;
 import java.util.List;
 
 public record SessionExportResponse(
-        SessionResponse session,
-        List<MessageResponse> messages,
-        Instant exportedAt
-) {
-}
+        SessionResponse session, List<MessageResponse> messages, Instant exportedAt) {}

@@ -4,14 +4,13 @@ import com.agent.mvp.session.dto.MessageResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.context.annotation.Profile;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.context.annotation.Profile;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
 
 @Service
 @Profile("!desktop")
@@ -35,7 +34,10 @@ public class RedisSessionCacheService implements SessionCacheService {
         }
 
         try {
-            JavaType listType = objectMapper.getTypeFactory().constructCollectionType(List.class, MessageResponse.class);
+            JavaType listType =
+                    objectMapper
+                            .getTypeFactory()
+                            .constructCollectionType(List.class, MessageResponse.class);
             return Optional.of(objectMapper.readValue(raw, listType));
         } catch (JsonProcessingException e) {
             redisTemplate.delete(cacheKey(sessionId));
@@ -43,7 +45,8 @@ public class RedisSessionCacheService implements SessionCacheService {
         }
     }
 
-    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(RedisSessionCacheService.class);
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(RedisSessionCacheService.class);
 
     public void cacheMessages(UUID sessionId, List<MessageResponse> messages) {
         try {

@@ -10,8 +10,12 @@ import com.agent.mvp.coach.dto.ScaffoldRequest;
 import com.agent.mvp.coach.dto.ScaffoldResponse;
 import com.agent.mvp.coach.service.CoachService;
 import com.agent.mvp.common.context.RequestContext;
-import com.agent.mvp.common.exception.UnauthorizedException;
 import jakarta.validation.Valid;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.UUID;
 import org.slf4j.MDC;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
@@ -26,12 +30,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.UUID;
-
 @RestController
 @RequestMapping({"/api/coach", "/api/v1/coach"})
 public class CoachController {
@@ -43,53 +41,60 @@ public class CoachController {
     }
 
     @PostMapping("/requirements/breakdown")
-    public RequirementBreakdownResponse breakdown(@Valid @RequestBody RequirementBreakdownRequest request,
-                                                 Authentication authentication) {
+    public RequirementBreakdownResponse breakdown(
+            @Valid @RequestBody RequirementBreakdownRequest request,
+            Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+        try (MDC.MDCCloseable u =
+                MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return coachService.breakdown(user.userId(), request);
         }
     }
 
     @PostMapping("/logs/diagnose")
-    public LogDiagnosisResponse diagnose(@Valid @RequestBody LogDiagnosisRequest request,
-                                         Authentication authentication) {
+    public LogDiagnosisResponse diagnose(
+            @Valid @RequestBody LogDiagnosisRequest request, Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+        try (MDC.MDCCloseable u =
+                MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return coachService.diagnose(user.userId(), request);
         }
     }
 
     @PostMapping("/scaffolds")
-    public ScaffoldResponse scaffold(@Valid @RequestBody ScaffoldRequest request,
-                                     Authentication authentication) {
+    public ScaffoldResponse scaffold(
+            @Valid @RequestBody ScaffoldRequest request, Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+        try (MDC.MDCCloseable u =
+                MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return coachService.generateScaffold(user.userId(), request);
         }
     }
 
     @GetMapping("/scaffolds/{runId}/download")
-    public ResponseEntity<InputStreamResource> downloadScaffold(@PathVariable UUID runId,
-                                                                Authentication authentication) throws IOException {
+    public ResponseEntity<InputStreamResource> downloadScaffold(
+            @PathVariable UUID runId, Authentication authentication) throws IOException {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+        try (MDC.MDCCloseable u =
+                MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             Path artifact = coachService.findScaffoldArtifact(user.userId(), runId);
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
                     .contentLength(Files.size(artifact))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + artifact.getFileName() + "\"")
+                    .header(
+                            HttpHeaders.CONTENT_DISPOSITION,
+                            "attachment; filename=\"" + artifact.getFileName() + "\"")
                     .body(new InputStreamResource(Files.newInputStream(artifact)));
         }
     }
 
     @GetMapping("/runs")
-    public List<CoachRunResponse> runs(@RequestParam(defaultValue = "20") int limit,
-                                       Authentication authentication) {
+    public List<CoachRunResponse> runs(
+            @RequestParam(defaultValue = "20") int limit, Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+        try (MDC.MDCCloseable u =
+                MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             return coachService.listRuns(user.userId(), limit);
         }
     }
-
 }

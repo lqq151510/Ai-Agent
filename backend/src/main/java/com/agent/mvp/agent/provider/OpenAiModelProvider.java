@@ -7,12 +7,19 @@ import com.agent.mvp.agent.dto.ModelChatResponse;
 import com.agent.mvp.agent.tooling.ToolCall;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.config.AppProperties;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
-import org.springframework.http.HttpHeaders;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.http.codec.ServerSentEvent;
@@ -21,15 +28,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.netty.http.client.HttpClient;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 @Component
 public class OpenAiModelProvider implements ModelProvider {
@@ -45,18 +43,26 @@ public class OpenAiModelProvider implements ModelProvider {
         this.appProperties = appProperties;
         this.baseUrl = appProperties.getOpenai().getBaseUrl();
         this.objectMapper = objectMapper;
-        long connectTimeoutMs = Math.max(500, appProperties.getModelRuntime().getConnectTimeoutMs());
-        Duration readTimeout = Duration.ofMillis(Math.max(1_000, appProperties.getModelRuntime().getReadTimeoutMs()));
-        this.totalTimeout = Duration.ofMillis(Math.max(1_000, appProperties.getModelRuntime().getTotalTimeoutMs()));
-        this.idempotentRetries = Math.max(0, appProperties.getModelRuntime().getIdempotentRetries());
-        HttpClient httpClient = HttpClient.create()
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) connectTimeoutMs)
-                .responseTimeout(readTimeout);
-        this.webClient = WebClient.builder()
-                .baseUrl(baseUrl)
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .build();
+        long connectTimeoutMs =
+                Math.max(500, appProperties.getModelRuntime().getConnectTimeoutMs());
+        Duration readTimeout =
+                Duration.ofMillis(
+                        Math.max(1_000, appProperties.getModelRuntime().getReadTimeoutMs()));
+        this.totalTimeout =
+                Duration.ofMillis(
+                        Math.max(1_000, appProperties.getModelRuntime().getTotalTimeoutMs()));
+        this.idempotentRetries =
+                Math.max(0, appProperties.getModelRuntime().getIdempotentRetries());
+        HttpClient httpClient =
+                HttpClient.create()
+                        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) connectTimeoutMs)
+                        .responseTimeout(readTimeout);
+        this.webClient =
+                WebClient.builder()
+                        .baseUrl(baseUrl)
+                        .clientConnector(new ReactorClientHttpConnector(httpClient))
+                        .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .build();
     }
 
     @Override
@@ -70,31 +76,37 @@ public class OpenAiModelProvider implements ModelProvider {
         String requestUrl = resolveBaseUrl(request) + "/chat/completions";
 
         Instant start = Instant.now();
-        Map<String, Object> body = Map.of(
-                "model", request.model(),
-                "messages", request.messages().stream().map(this::toMap).toList(),
-                "temperature", 0.2,
-                "tools", toToolsPayload(request),
-                "tool_choice", request.toolChoice() == null ? "auto" : request.toolChoice()
-        );
+        Map<String, Object> body =
+                Map.of(
+                        "model", request.model(),
+                        "messages", request.messages().stream().map(this::toMap).toList(),
+                        "temperature", 0.2,
+                        "tools", toToolsPayload(request),
+                        "tool_choice",
+                                request.toolChoice() == null ? "auto" : request.toolChoice());
 
         JsonNode response;
         try {
-            response = withIdempotentRetry(() -> webClient.post()
-                    .uri(requestUrl)
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
-                    .bodyValue(body)
-                    .retrieve()
-                    .bodyToMono(JsonNode.class)
-                    .timeout(totalTimeout)
-                    .block());
+            response =
+                    withIdempotentRetry(
+                            () ->
+                                    webClient
+                                            .post()
+                                            .uri(requestUrl)
+                                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                                            .bodyValue(body)
+                                            .retrieve()
+                                            .bodyToMono(JsonNode.class)
+                                            .timeout(totalTimeout)
+                                            .block());
         } catch (WebClientRequestException ex) {
             throw new BadRequestException("Cannot connect to OpenAI at " + baseUrl);
         } catch (WebClientResponseException ex) {
-            throw new BadRequestException("OpenAI request failed: HTTP "
-                    + ex.getStatusCode().value()
-                    + " - "
-                    + truncate(ex.getResponseBodyAsString()));
+            throw new BadRequestException(
+                    "OpenAI request failed: HTTP "
+                            + ex.getStatusCode().value()
+                            + " - "
+                            + truncate(ex.getResponseBodyAsString()));
         }
 
         if (response == null) {
@@ -112,7 +124,11 @@ public class OpenAiModelProvider implements ModelProvider {
         List<ToolCall> toolCalls = extractToolCalls(message);
         String finishReason = choice.path("finish_reason").asText("");
 
-        return new ModelChatResponse(content, Duration.between(start, Instant.now()).toMillis(), toolCalls, finishReason);
+        return new ModelChatResponse(
+                content,
+                Duration.between(start, Instant.now()).toMillis(),
+                toolCalls,
+                finishReason);
     }
 
     @Override
@@ -122,17 +138,24 @@ public class OpenAiModelProvider implements ModelProvider {
 
         Instant start = Instant.now();
         StringBuilder content = new StringBuilder();
-        Map<String, Object> body = Map.of(
-                "model", request.model(),
-                "messages", request.messages().stream().map(this::toMap).toList(),
-                "temperature", 0.2,
-                "stream", true,
-                "tools", toToolsPayload(request),
-                "tool_choice", request.toolChoice() == null ? "auto" : request.toolChoice()
-        );
+        Map<String, Object> body =
+                Map.of(
+                        "model",
+                        request.model(),
+                        "messages",
+                        request.messages().stream().map(this::toMap).toList(),
+                        "temperature",
+                        0.2,
+                        "stream",
+                        true,
+                        "tools",
+                        toToolsPayload(request),
+                        "tool_choice",
+                        request.toolChoice() == null ? "auto" : request.toolChoice());
 
         try {
-            webClient.post()
+            webClient
+                    .post()
                     .uri(requestUrl)
                     .accept(MediaType.TEXT_EVENT_STREAM)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
@@ -140,28 +163,34 @@ public class OpenAiModelProvider implements ModelProvider {
                     .retrieve()
                     .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
                     .timeout(totalTimeout)
-                    .doOnNext(event -> {
-                        String data = event.data();
-                        if (data == null || data.isBlank() || "[DONE]".equals(data)) {
-                            return;
-                        }
-                        String chunk = extractOpenAiChunk(data);
-                        if (!chunk.isEmpty()) {
-                            content.append(chunk);
-                            chunkConsumer.accept(chunk);
-                        }
-                    })
+                    .doOnNext(
+                            event -> {
+                                String data = event.data();
+                                if (data == null || data.isBlank() || "[DONE]".equals(data)) {
+                                    return;
+                                }
+                                String chunk = extractOpenAiChunk(data);
+                                if (!chunk.isEmpty()) {
+                                    content.append(chunk);
+                                    chunkConsumer.accept(chunk);
+                                }
+                            })
                     .blockLast();
         } catch (WebClientRequestException ex) {
             throw new BadRequestException("Cannot connect to OpenAI at " + baseUrl);
         } catch (WebClientResponseException ex) {
-            throw new BadRequestException("OpenAI request failed: HTTP "
-                    + ex.getStatusCode().value()
-                    + " - "
-                    + truncate(ex.getResponseBodyAsString()));
+            throw new BadRequestException(
+                    "OpenAI request failed: HTTP "
+                            + ex.getStatusCode().value()
+                            + " - "
+                            + truncate(ex.getResponseBodyAsString()));
         }
 
-        return new ModelChatResponse(content.toString(), Duration.between(start, Instant.now()).toMillis(), List.of(), "stop");
+        return new ModelChatResponse(
+                content.toString(),
+                Duration.between(start, Instant.now()).toMillis(),
+                List.of(),
+                "stop");
     }
 
     private Map<String, Object> toMap(ModelChatMessage message) {
@@ -175,16 +204,23 @@ public class OpenAiModelProvider implements ModelProvider {
             map.put("tool_call_id", message.toolCallId());
         }
         if (message.toolCalls() != null && !message.toolCalls().isEmpty()) {
-            List<Map<String, Object>> toolCalls = message.toolCalls().stream()
-                    .map(call -> Map.of(
-                            "id", call.id(),
-                            "type", "function",
-                            "function", Map.of(
-                                    "name", call.name(),
-                                    "arguments", call.argumentsJson() == null ? "{}" : call.argumentsJson()
-                            )
-                    ))
-                    .collect(Collectors.toList());
+            List<Map<String, Object>> toolCalls =
+                    message.toolCalls().stream()
+                            .map(
+                                    call ->
+                                            Map.of(
+                                                    "id", call.id(),
+                                                    "type", "function",
+                                                    "function",
+                                                            Map.of(
+                                                                    "name",
+                                                                    call.name(),
+                                                                    "arguments",
+                                                                    call.argumentsJson() == null
+                                                                            ? "{}"
+                                                                            : call
+                                                                                    .argumentsJson())))
+                            .collect(Collectors.toList());
             map.put("tool_calls", toolCalls);
         }
         return map;
@@ -195,14 +231,16 @@ public class OpenAiModelProvider implements ModelProvider {
             return List.of();
         }
         return request.tools().stream()
-                .map(spec -> Map.of(
-                        "type", "function",
-                        "function", Map.of(
-                                "name", spec.name(),
-                                "description", spec.description(),
-                                "parameters", spec.inputJsonSchema()
-                        )
-                ))
+                .map(
+                        spec ->
+                                Map.of(
+                                        "type",
+                                        "function",
+                                        "function",
+                                        Map.of(
+                                                "name", spec.name(),
+                                                "description", spec.description(),
+                                                "parameters", spec.inputJsonSchema())))
                 .toList();
     }
 
@@ -222,13 +260,14 @@ public class OpenAiModelProvider implements ModelProvider {
             return List.of();
         }
         return java.util.stream.StreamSupport.stream(toolCallsNode.spliterator(), false)
-                .map(item -> {
-                    JsonNode function = item.path("function");
-                    String id = item.path("id").asText("");
-                    String name = function.path("name").asText("");
-                    String args = function.path("arguments").asText("{}");
-                    return new ToolCall(id, name, args);
-                })
+                .map(
+                        item -> {
+                            JsonNode function = item.path("function");
+                            String id = item.path("id").asText("");
+                            String name = function.path("name").asText("");
+                            String args = function.path("arguments").asText("{}");
+                            return new ToolCall(id, name, args);
+                        })
                 .toList();
     }
 
@@ -286,7 +325,9 @@ public class OpenAiModelProvider implements ModelProvider {
                 return content.asText();
             }
             JsonNode reasoning = delta.path("reasoning_content");
-            if (!reasoning.isMissingNode() && !reasoning.isNull() && !reasoning.asText().isEmpty()) {
+            if (!reasoning.isMissingNode()
+                    && !reasoning.isNull()
+                    && !reasoning.asText().isEmpty()) {
                 return reasoning.asText();
             }
             return "";

@@ -1,15 +1,14 @@
 package com.agent.mvp.auth.entity;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
+import java.nio.charset.StandardCharsets;
+import java.security.Key;
+import java.security.SecureRandom;
+import java.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
-import java.util.Base64;
-import java.security.Key;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 @Component
 public class StringCryptoConverter {
@@ -20,7 +19,9 @@ public class StringCryptoConverter {
 
     private final byte[] key;
 
-    public StringCryptoConverter(@Value("${security.db.encryption-key:12345678901234567890123456789012}") String configuredKey) {
+    public StringCryptoConverter(
+            @Value("${security.db.encryption-key:12345678901234567890123456789012}")
+                    String configuredKey) {
         // Pad or truncate to 32 bytes for AES-256
         String padded = String.format("%-32s", configuredKey).substring(0, 32);
         this.key = padded.getBytes(StandardCharsets.UTF_8);
@@ -64,7 +65,8 @@ public class StringCryptoConverter {
             cipher.init(Cipher.DECRYPT_MODE, aesKey, gcmSpec);
             return new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            // If it fails to decrypt, it might be unencrypted plaintext from before this feature was added
+            // If it fails to decrypt, it might be unencrypted plaintext from before this feature
+            // was added
             return dbData;
         }
     }

@@ -1,19 +1,14 @@
 package com.agent.mvp.tooling.entity;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.IdType;
-
-
-
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @TableName("tool_audits")
 @Data
@@ -22,8 +17,7 @@ import java.util.UUID;
 @Builder
 public class ToolAudit {
 
-    @TableId
-    private UUID id;
+    @TableId private UUID id;
 
     @TableField("user_id")
     private UUID userId;
@@ -37,22 +31,18 @@ public class ToolAudit {
     @TableField("args_json")
     private String argsJson;
 
-    
     private String status;
 
     @TableField("duration_ms")
     private long durationMs;
 
-    
     private String provider;
 
-    
     private String model;
 
     @TableField("created_at")
     private Instant createdAt;
 
-    
     public void onCreate() {
         if (id == null) {
             id = UUID.randomUUID();
@@ -61,44 +51,4 @@ public class ToolAudit {
             createdAt = Instant.now();
         }
     }
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
 }

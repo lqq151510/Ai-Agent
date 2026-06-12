@@ -30,4 +30,3 @@ public class SystemController {
         return diagnosticsService.readiness();
     }
 }
-

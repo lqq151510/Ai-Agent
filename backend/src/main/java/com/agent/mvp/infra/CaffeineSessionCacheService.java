@@ -3,7 +3,6 @@ package com.agent.mvp.infra;
 import com.agent.mvp.session.dto.MessageResponse;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -14,11 +13,12 @@ public class CaffeineSessionCacheService implements SessionCacheService {
     private final Cache<UUID, List<MessageResponse>> cache;
 
     public CaffeineSessionCacheService(Duration cacheTtl, long maximumSize) {
-        this.cache = Caffeine.newBuilder()
-                .expireAfterWrite(cacheTtl)
-                .maximumSize(maximumSize)
-                .recordStats()
-                .build();
+        this.cache =
+                Caffeine.newBuilder()
+                        .expireAfterWrite(cacheTtl)
+                        .maximumSize(maximumSize)
+                        .recordStats()
+                        .build();
     }
 
     @Override

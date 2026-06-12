@@ -10,6 +10,4 @@ public record CoachRunResponse(
         String inputText,
         String outputJson,
         String downloadUrl,
-        Instant createdAt
-) {
-}
+        Instant createdAt) {}

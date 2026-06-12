@@ -7,6 +7,4 @@ public record LogDiagnosis(
         String rootCause,
         String triggerCondition,
         String minimalFix,
-        List<String> verificationSteps
-) {
-}
+        List<String> verificationSteps) {}

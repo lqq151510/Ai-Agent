@@ -8,6 +8,4 @@ public record RequirementBreakdown(
         List<CoachItem> dataStructures,
         List<ApiEndpointPlan> apiEndpoints,
         List<CoachItem> risks,
-        List<String> testPoints
-) {
-}
+        List<String> testPoints) {}

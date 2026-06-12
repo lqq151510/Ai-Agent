@@ -6,9 +6,7 @@ import jakarta.validation.constraints.Size;
 
 public record RequirementBreakdownRequest(
         @NotBlank(message = "Requirement is required")
-        @Size(max = 8000, message = "Requirement must be <= 8000 characters")
-        String requirement,
+                @Size(max = 8000, message = "Requirement must be <= 8000 characters")
+                String requirement,
         ModelProviderType provider,
-        String model
-) {
-}
+        String model) {}

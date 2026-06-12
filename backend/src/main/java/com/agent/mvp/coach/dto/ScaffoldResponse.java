@@ -10,6 +10,4 @@ public record ScaffoldResponse(
         List<String> fileTree,
         List<ScaffoldFilePreview> previews,
         List<String> startCommands,
-        String downloadUrl
-) {
-}
+        String downloadUrl) {}

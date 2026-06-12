@@ -1,44 +1,46 @@
 package com.agent.mvp.config;
 
-import com.agent.mvp.system.dto.ReadinessCheck;
-import com.agent.mvp.system.service.SystemDiagnosticsService;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.ApplicationArguments;
-
-import java.lang.reflect.Constructor;
-import java.util.Arrays;
-
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.agent.mvp.system.dto.ReadinessCheck;
+import com.agent.mvp.system.service.SystemDiagnosticsService;
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.ApplicationArguments;
+
 class StartupValidationRunnerTest {
 
     @Test
     void shouldMarkProductionConstructorForSpringInjection() {
-        boolean hasAutowiredConstructor = Arrays.stream(StartupValidationRunner.class.getDeclaredConstructors())
-                .filter(this::isProductionConstructor)
-                .anyMatch(constructor -> constructor.isAnnotationPresent(Autowired.class));
+        boolean hasAutowiredConstructor =
+                Arrays.stream(StartupValidationRunner.class.getDeclaredConstructors())
+                        .filter(this::isProductionConstructor)
+                        .anyMatch(constructor -> constructor.isAnnotationPresent(Autowired.class));
 
-        assertTrue(hasAutowiredConstructor, "Spring needs an explicit constructor when test-only constructors exist");
+        assertTrue(
+                hasAutowiredConstructor,
+                "Spring needs an explicit constructor when test-only constructors exist");
     }
 
     @Test
     void shouldFailFastWhenJwtSecretEnvIsMissing() {
         SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
-        StartupValidationRunner runner = new StartupValidationRunner(
-                new AppProperties(),
-                diagnosticsService,
-                mockEnv(null)
-        );
+        StartupValidationRunner runner =
+                new StartupValidationRunner(new AppProperties(), diagnosticsService, mockEnv(null));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
+        IllegalStateException ex =
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> runner.run(mock(ApplicationArguments.class)));
 
         org.junit.jupiter.api.Assertions.assertTrue(ex.getMessage().contains("JWT_SECRET"));
         verifyNoInteractions(diagnosticsService);
@@ -47,13 +49,14 @@ class StartupValidationRunnerTest {
     @Test
     void shouldFailFastWhenJwtSecretEnvTooShort() {
         SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
-        StartupValidationRunner runner = new StartupValidationRunner(
-                new AppProperties(),
-                diagnosticsService,
-                mockEnv("short-secret")
-        );
+        StartupValidationRunner runner =
+                new StartupValidationRunner(
+                        new AppProperties(), diagnosticsService, mockEnv("short-secret"));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
+        IllegalStateException ex =
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> runner.run(mock(ApplicationArguments.class)));
 
         org.junit.jupiter.api.Assertions.assertTrue(ex.getMessage().contains("JWT_SECRET"));
         verifyNoInteractions(diagnosticsService);
@@ -64,17 +67,18 @@ class StartupValidationRunnerTest {
         SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
         when(diagnosticsService.checkDatabase()).thenReturn(readinessCheck("database", true, "ok"));
         when(diagnosticsService.checkRedis()).thenReturn(readinessCheck("redis", true, "ok"));
-        when(diagnosticsService.checkModelProvider()).thenReturn(readinessCheck("model", true, "ok"));
+        when(diagnosticsService.checkModelProvider())
+                .thenReturn(readinessCheck("model", true, "ok"));
         AppProperties appProperties = new AppProperties();
         appProperties.getOpenai().setApiKey("sk-test");
         appProperties.getOpenai().setBaseUrl("http://localhost:1234/v1");
         appProperties.setDefaultOpenaiModel("qwen/qwen3.5-9b");
 
-        StartupValidationRunner runner = new StartupValidationRunner(
-                appProperties,
-                diagnosticsService,
-                mockEnv("01234567890123456789012345678901")
-        );
+        StartupValidationRunner runner =
+                new StartupValidationRunner(
+                        appProperties,
+                        diagnosticsService,
+                        mockEnv("01234567890123456789012345678901"));
 
         assertDoesNotThrow(() -> runner.run(mock(ApplicationArguments.class)));
         verify(diagnosticsService).checkDatabase();
@@ -87,18 +91,19 @@ class StartupValidationRunnerTest {
         SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
         when(diagnosticsService.checkDatabase()).thenReturn(readinessCheck("database", true, "ok"));
         when(diagnosticsService.checkRedis()).thenReturn(readinessCheck("redis", true, "ok"));
-        when(diagnosticsService.checkModelProvider()).thenReturn(readinessCheck("model", false, "mock not available"));
+        when(diagnosticsService.checkModelProvider())
+                .thenReturn(readinessCheck("model", false, "mock not available"));
         AppProperties appProperties = new AppProperties();
         appProperties.getOpenai().setApiKey("sk-test");
         appProperties.getOpenai().setBaseUrl("http://localhost:1234/v1");
         appProperties.setDefaultOpenaiModel("qwen/qwen3.5-9b");
         appProperties.getStartupValidation().setFailFast(false);
 
-        StartupValidationRunner runner = new StartupValidationRunner(
-                appProperties,
-                diagnosticsService,
-                mockEnv("01234567890123456789012345678901")
-        );
+        StartupValidationRunner runner =
+                new StartupValidationRunner(
+                        appProperties,
+                        diagnosticsService,
+                        mockEnv("01234567890123456789012345678901"));
 
         assertDoesNotThrow(() -> runner.run(mock(ApplicationArguments.class)));
         verify(diagnosticsService).checkDatabase();
@@ -111,21 +116,26 @@ class StartupValidationRunnerTest {
         SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
         when(diagnosticsService.checkDatabase()).thenReturn(readinessCheck("database", true, "ok"));
         when(diagnosticsService.checkRedis()).thenReturn(readinessCheck("redis", true, "ok"));
-        when(diagnosticsService.checkModelProvider()).thenReturn(readinessCheck("model", false, "mock not available"));
+        when(diagnosticsService.checkModelProvider())
+                .thenReturn(readinessCheck("model", false, "mock not available"));
         AppProperties appProperties = new AppProperties();
         appProperties.getOpenai().setApiKey("sk-test");
         appProperties.getOpenai().setBaseUrl("http://localhost:1234/v1");
         appProperties.setDefaultOpenaiModel("qwen/qwen3.5-9b");
         appProperties.getStartupValidation().setFailFast(true);
 
-        StartupValidationRunner runner = new StartupValidationRunner(
-                appProperties,
-                diagnosticsService,
-                mockEnv("01234567890123456789012345678901")
-        );
+        StartupValidationRunner runner =
+                new StartupValidationRunner(
+                        appProperties,
+                        diagnosticsService,
+                        mockEnv("01234567890123456789012345678901"));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
-        org.junit.jupiter.api.Assertions.assertTrue(ex.getMessage().contains("Model provider readiness check failed"));
+        IllegalStateException ex =
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> runner.run(mock(ApplicationArguments.class)));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                ex.getMessage().contains("Model provider readiness check failed"));
         verify(diagnosticsService).checkDatabase();
         verify(diagnosticsService).checkRedis();
         verify(diagnosticsService).checkModelProvider();
@@ -134,20 +144,25 @@ class StartupValidationRunnerTest {
     @Test
     void shouldFailWhenRequiredDependencyCheckFails() {
         SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
-        when(diagnosticsService.checkDatabase()).thenReturn(readinessCheck("database", false, "db down"));
+        when(diagnosticsService.checkDatabase())
+                .thenReturn(readinessCheck("database", false, "db down"));
         AppProperties appProperties = new AppProperties();
         appProperties.getOpenai().setApiKey("sk-test");
         appProperties.getOpenai().setBaseUrl("http://localhost:1234/v1");
         appProperties.setDefaultOpenaiModel("qwen/qwen3.5-9b");
 
-        StartupValidationRunner runner = new StartupValidationRunner(
-                appProperties,
-                diagnosticsService,
-                mockEnv("01234567890123456789012345678901")
-        );
+        StartupValidationRunner runner =
+                new StartupValidationRunner(
+                        appProperties,
+                        diagnosticsService,
+                        mockEnv("01234567890123456789012345678901"));
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> runner.run(mock(ApplicationArguments.class)));
-        org.junit.jupiter.api.Assertions.assertTrue(ex.getMessage().contains("Database connectivity check failed"));
+        IllegalStateException ex =
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> runner.run(mock(ApplicationArguments.class)));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                ex.getMessage().contains("Database connectivity check failed"));
         verify(diagnosticsService).checkDatabase();
         verify(diagnosticsService, never()).checkRedis();
         verify(diagnosticsService, never()).checkModelProvider();
@@ -166,7 +181,8 @@ class StartupValidationRunnerTest {
     }
 
     private org.springframework.core.env.Environment mockEnv(String secret) {
-        org.springframework.core.env.Environment env = mock(org.springframework.core.env.Environment.class);
+        org.springframework.core.env.Environment env =
+                mock(org.springframework.core.env.Environment.class);
         when(env.getProperty("security.jwt.secret")).thenReturn(secret);
         return env;
     }

@@ -5,9 +5,6 @@ import com.agent.mvp.auth.dto.TokenResponse;
 import com.agent.mvp.auth.dto.UpdateUserConfigRequest;
 import com.agent.mvp.auth.dto.UserProfileResponse;
 import com.agent.mvp.auth.entity.User;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import java.util.Optional;
-import com.agent.mvp.auth.service.UserService;
 import com.agent.mvp.auth.security.AuthenticatedUser;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.common.exception.NotFoundException;
@@ -15,6 +12,7 @@ import com.agent.mvp.common.exception.UnauthorizedException;
 import io.jsonwebtoken.Claims;
 import java.time.Duration;
 import java.util.Date;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -30,10 +28,11 @@ public class AuthService {
     private final JwtService jwtService;
     private final com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService;
 
-    public AuthService(UserService userService,
-                       PasswordEncoder passwordEncoder,
-                       JwtService jwtService,
-                       com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService) {
+    public AuthService(
+            UserService userService,
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService,
+            com.agent.mvp.infra.TokenBlacklistService tokenBlacklistService) {
         this.userService = userService;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
@@ -77,15 +76,17 @@ public class AuthService {
 
     public TokenResponse login(LoginRequest request) {
         String normalizedEmail = request.email().toLowerCase().trim();
-        User user = Optional.ofNullable(userService.getUserByEmail(normalizedEmail))
-                .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
+        User user =
+                Optional.ofNullable(userService.getUserByEmail(normalizedEmail))
+                        .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid email or password");
         }
 
         JwtService.TokenPair pair = jwtService.issueTokens(user);
-        return new TokenResponse(pair.accessToken(), pair.refreshToken(), pair.accessTokenExpiresInSeconds());
+        return new TokenResponse(
+                pair.accessToken(), pair.refreshToken(), pair.accessTokenExpiresInSeconds());
     }
 
     @Transactional
@@ -94,8 +95,9 @@ public class AuthService {
             throw new UnauthorizedException("Refresh token required");
         }
 
-        User user = Optional.ofNullable(userService.getUserById(jwtService.extractUserId(refreshToken)))
-                .orElseThrow(() -> new UnauthorizedException("User not found"));
+        User user =
+                Optional.ofNullable(userService.getUserById(jwtService.extractUserId(refreshToken)))
+                        .orElseThrow(() -> new UnauthorizedException("User not found"));
 
         int tokenVersion = jwtService.extractTokenVersion(refreshToken);
         if (tokenVersion != user.getTokenVersion()) {
@@ -103,26 +105,38 @@ public class AuthService {
         }
 
         user.setTokenVersion(user.getTokenVersion() + 1);
-        if(user.getId() == null) { userService.createUser(user); } else { userService.updateUser(user); }
+        if (user.getId() == null) {
+            userService.createUser(user);
+        } else {
+            userService.updateUser(user);
+        }
 
         JwtService.TokenPair pair = jwtService.issueTokens(user);
-        return new TokenResponse(pair.accessToken(), pair.refreshToken(), pair.accessTokenExpiresInSeconds());
+        return new TokenResponse(
+                pair.accessToken(), pair.refreshToken(), pair.accessTokenExpiresInSeconds());
     }
 
     public UserProfileResponse me(AuthenticatedUser authenticatedUser) {
-        User user = Optional.ofNullable(userService.getUserById(authenticatedUser.userId()))
-                .orElseThrow(() -> new NotFoundException("User not found"));
+        User user =
+                Optional.ofNullable(userService.getUserById(authenticatedUser.userId()))
+                        .orElseThrow(() -> new NotFoundException("User not found"));
         return toProfileResponse(user);
     }
 
     @Transactional
-    public UserProfileResponse updateConfig(AuthenticatedUser authenticatedUser, UpdateUserConfigRequest configRequest) {
-        User user = Optional.ofNullable(userService.getUserById(authenticatedUser.userId()))
-                .orElseThrow(() -> new NotFoundException("User not found"));
-        
+    public UserProfileResponse updateConfig(
+            AuthenticatedUser authenticatedUser, UpdateUserConfigRequest configRequest) {
+        User user =
+                Optional.ofNullable(userService.getUserById(authenticatedUser.userId()))
+                        .orElseThrow(() -> new NotFoundException("User not found"));
+
         user.setCustomBaseUrl(configRequest.customBaseUrl());
         user.setCustomApiKey(configRequest.customApiKey());
-        if(user.getId() == null) { userService.createUser(user); } else { userService.updateUser(user); }
+        if (user.getId() == null) {
+            userService.createUser(user);
+        } else {
+            userService.updateUser(user);
+        }
 
         return toProfileResponse(user);
     }
@@ -131,7 +145,11 @@ public class AuthService {
         String maskedKey = null;
         if (user.getCustomApiKey() != null && !user.getCustomApiKey().isBlank()) {
             if (user.getCustomApiKey().length() > 6) {
-                maskedKey = user.getCustomApiKey().substring(0, 3) + "***" + user.getCustomApiKey().substring(user.getCustomApiKey().length() - 3);
+                maskedKey =
+                        user.getCustomApiKey().substring(0, 3)
+                                + "***"
+                                + user.getCustomApiKey()
+                                        .substring(user.getCustomApiKey().length() - 3);
             } else {
                 maskedKey = "***";
             }
@@ -141,7 +159,6 @@ public class AuthService {
                 user.getEmail(),
                 user.getCreatedAt(),
                 user.getCustomBaseUrl(),
-                maskedKey
-        );
+                maskedKey);
     }
 }

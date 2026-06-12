@@ -4,10 +4,4 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record UserProfileResponse(
-        UUID id,
-        String email,
-        Instant createdAt,
-        String customBaseUrl,
-        String customApiKey
-) {
-}
+        UUID id, String email, Instant createdAt, String customBaseUrl, String customApiKey) {}

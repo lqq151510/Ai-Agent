@@ -10,6 +10,4 @@ public record MessageResponse(
         String toolTrace,
         String provider,
         String model,
-        Instant createdAt
-) {
-}
+        Instant createdAt) {}

@@ -1,15 +1,15 @@
 package com.agent.mvp.agent.service;
 
+import com.agent.mvp.agent.dto.AgentExecutionDiagnostics;
 import com.agent.mvp.agent.dto.ChatRequest;
 import com.agent.mvp.agent.dto.ChatResponse;
 import com.agent.mvp.agent.dto.ChatStreamMeta;
-import com.agent.mvp.agent.dto.AgentExecutionDiagnostics;
 import com.agent.mvp.agent.dto.ModelChatMessage;
 import com.agent.mvp.agent.dto.ResolvedModelConfig;
 import com.agent.mvp.agent.tooling.AgentToolOrchestrator;
+import com.agent.mvp.agent.tooling.ClientToolRegistry;
 import com.agent.mvp.agent.tooling.ToolCall;
 import com.agent.mvp.agent.tooling.ToolResult;
-import com.agent.mvp.agent.tooling.ClientToolRegistry;
 import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.auth.service.UserService;
 import com.agent.mvp.config.AppProperties;
@@ -19,18 +19,17 @@ import com.agent.mvp.session.service.SessionService;
 import com.agent.mvp.tooling.dto.ToolExecutionResult;
 import com.agent.mvp.tooling.service.ToolAuditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import org.flexagent.core.runtime.AgentRuntime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-import java.util.function.Consumer;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 
 @Service
 public class AgentService {
@@ -50,18 +49,19 @@ public class AgentService {
     private final UserService userService;
     private final SemanticCacheService semanticCacheService;
 
-    public AgentService(SessionService sessionService,
-                        ModelRoutingService modelRoutingService,
-                        ModelGateway modelGateway,
-                        AgentToolOrchestrator toolOrchestrator,
-                        ToolAuditService toolAuditService,
-                        AppProperties appProperties,
-                        ObjectMapper objectMapper,
-                        RAGMemoryService ragMemoryService,
-                        ClientToolRegistry clientToolRegistry,
-                        FlexRuntimeFactory flexRuntimeFactory,
-                        UserService userService,
-                        SemanticCacheService semanticCacheService) {
+    public AgentService(
+            SessionService sessionService,
+            ModelRoutingService modelRoutingService,
+            ModelGateway modelGateway,
+            AgentToolOrchestrator toolOrchestrator,
+            ToolAuditService toolAuditService,
+            AppProperties appProperties,
+            ObjectMapper objectMapper,
+            RAGMemoryService ragMemoryService,
+            ClientToolRegistry clientToolRegistry,
+            FlexRuntimeFactory flexRuntimeFactory,
+            UserService userService,
+            SemanticCacheService semanticCacheService) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
         this.modelGateway = modelGateway;
@@ -78,22 +78,31 @@ public class AgentService {
 
     public ChatResponse chat(UUID userId, ChatRequest request) {
         ConversationSession session = sessionService.findOwnedSession(userId, request.sessionId());
-        ResolvedModelConfig resolved = modelRoutingService.resolve(request.provider(), request.model(), session);
-        sessionService.saveMessage(session, "user", request.message(), null, resolved.provider().name(), resolved.model());
+        ResolvedModelConfig resolved =
+                modelRoutingService.resolve(request.provider(), request.model(), session);
+        sessionService.saveMessage(
+                session,
+                "user",
+                request.message(),
+                null,
+                resolved.provider().name(),
+                resolved.model());
         int maxContextTokens = resolveContextTokenBudget(request.maxContextTokens(), session);
 
-        Optional<String> cachedResponseOpt = semanticCacheService.findCachedResponse(request.message());
+        Optional<String> cachedResponseOpt =
+                semanticCacheService.findCachedResponse(request.message());
         if (cachedResponseOpt.isPresent()) {
             String cachedResponse = cachedResponseOpt.get();
-            sessionService.saveMessage(session, "assistant", cachedResponse, null, resolved.provider().name(), resolved.model());
-            AgentExecutionDiagnostics execution = new AgentExecutionDiagnostics(
-                    maxContextTokens,
-                    maxToolSteps(),
-                    0,
-                    false,
-                    0,
-                    "completed_from_cache"
-            );
+            sessionService.saveMessage(
+                    session,
+                    "assistant",
+                    cachedResponse,
+                    null,
+                    resolved.provider().name(),
+                    resolved.model());
+            AgentExecutionDiagnostics execution =
+                    new AgentExecutionDiagnostics(
+                            maxContextTokens, maxToolSteps(), 0, false, 0, "completed_from_cache");
             return new ChatResponse(
                     session.getId(),
                     resolved.provider(),
@@ -101,13 +110,27 @@ public class AgentService {
                     cachedResponse,
                     0,
                     List.of(),
-                    execution
-            );
+                    execution);
         }
 
-        java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> rejectClientTool = (call) -> java.util.concurrent.CompletableFuture.completedFuture("ERROR: execute_cli_command is only available via streaming chat (/api/v1/agent/chat/stream)");
-        AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, null, request.systemContext(), rejectClientTool);
-        
+        java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>>
+                rejectClientTool =
+                        (call) ->
+                                java.util.concurrent.CompletableFuture.completedFuture(
+                                        "ERROR: execute_cli_command is only available via streaming"
+                                                + " chat (/api/v1/agent/chat/stream)");
+        AgentLoopResult loop =
+                executeLoop(
+                        userId,
+                        session,
+                        resolved,
+                        maxContextTokens,
+                        null,
+                        request.systemContext(),
+                        request.customBaseUrl(),
+                        request.customApiKey(),
+                        rejectClientTool);
+
         if (loop.reply() != null && !loop.reply().isBlank()) {
             semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
         }
@@ -119,52 +142,61 @@ public class AgentService {
                 loop.reply(),
                 loop.totalLatencyMs(),
                 loop.traces(),
-                loop.execution()
-        );
+                loop.execution());
     }
 
-    public ChatResponse streamChat(UUID userId,
-                                   ChatRequest request,
-                                   Consumer<ChatStreamMeta> metaConsumer,
-                                   Consumer<String> chunkConsumer,
-                                   Consumer<ToolCall> clientToolConsumer) {
+    public ChatResponse streamChat(
+            UUID userId,
+            ChatRequest request,
+            Consumer<ChatStreamMeta> metaConsumer,
+            Consumer<String> chunkConsumer,
+            Consumer<ToolCall> clientToolConsumer) {
         ConversationSession session = sessionService.findOwnedSession(userId, request.sessionId());
-        ResolvedModelConfig resolved = modelRoutingService.resolve(request.provider(), request.model(), session);
+        ResolvedModelConfig resolved =
+                modelRoutingService.resolve(request.provider(), request.model(), session);
 
-        sessionService.saveMessage(session, "user", request.message(), null, resolved.provider().name(), resolved.model());
+        sessionService.saveMessage(
+                session,
+                "user",
+                request.message(),
+                null,
+                resolved.provider().name(),
+                resolved.model());
         int maxContextTokens = resolveContextTokenBudget(request.maxContextTokens(), session);
-        metaConsumer.accept(new ChatStreamMeta(
-                session.getId(),
-                resolved.provider(),
-                resolved.model(),
-                List.of(),
-                "started",
-                initialExecutionDiagnostics(maxContextTokens)
-        ));
+        metaConsumer.accept(
+                new ChatStreamMeta(
+                        session.getId(),
+                        resolved.provider(),
+                        resolved.model(),
+                        List.of(),
+                        "started",
+                        initialExecutionDiagnostics(maxContextTokens)));
 
-        Optional<String> cachedResponseOpt = semanticCacheService.findCachedResponse(request.message());
+        Optional<String> cachedResponseOpt =
+                semanticCacheService.findCachedResponse(request.message());
         if (cachedResponseOpt.isPresent()) {
             String cachedResponse = cachedResponseOpt.get();
-            sessionService.saveMessage(session, "assistant", cachedResponse, null, resolved.provider().name(), resolved.model());
+            sessionService.saveMessage(
+                    session,
+                    "assistant",
+                    cachedResponse,
+                    null,
+                    resolved.provider().name(),
+                    resolved.model());
             if (chunkConsumer != null) {
                 chunkConsumer.accept(cachedResponse);
             }
-            AgentExecutionDiagnostics execution = new AgentExecutionDiagnostics(
-                    maxContextTokens,
-                    maxToolSteps(),
-                    0,
-                    false,
-                    0,
-                    "completed_from_cache"
-            );
-            metaConsumer.accept(new ChatStreamMeta(
-                    session.getId(),
-                    resolved.provider(),
-                    resolved.model(),
-                    List.of(),
-                    "completed_from_cache",
-                    execution
-            ));
+            AgentExecutionDiagnostics execution =
+                    new AgentExecutionDiagnostics(
+                            maxContextTokens, maxToolSteps(), 0, false, 0, "completed_from_cache");
+            metaConsumer.accept(
+                    new ChatStreamMeta(
+                            session.getId(),
+                            resolved.provider(),
+                            resolved.model(),
+                            List.of(),
+                            "completed_from_cache",
+                            execution));
             return new ChatResponse(
                     session.getId(),
                     resolved.provider(),
@@ -172,37 +204,56 @@ public class AgentService {
                     cachedResponse,
                     0,
                     List.of(),
-                    execution
-            );
+                    execution);
         }
 
-        java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> clientToolInvoker = (call) -> {
-            try {
-                java.util.concurrent.CompletableFuture<String> future = clientToolRegistry.register(userId.toString(), call.id());
-                if (clientToolConsumer != null) {
-                    clientToolConsumer.accept(call);
-                }
-                return future.orTimeout(appProperties.getAgent().getStreamTimeoutMs(), java.util.concurrent.TimeUnit.MILLISECONDS)
-                    .whenComplete((res, ex) -> clientToolRegistry.remove(userId.toString(), call.id()));
-            } catch (Exception e) {
-                return java.util.concurrent.CompletableFuture.completedFuture("ERROR: Client execution timed out or failed: " + e.getMessage());
-            }
-        };
+        java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>>
+                clientToolInvoker =
+                        (call) -> {
+                            try {
+                                java.util.concurrent.CompletableFuture<String> future =
+                                        clientToolRegistry.register(userId.toString(), call.id());
+                                if (clientToolConsumer != null) {
+                                    clientToolConsumer.accept(call);
+                                }
+                                return future.orTimeout(
+                                                appProperties.getAgent().getStreamTimeoutMs(),
+                                                java.util.concurrent.TimeUnit.MILLISECONDS)
+                                        .whenComplete(
+                                                (res, ex) ->
+                                                        clientToolRegistry.remove(
+                                                                userId.toString(), call.id()));
+                            } catch (Exception e) {
+                                return java.util.concurrent.CompletableFuture.completedFuture(
+                                        "ERROR: Client execution timed out or failed: "
+                                                + e.getMessage());
+                            }
+                        };
 
-        AgentLoopResult loop = executeLoop(userId, session, resolved, maxContextTokens, chunkConsumer, request.systemContext(), clientToolInvoker);
-        
+        AgentLoopResult loop =
+                executeLoop(
+                        userId,
+                        session,
+                        resolved,
+                        maxContextTokens,
+                        chunkConsumer,
+                        request.systemContext(),
+                        request.customBaseUrl(),
+                        request.customApiKey(),
+                        clientToolInvoker);
+
         if (loop.reply() != null && !loop.reply().isBlank()) {
             semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
         }
 
-        metaConsumer.accept(new ChatStreamMeta(
-                session.getId(),
-                resolved.provider(),
-                resolved.model(),
-                loop.traces(),
-                "completed",
-                loop.execution()
-        ));
+        metaConsumer.accept(
+                new ChatStreamMeta(
+                        session.getId(),
+                        resolved.provider(),
+                        resolved.model(),
+                        loop.traces(),
+                        "completed",
+                        loop.execution()));
         return new ChatResponse(
                 session.getId(),
                 resolved.provider(),
@@ -210,21 +261,25 @@ public class AgentService {
                 loop.reply(),
                 loop.totalLatencyMs(),
                 loop.traces(),
-                loop.execution()
-        );
+                loop.execution());
     }
 
-    private AgentLoopResult executeLoop(UUID userId,
-                                        ConversationSession session,
-                                        ResolvedModelConfig resolved,
-                                        int maxContextTokens,
-                                        Consumer<String> chunkConsumer,
-                                        String systemContext,
-                                        java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>> clientToolInvoker) {
+    private AgentLoopResult executeLoop(
+            UUID userId,
+            ConversationSession session,
+            ResolvedModelConfig resolved,
+            int maxContextTokens,
+            Consumer<String> chunkConsumer,
+            String systemContext,
+            String customBaseUrl,
+            String customApiKey,
+            java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>>
+                    clientToolInvoker) {
         List<MessageResponse> history = sessionService.listMessages(userId, session.getId());
         int maxToolSteps = maxToolSteps();
         boolean stopOnToolError = appProperties.getAgent().isStopOnToolError();
-        HistoryWindow historyWindow = buildMessages(userId, history, maxContextTokens, systemContext);
+        HistoryWindow historyWindow =
+                buildMessages(userId, history, maxContextTokens, systemContext);
         List<ModelChatMessage> messages = historyWindow.messages();
         List<ToolExecutionResult> traces = new ArrayList<>();
         StringBuilder replyBuilder = new StringBuilder();
@@ -233,7 +288,8 @@ public class AgentService {
         String stopReason = "completed";
 
         User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
-        AgentRuntime runtime = flexRuntimeFactory.createRuntime(user, resolved, toolOrchestrator.listToolSpecs());
+        AgentRuntime runtime =
+                flexRuntimeFactory.createRuntime(user, resolved, toolOrchestrator.listToolSpecs(), customBaseUrl, customApiKey);
 
         // The last user message has already been saved by the caller and will be
         // sent separately via runtime.send() below — exclude it from injected history
@@ -256,7 +312,8 @@ public class AgentService {
 
             boolean running = true;
             while (running) {
-                org.flexagent.core.model.Step step = runtime.pollStep(100, java.util.concurrent.TimeUnit.MILLISECONDS);
+                org.flexagent.core.model.Step step =
+                        runtime.pollStep(100, java.util.concurrent.TimeUnit.MILLISECONDS);
                 if (step == null) continue;
 
                 if (step.status() == org.flexagent.core.model.StepStatus.ERROR) {
@@ -264,7 +321,8 @@ public class AgentService {
                     running = false;
                 }
 
-                if (step.type() == org.flexagent.core.model.StepType.TOOL_CALL && !step.toolCalls().isEmpty()) {
+                if (step.type() == org.flexagent.core.model.StepType.TOOL_CALL
+                        && !step.toolCalls().isEmpty()) {
                     toolRounds++;
                     if (toolRounds >= maxToolSteps) {
                         stopReason = "max_tool_steps_reached";
@@ -272,11 +330,12 @@ public class AgentService {
                         running = false;
                         break;
                     }
-                    
+
                     List<CompletableFuture<ToolResult>> futures = new ArrayList<>();
                     List<org.flexagent.core.model.ToolCall> fcTools = step.toolCalls();
                     for (org.flexagent.core.model.ToolCall fcTool : fcTools) {
-                        ToolCall localTool = new ToolCall(fcTool.id(), fcTool.name(), fcTool.argumentsJson());
+                        ToolCall localTool =
+                                new ToolCall(fcTool.id(), fcTool.name(), fcTool.argumentsJson());
                         futures.add(toolOrchestrator.execute(localTool, clientToolInvoker));
                     }
 
@@ -289,9 +348,9 @@ public class AgentService {
                         ToolExecutionResult trace = toTrace(result);
                         traces.add(trace);
 
-                        org.flexagent.core.model.ToolResult fcResult = new org.flexagent.core.model.ToolResult(
-                                fcTool.id(), fcTool.name(), null, result.output()
-                        );
+                        org.flexagent.core.model.ToolResult fcResult =
+                                new org.flexagent.core.model.ToolResult(
+                                        fcTool.id(), fcTool.name(), null, result.output());
                         try {
                             runtime.sendToolResult(fcResult);
                         } catch (Exception e) {
@@ -314,7 +373,8 @@ public class AgentService {
                     }
                 }
 
-                if (Boolean.TRUE.equals(step.isCompleteResponse()) && step.type() == org.flexagent.core.model.StepType.TEXT_RESPONSE) {
+                if (Boolean.TRUE.equals(step.isCompleteResponse())
+                        && step.type() == org.flexagent.core.model.StepType.TEXT_RESPONSE) {
                     running = false;
                 }
             }
@@ -328,30 +388,29 @@ public class AgentService {
         long totalLatencyMs = System.currentTimeMillis() - startMs;
 
         persistFinalAssistant(session, resolved, reply, traces);
-        toolAuditService.saveAll(userId, session.getId(), resolved.provider().name(), resolved.model(), traces);
-        AgentExecutionDiagnostics execution = new AgentExecutionDiagnostics(
-                maxContextTokens,
-                maxToolSteps,
-                historyWindow.historyMessagesUsed(),
-                historyWindow.historyTruncated(),
-                toolRounds,
-                stopReason
-        );
+        toolAuditService.saveAll(
+                userId, session.getId(), resolved.provider().name(), resolved.model(), traces);
+        AgentExecutionDiagnostics execution =
+                new AgentExecutionDiagnostics(
+                        maxContextTokens,
+                        maxToolSteps,
+                        historyWindow.historyMessagesUsed(),
+                        historyWindow.historyTruncated(),
+                        toolRounds,
+                        stopReason);
         return new AgentLoopResult(reply, totalLatencyMs, traces, execution);
     }
 
     private AgentExecutionDiagnostics initialExecutionDiagnostics(int maxContextTokens) {
         return new AgentExecutionDiagnostics(
-                maxContextTokens,
-                maxToolSteps(),
-                0,
-                false,
-                0,
-                "started"
-        );
+                maxContextTokens, maxToolSteps(), 0, false, 0, "started");
     }
 
-    private HistoryWindow buildMessages(UUID userId, List<MessageResponse> history, int maxContextTokens, String systemContext) {
+    private HistoryWindow buildMessages(
+            UUID userId,
+            List<MessageResponse> history,
+            int maxContextTokens,
+            String systemContext) {
         List<ModelChatMessage> messages = new ArrayList<>();
 
         String lastUserMessage = "";
@@ -367,13 +426,15 @@ public class AgentService {
             similarDiagnoses = ragMemoryService.searchSimilarDiagnoses(userId, lastUserMessage, 3);
         }
 
-        StringBuilder systemPrompt = new StringBuilder(
-                "You are a Java AI coding assistant. Use provided tool context as factual repo grounding. " +
-                "If tool context is insufficient, say what extra info is needed."
-        );
+        StringBuilder systemPrompt =
+                new StringBuilder(
+                        "You are a Java AI coding assistant. Use provided tool context as factual"
+                                + " repo grounding. If tool context is insufficient, say what extra"
+                                + " info is needed.");
 
         if (!similarDiagnoses.isEmpty()) {
-            systemPrompt.append("\n\nHere are some relevant historical log diagnoses for reference:\n");
+            systemPrompt.append(
+                    "\n\nHere are some relevant historical log diagnoses for reference:\n");
             for (String diagnosis : similarDiagnoses) {
                 systemPrompt.append("---\n").append(diagnosis).append("\n");
             }
@@ -391,25 +452,27 @@ public class AgentService {
         String promptText = systemPrompt.toString();
         messages.add(ModelChatMessage.of("system", promptText));
 
-        int historyBudget = Math.max(0, maxContextTokens - TokenCounter.countTokens(promptText) - 8);
+        int historyBudget =
+                Math.max(0, maxContextTokens - TokenCounter.countTokens(promptText) - 8);
         HistoryWindow historyWindow = sliceByTokenBudget(history, historyBudget);
         List<ModelChatMessage> historyMessages = historyWindow.messages();
         messages.addAll(historyMessages);
-        return new HistoryWindow(messages, historyWindow.historyMessagesUsed(), historyWindow.historyTruncated());
+        return new HistoryWindow(
+                messages, historyWindow.historyMessagesUsed(), historyWindow.historyTruncated());
     }
 
-    private void persistFinalAssistant(ConversationSession session,
-                                       ResolvedModelConfig resolved,
-                                       String reply,
-                                       List<ToolExecutionResult> traces) {
+    private void persistFinalAssistant(
+            ConversationSession session,
+            ResolvedModelConfig resolved,
+            String reply,
+            List<ToolExecutionResult> traces) {
         sessionService.saveMessage(
                 session,
                 "assistant",
                 reply == null ? "" : reply,
                 toJson(traces),
                 resolved.provider().name(),
-                resolved.model()
-        );
+                resolved.model());
     }
 
     private String toJson(Object value) {
@@ -422,7 +485,12 @@ public class AgentService {
     }
 
     private ToolExecutionResult toTrace(ToolResult result) {
-        return new ToolExecutionResult(result.toolName(), result.argsJson(), result.status(), result.durationMs(), result.output());
+        return new ToolExecutionResult(
+                result.toolName(),
+                result.argsJson(),
+                result.status(),
+                result.durationMs(),
+                result.output());
     }
 
     private HistoryWindow sliceByTokenBudget(List<MessageResponse> history, int maxTokens) {
@@ -433,7 +501,8 @@ public class AgentService {
         for (int i = history.size() - 1; i >= 0; i--) {
             MessageResponse msg = history.get(i);
             String content = msg.content() == null ? "" : msg.content();
-            int messageTokens = TokenCounter.countTokens(msg.role()) + TokenCounter.countTokens(content) + 8;
+            int messageTokens =
+                    TokenCounter.countTokens(msg.role()) + TokenCounter.countTokens(content) + 8;
             if (used + messageTokens > budget && !reversed.isEmpty()) {
                 truncated = true;
                 break;
@@ -445,15 +514,17 @@ public class AgentService {
         return new HistoryWindow(reversed, reversed.size(), truncated);
     }
 
-        private String sanitizeSystemContext(String systemContext, int tokenBudget) {
+    private String sanitizeSystemContext(String systemContext, int tokenBudget) {
         if (systemContext == null || systemContext.isBlank()) {
             return "";
         }
 
         String[] lines = systemContext.replace("\r\n", "\n").split("\n");
         StringBuilder sb = new StringBuilder();
-        java.util.regex.Pattern sensitivePattern = java.util.regex.Pattern.compile("(?i)(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie)");
-        
+        java.util.regex.Pattern sensitivePattern =
+                java.util.regex.Pattern.compile(
+                        "(?i)(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie)");
+
         for (String line : lines) {
             if (sensitivePattern.matcher(line).find()) {
                 sb.append("[redacted sensitive line]\n");
@@ -463,12 +534,13 @@ public class AgentService {
         }
         String sanitized = sb.toString();
 
-        sanitized = sanitized
-                .replaceAll("Bearer\\s+[A-Za-z0-9._-]+", "Bearer [redacted]")
-                .replaceAll("(?i)sk-[A-Za-z0-9]+", "sk-[redacted]")
-                .replaceAll("[^\\x09\\x0A\\x0D\\x20-\\x7E]", "")
-                .replaceAll("\\n{3,}", "\\n\\n")
-                .trim();
+        sanitized =
+                sanitized
+                        .replaceAll("Bearer\\s+[A-Za-z0-9._-]+", "Bearer [redacted]")
+                        .replaceAll("(?i)sk-[A-Za-z0-9]+", "sk-[redacted]")
+                        .replaceAll("[^\\x09\\x0A\\x0D\\x20-\\x7E]", "")
+                        .replaceAll("\\n{3,}", "\\n\\n")
+                        .trim();
 
         int currentTokens = TokenCounter.countTokens(sanitized);
         if (currentTokens > tokenBudget) {
@@ -483,7 +555,8 @@ public class AgentService {
         return sanitized;
     }
 
-    private int resolveContextTokenBudget(Integer userProvidedMaxContextTokens, ConversationSession session) {
+    private int resolveContextTokenBudget(
+            Integer userProvidedMaxContextTokens, ConversationSession session) {
         if (userProvidedMaxContextTokens != null) {
             return Math.max(MIN_CONTEXT_TOKENS, userProvidedMaxContextTokens);
         }
@@ -497,16 +570,12 @@ public class AgentService {
         return Math.max(1, appProperties.getAgent().getMaxToolSteps());
     }
 
+    private record AgentLoopResult(
+            String reply,
+            long totalLatencyMs,
+            List<ToolExecutionResult> traces,
+            AgentExecutionDiagnostics execution) {}
 
-
-    private record AgentLoopResult(String reply,
-                                   long totalLatencyMs,
-                                   List<ToolExecutionResult> traces,
-                                   AgentExecutionDiagnostics execution) {
-    }
-
-    private record HistoryWindow(List<ModelChatMessage> messages,
-                                 int historyMessagesUsed,
-                                 boolean historyTruncated) {
-    }
+    private record HistoryWindow(
+            List<ModelChatMessage> messages, int historyMessagesUsed, boolean historyTruncated) {}
 }

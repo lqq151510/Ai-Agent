@@ -1,14 +1,13 @@
 package com.agent.mvp.auth;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.auth.service.JwtService;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
-
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 class JwtServiceTest {
 

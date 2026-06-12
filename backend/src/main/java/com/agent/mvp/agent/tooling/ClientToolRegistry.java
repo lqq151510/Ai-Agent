@@ -1,9 +1,9 @@
 package com.agent.mvp.agent.tooling;
 
-import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.stereotype.Component;
 
 @Component
 public class ClientToolRegistry {

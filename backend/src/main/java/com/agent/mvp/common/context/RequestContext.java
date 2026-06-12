@@ -1,13 +1,7 @@
 package com.agent.mvp.common.context;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-
-import org.slf4j.MDC;
-
 import java.util.UUID;
+import org.slf4j.MDC;
 
 public final class RequestContext {
 
@@ -16,8 +10,7 @@ public final class RequestContext {
     public static final String SESSION_ID_KEY = "sessionId";
     public static final String REQUEST_ID_HEADER = "X-Request-Id";
 
-    private RequestContext() {
-    }
+    private RequestContext() {}
 
     public static String ensureRequestId() {
         String current = MDC.get(REQUEST_ID_KEY);
@@ -33,4 +26,3 @@ public final class RequestContext {
         return MDC.get(REQUEST_ID_KEY);
     }
 }
-

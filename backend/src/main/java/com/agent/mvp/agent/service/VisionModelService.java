@@ -1,13 +1,12 @@
 package com.agent.mvp.agent.service;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.util.stream.Collectors;
 
 @Service
 public class VisionModelService {
@@ -24,18 +23,14 @@ public class VisionModelService {
             throw new RuntimeException("Vision script path is not configured (vision.script-path)");
         }
         try {
-            ProcessBuilder pb = new ProcessBuilder(
-                    "python",
-                    scriptPath,
-                    "--image",
-                    imagePath,
-                    "--prompt",
-                    prompt
-            );
+            ProcessBuilder pb =
+                    new ProcessBuilder(
+                            "python", scriptPath, "--image", imagePath, "--prompt", prompt);
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            try (BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String output = reader.lines().collect(Collectors.joining("\n"));
                 int exitCode = process.waitFor();
                 if (exitCode != 0) {

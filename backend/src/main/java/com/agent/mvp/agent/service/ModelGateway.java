@@ -5,17 +5,17 @@ import com.agent.mvp.agent.dto.ModelChatRequest;
 import com.agent.mvp.agent.dto.ModelChatResponse;
 import com.agent.mvp.agent.provider.ModelProvider;
 import com.agent.mvp.common.exception.BadRequestException;
-import org.springframework.stereotype.Service;
-
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import org.springframework.stereotype.Service;
 
 @Service
 public class ModelGateway {
 
-    private final Map<ModelProviderType, ModelProvider> providers = new EnumMap<>(ModelProviderType.class);
+    private final Map<ModelProviderType, ModelProvider> providers =
+            new EnumMap<>(ModelProviderType.class);
 
     public ModelGateway(List<ModelProvider> providerList) {
         for (ModelProvider provider : providerList) {
@@ -27,9 +27,10 @@ public class ModelGateway {
         return provider(providerType).chat(request);
     }
 
-    public ModelChatResponse stream(ModelProviderType providerType,
-                                    ModelChatRequest request,
-                                    Consumer<String> chunkConsumer) {
+    public ModelChatResponse stream(
+            ModelProviderType providerType,
+            ModelChatRequest request,
+            Consumer<String> chunkConsumer) {
         return provider(providerType).stream(request, chunkConsumer);
     }
 

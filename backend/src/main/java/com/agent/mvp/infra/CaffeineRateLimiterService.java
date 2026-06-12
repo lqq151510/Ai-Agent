@@ -2,7 +2,6 @@ package com.agent.mvp.infra;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -11,11 +10,12 @@ public class CaffeineRateLimiterService implements RateLimiterService {
     private final Cache<String, RateLimitBucket> buckets;
 
     public CaffeineRateLimiterService(Duration expireAfterAccess, long maximumSize) {
-        this.buckets = Caffeine.newBuilder()
-                .expireAfterAccess(expireAfterAccess)
-                .maximumSize(maximumSize)
-                .recordStats()
-                .build();
+        this.buckets =
+                Caffeine.newBuilder()
+                        .expireAfterAccess(expireAfterAccess)
+                        .maximumSize(maximumSize)
+                        .recordStats()
+                        .build();
     }
 
     @Override

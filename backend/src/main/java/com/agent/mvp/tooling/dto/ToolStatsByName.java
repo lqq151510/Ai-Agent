@@ -7,6 +7,4 @@ public record ToolStatsByName(
         long failedRuns,
         double successRate,
         long averageDurationMs,
-        long p95DurationMs
-) {
-}
+        long p95DurationMs) {}

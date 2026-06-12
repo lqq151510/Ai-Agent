@@ -5,6 +5,8 @@ import com.agent.mvp.agent.dto.ModelChatRequest;
 import com.agent.mvp.agent.dto.ModelChatResponse;
 import com.agent.mvp.agent.service.ModelGateway;
 import com.agent.mvp.agent.service.RAGMemoryService;
+import com.agent.mvp.auth.entity.User;
+import com.agent.mvp.auth.service.UserService;
 import com.agent.mvp.coach.domain.GeneratedScaffold;
 import com.agent.mvp.coach.domain.ScaffoldFile;
 import com.agent.mvp.coach.dto.ApiEndpointPlan;
@@ -21,22 +23,19 @@ import com.agent.mvp.coach.dto.ScaffoldRequest;
 import com.agent.mvp.coach.dto.ScaffoldResponse;
 import com.agent.mvp.coach.entity.DevCoachRun;
 import com.agent.mvp.coach.repo.DevCoachRunRepository;
-import com.agent.mvp.auth.entity.User;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import java.util.Optional;
-import com.agent.mvp.auth.service.UserService;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.config.AppProperties;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Service;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import org.springframework.stereotype.Service;
 
 @Service
 public class CoachService {
@@ -51,15 +50,16 @@ public class CoachService {
     private final RAGMemoryService ragMemoryService;
     private final UserService userService;
 
-    public CoachService(ModelGateway modelGateway,
-                        CoachPromptService promptService,
-                        ScaffoldTemplateRegistry scaffoldTemplateRegistry,
-                        ScaffoldZipService scaffoldZipService,
-                        DevCoachRunRepository runRepository,
-                        AppProperties appProperties,
-                        ObjectMapper objectMapper,
-                        RAGMemoryService ragMemoryService,
-                        UserService userService) {
+    public CoachService(
+            ModelGateway modelGateway,
+            CoachPromptService promptService,
+            ScaffoldTemplateRegistry scaffoldTemplateRegistry,
+            ScaffoldZipService scaffoldZipService,
+            DevCoachRunRepository runRepository,
+            AppProperties appProperties,
+            ObjectMapper objectMapper,
+            RAGMemoryService ragMemoryService,
+            UserService userService) {
         this.modelGateway = modelGateway;
         this.promptService = promptService;
         this.scaffoldTemplateRegistry = scaffoldTemplateRegistry;
@@ -71,38 +71,63 @@ public class CoachService {
         this.userService = userService;
     }
 
-    public RequirementBreakdownResponse breakdown(UUID userId, RequirementBreakdownRequest request) {
+    public RequirementBreakdownResponse breakdown(
+            UUID userId, RequirementBreakdownRequest request) {
         User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
-        ModelChatResponse modelResponse = modelGateway.chat(resolveProvider(request.provider()), new ModelChatRequest(
-                resolveModel(request.provider(), request.model()),
-                promptService.requirementMessages(request.requirement()),
-                List.of(),
-                "none",
-                user != null ? user.getCustomBaseUrl() : null,
-                user != null ? user.getCustomApiKey() : null
-        ));
+        ModelChatResponse modelResponse =
+                modelGateway.chat(
+                        resolveProvider(request.provider()),
+                        new ModelChatRequest(
+                                resolveModel(request.provider(), request.model()),
+                                promptService.requirementMessages(request.requirement()),
+                                List.of(),
+                                "none",
+                                user != null ? user.getCustomBaseUrl() : null,
+                                user != null ? user.getCustomApiKey() : null));
         String raw = modelResponse.content() == null ? "" : modelResponse.content();
         Parsed<RequirementBreakdown> parsed = parseRequirementBreakdown(raw);
-        DevCoachRun run = saveRun(userId, "REQUIREMENT_BREAKDOWN", titleFrom(request.requirement()), request.requirement(), toJson(parsed.value()), null);
+        DevCoachRun run =
+                saveRun(
+                        userId,
+                        "REQUIREMENT_BREAKDOWN",
+                        titleFrom(request.requirement()),
+                        request.requirement(),
+                        toJson(parsed.value()),
+                        null);
         return new RequirementBreakdownResponse(run.getId(), parsed.value(), raw, parsed.warning());
     }
 
     public LogDiagnosisResponse diagnose(UUID userId, LogDiagnosisRequest request) {
         User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
-        ModelChatResponse modelResponse = modelGateway.chat(resolveProvider(request.provider()), new ModelChatRequest(
-                resolveModel(request.provider(), request.model()),
-                promptService.logDiagnosisMessages(request.logContent(), request.context()),
-                List.of(),
-                "none",
-                user != null ? user.getCustomBaseUrl() : null,
-                user != null ? user.getCustomApiKey() : null
-        ));
+        ModelChatResponse modelResponse =
+                modelGateway.chat(
+                        resolveProvider(request.provider()),
+                        new ModelChatRequest(
+                                resolveModel(request.provider(), request.model()),
+                                promptService.logDiagnosisMessages(
+                                        request.logContent(), request.context()),
+                                List.of(),
+                                "none",
+                                user != null ? user.getCustomBaseUrl() : null,
+                                user != null ? user.getCustomApiKey() : null));
         String raw = modelResponse.content() == null ? "" : modelResponse.content();
         Parsed<LogDiagnosis> parsed = parseLogDiagnosis(raw);
-        DevCoachRun run = saveRun(userId, "LOG_DIAGNOSIS", titleFrom(request.logContent()), request.logContent(), toJson(parsed.value()), null);
-        
+        DevCoachRun run =
+                saveRun(
+                        userId,
+                        "LOG_DIAGNOSIS",
+                        titleFrom(request.logContent()),
+                        request.logContent(),
+                        toJson(parsed.value()),
+                        null);
+
         if (parsed.warning() == null) {
-            ragMemoryService.storeDiagnosis(userId, run.getId(), parsed.value().symptom(), parsed.value().rootCause(), parsed.value().minimalFix());
+            ragMemoryService.storeDiagnosis(
+                    userId,
+                    run.getId(),
+                    parsed.value().symptom(),
+                    parsed.value().rootCause(),
+                    parsed.value().minimalFix());
         }
 
         return new LogDiagnosisResponse(run.getId(), parsed.value(), raw, parsed.warning());
@@ -113,13 +138,21 @@ public class CoachService {
         GeneratedScaffold scaffold = scaffoldTemplateRegistry.generate(request);
         Path zipPath = scaffoldZipService.writeZip(runId, scaffold);
         ScaffoldResponse response = toScaffoldResponse(runId, scaffold);
-        saveRun(userId, runId, "SCAFFOLD", scaffold.projectName(), toJson(request), toJson(response), zipPath.toString());
+        saveRun(
+                userId,
+                runId,
+                "SCAFFOLD",
+                scaffold.projectName(),
+                toJson(request),
+                toJson(response),
+                zipPath.toString());
         return response;
     }
 
     public Path findScaffoldArtifact(UUID userId, UUID runId) {
-        DevCoachRun run = Optional.ofNullable(runRepository.selectById(runId))
-                .orElseThrow(() -> new NotFoundException("Coach run not found"));
+        DevCoachRun run =
+                Optional.ofNullable(runRepository.selectById(runId))
+                        .orElseThrow(() -> new NotFoundException("Coach run not found"));
         if (!run.getUserId().equals(userId)) {
             throw new ForbiddenException("Cannot download another user's scaffold");
         }
@@ -131,10 +164,13 @@ public class CoachService {
 
     public List<CoachRunResponse> listRuns(UUID userId, int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 50));
-        return runRepository.selectPage(
+        return runRepository
+                .selectPage(
                         new Page<>(1, safeLimit),
-                        new LambdaQueryWrapper<DevCoachRun>().eq(DevCoachRun::getUserId, userId).orderByDesc(DevCoachRun::getCreatedAt)
-                ).getRecords()
+                        new LambdaQueryWrapper<DevCoachRun>()
+                                .eq(DevCoachRun::getUserId, userId)
+                                .orderByDesc(DevCoachRun::getCreatedAt))
+                .getRecords()
                 .stream()
                 .map(this::toRunResponse)
                 .toList();
@@ -152,15 +188,17 @@ public class CoachService {
     }
 
     private ScaffoldResponse toScaffoldResponse(UUID runId, GeneratedScaffold scaffold) {
-        List<String> fileTree = scaffold.files().stream()
-                .map(ScaffoldFile::path)
-                .sorted()
-                .toList();
-        List<ScaffoldFilePreview> previews = scaffold.files().stream()
-                .filter(file -> file.path().endsWith("pom.xml") || file.path().endsWith("README.md") || file.path().endsWith("DevCoachService.java"))
-                .limit(4)
-                .map(file -> new ScaffoldFilePreview(file.path(), file.content()))
-                .toList();
+        List<String> fileTree = scaffold.files().stream().map(ScaffoldFile::path).sorted().toList();
+        List<ScaffoldFilePreview> previews =
+                scaffold.files().stream()
+                        .filter(
+                                file ->
+                                        file.path().endsWith("pom.xml")
+                                                || file.path().endsWith("README.md")
+                                                || file.path().endsWith("DevCoachService.java"))
+                        .limit(4)
+                        .map(file -> new ScaffoldFilePreview(file.path(), file.content()))
+                        .toList();
         return new ScaffoldResponse(
                 runId,
                 scaffold.preset(),
@@ -168,31 +206,30 @@ public class CoachService {
                 fileTree,
                 previews,
                 scaffold.startCommands(),
-                "/api/v1/coach/scaffolds/" + runId + "/download"
-        );
+                "/api/v1/coach/scaffolds/" + runId + "/download");
     }
 
     private Parsed<RequirementBreakdown> parseRequirementBreakdown(String raw) {
         try {
             JsonNode node = objectMapper.readTree(stripCodeFence(raw));
-            RequirementBreakdown value = new RequirementBreakdown(
-                    text(node, "goal", "Goal was not parsed; inspect rawText."),
-                    items(node, "modules"),
-                    items(node, "dataStructures"),
-                    endpoints(node, "apiEndpoints"),
-                    items(node, "risks"),
-                    strings(node, "testPoints")
-            );
+            RequirementBreakdown value =
+                    new RequirementBreakdown(
+                            text(node, "goal", "Goal was not parsed; inspect rawText."),
+                            items(node, "modules"),
+                            items(node, "dataStructures"),
+                            endpoints(node, "apiEndpoints"),
+                            items(node, "risks"),
+                            strings(node, "testPoints"));
             return new Parsed<>(value, null);
         } catch (Exception ex) {
-            RequirementBreakdown fallback = new RequirementBreakdown(
-                    "Unable to parse model JSON; inspect rawText.",
-                    List.of(),
-                    List.of(),
-                    List.of(),
-                    List.of(new CoachItem("parse_warning", ex.getMessage())),
-                    List.of("Retry with a shorter requirement or switch model.")
-            );
+            RequirementBreakdown fallback =
+                    new RequirementBreakdown(
+                            "Unable to parse model JSON; inspect rawText.",
+                            List.of(),
+                            List.of(),
+                            List.of(),
+                            List.of(new CoachItem("parse_warning", ex.getMessage())),
+                            List.of("Retry with a shorter requirement or switch model."));
             return new Parsed<>(fallback, "Model output was not valid JSON: " + ex.getMessage());
         }
     }
@@ -200,22 +237,30 @@ public class CoachService {
     private Parsed<LogDiagnosis> parseLogDiagnosis(String raw) {
         try {
             JsonNode node = objectMapper.readTree(stripCodeFence(raw));
-            LogDiagnosis value = new LogDiagnosis(
-                    text(node, "symptom", "Symptom was not parsed; inspect rawText."),
-                    text(node, "rootCause", "Root cause was not parsed; inspect rawText."),
-                    text(node, "triggerCondition", "Trigger condition was not parsed; inspect rawText."),
-                    text(node, "minimalFix", "Minimal fix was not parsed; inspect rawText."),
-                    strings(node, "verificationSteps")
-            );
+            LogDiagnosis value =
+                    new LogDiagnosis(
+                            text(node, "symptom", "Symptom was not parsed; inspect rawText."),
+                            text(node, "rootCause", "Root cause was not parsed; inspect rawText."),
+                            text(
+                                    node,
+                                    "triggerCondition",
+                                    "Trigger condition was not parsed; inspect rawText."),
+                            text(
+                                    node,
+                                    "minimalFix",
+                                    "Minimal fix was not parsed; inspect rawText."),
+                            strings(node, "verificationSteps"));
             return new Parsed<>(value, null);
         } catch (Exception ex) {
-            LogDiagnosis fallback = new LogDiagnosis(
-                    "Unable to parse model JSON; inspect rawText.",
-                    "Model returned non-JSON output.",
-                    "Parser failed before structured diagnosis was available.",
-                    "Retry with a smaller log slice or switch model.",
-                    List.of("Confirm the original error still reproduces.", "Retry diagnosis with the most relevant stack trace.")
-            );
+            LogDiagnosis fallback =
+                    new LogDiagnosis(
+                            "Unable to parse model JSON; inspect rawText.",
+                            "Model returned non-JSON output.",
+                            "Parser failed before structured diagnosis was available.",
+                            "Retry with a smaller log slice or switch model.",
+                            List.of(
+                                    "Confirm the original error still reproduces.",
+                                    "Retry diagnosis with the most relevant stack trace."));
             return new Parsed<>(fallback, "Model output was not valid JSON: " + ex.getMessage());
         }
     }
@@ -227,7 +272,10 @@ public class CoachService {
             return out;
         }
         for (JsonNode item : array) {
-            out.add(new CoachItem(text(item, "name", text(item, "title", "item")), text(item, "description", "")));
+            out.add(
+                    new CoachItem(
+                            text(item, "name", text(item, "title", "item")),
+                            text(item, "description", "")));
         }
         return out;
     }
@@ -239,7 +287,11 @@ public class CoachService {
             return out;
         }
         for (JsonNode item : array) {
-            out.add(new ApiEndpointPlan(text(item, "method", "POST"), text(item, "path", "/api/todo"), text(item, "purpose", "")));
+            out.add(
+                    new ApiEndpointPlan(
+                            text(item, "method", "POST"),
+                            text(item, "path", "/api/todo"),
+                            text(item, "purpose", "")));
         }
         return out;
     }
@@ -277,11 +329,25 @@ public class CoachService {
         return text;
     }
 
-    private DevCoachRun saveRun(UUID userId, String runType, String title, String inputText, String outputJson, String artifactPath) {
-        return saveRun(userId, UUID.randomUUID(), runType, title, inputText, outputJson, artifactPath);
+    private DevCoachRun saveRun(
+            UUID userId,
+            String runType,
+            String title,
+            String inputText,
+            String outputJson,
+            String artifactPath) {
+        return saveRun(
+                userId, UUID.randomUUID(), runType, title, inputText, outputJson, artifactPath);
     }
 
-    private DevCoachRun saveRun(UUID userId, UUID runId, String runType, String title, String inputText, String outputJson, String artifactPath) {
+    private DevCoachRun saveRun(
+            UUID userId,
+            UUID runId,
+            String runType,
+            String title,
+            String inputText,
+            String outputJson,
+            String artifactPath) {
         DevCoachRun run = new DevCoachRun();
         run.setId(runId);
         run.setUserId(userId);
@@ -296,7 +362,10 @@ public class CoachService {
     }
 
     private CoachRunResponse toRunResponse(DevCoachRun run) {
-        String downloadUrl = run.getArtifactPath() != null ? "/api/v1/coach/scaffolds/" + run.getId() + "/download" : null;
+        String downloadUrl =
+                run.getArtifactPath() != null
+                        ? "/api/v1/coach/scaffolds/" + run.getId() + "/download"
+                        : null;
         return new CoachRunResponse(
                 run.getId(),
                 run.getRunType(),
@@ -304,8 +373,7 @@ public class CoachService {
                 run.getInputText(),
                 run.getOutputJson(),
                 downloadUrl,
-                run.getCreatedAt()
-        );
+                run.getCreatedAt());
     }
 
     private String titleFrom(String text) {
@@ -324,6 +392,5 @@ public class CoachService {
         }
     }
 
-    private record Parsed<T>(T value, String warning) {
-    }
+    private record Parsed<T>(T value, String warning) {}
 }

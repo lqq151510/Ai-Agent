@@ -56,6 +56,7 @@ export function Workspace({
             contextTokenLimit={ui.contextTokenLimit}
             onCreateSession={onCreateSession}
             onNavigateToCoach={() => navigate('/coach')}
+            ui={ui}
           />
           <ChatList sessions={chat.sessions} activeSessionId={chat.activeSessionId} onSelectSession={onSelectSession} />
         </aside>

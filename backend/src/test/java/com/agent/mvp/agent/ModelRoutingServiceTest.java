@@ -1,12 +1,12 @@
 package com.agent.mvp.agent;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import com.agent.mvp.agent.dto.ResolvedModelConfig;
 import com.agent.mvp.agent.service.ModelRoutingService;
 import com.agent.mvp.config.AppProperties;
 import com.agent.mvp.session.entity.ConversationSession;
 import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ModelRoutingServiceTest {
 

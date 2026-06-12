@@ -10,6 +10,4 @@ public record ModelOption(
         String providerLabel,
         String apiStyle,
         boolean openAiCompatible,
-        boolean available
-) {
-}
+        boolean available) {}

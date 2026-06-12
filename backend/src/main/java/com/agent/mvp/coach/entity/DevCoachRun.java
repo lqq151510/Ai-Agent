@@ -1,19 +1,14 @@
 package com.agent.mvp.coach.entity;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.IdType;
-
-
-
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @TableName("dev_coach_runs")
 @Data
@@ -22,8 +17,7 @@ import java.util.UUID;
 @Builder
 public class DevCoachRun {
 
-    @TableId
-    private UUID id;
+    @TableId private UUID id;
 
     @TableField("user_id")
     private UUID userId;
@@ -31,7 +25,6 @@ public class DevCoachRun {
     @TableField("run_type")
     private String runType;
 
-    
     private String title;
 
     @TableField("input_text")
@@ -46,7 +39,6 @@ public class DevCoachRun {
     @TableField("created_at")
     private Instant createdAt;
 
-    
     public void onCreate() {
         if (id == null) {
             id = UUID.randomUUID();
@@ -55,36 +47,4 @@ public class DevCoachRun {
             createdAt = Instant.now();
         }
     }
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
 }

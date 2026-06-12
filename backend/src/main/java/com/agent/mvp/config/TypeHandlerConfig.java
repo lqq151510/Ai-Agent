@@ -2,8 +2,8 @@ package com.agent.mvp.config;
 
 import com.agent.mvp.auth.entity.StringCryptoConverter;
 import com.agent.mvp.auth.entity.StringCryptoTypeHandler;
-import org.springframework.context.annotation.Configuration;
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class TypeHandlerConfig {

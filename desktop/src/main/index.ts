@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, Tray, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, Tray, shell, globalShortcut } from 'electron';
 import * as path from 'path';
 import * as net from 'net';
 import { BackendManager } from './backend-manager';
@@ -183,6 +183,19 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(async () => {
+    app.dock?.hide();
+
+    globalShortcut.register('CommandOrControl+Shift+Space', () => {
+      if (mainWindow) {
+        if (mainWindow.isVisible()) {
+          mainWindow.hide();
+        } else {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    });
+
     const dataDir = getDataDir();
     const jrePath = getJrePath();
     const jarPath = getBackendJarPath();

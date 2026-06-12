@@ -6,6 +6,4 @@ public record AgentExecutionDiagnostics(
         int historyMessagesUsed,
         boolean historyTruncated,
         int toolRounds,
-        String stopReason
-) {
-}
+        String stopReason) {}

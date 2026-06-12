@@ -8,26 +8,11 @@ import com.agent.mvp.agent.tooling.ClientToolRegistry;
 import com.agent.mvp.auth.security.AuthenticatedUser;
 import com.agent.mvp.common.context.RequestContext;
 import com.agent.mvp.common.exception.TooManyRequestsException;
-import com.agent.mvp.common.exception.UnauthorizedException;
 import com.agent.mvp.config.AppProperties;
 import com.agent.mvp.infra.RateLimiterService;
-import jakarta.validation.Valid;
-import org.slf4j.MDC;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
-import org.springframework.http.MediaType;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.http.ResponseEntity;
-
+import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,8 +20,21 @@ import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/v1/agent")
@@ -54,24 +52,34 @@ public class AgentController {
     private final ThreadPoolTaskExecutor streamExecutor;
     private final ThreadPoolTaskScheduler heartbeatScheduler;
 
-    public AgentController(AgentService agentService,
-                           RateLimiterService rateLimiterService,
-                           AppProperties appProperties,
-                           ClientToolRegistry clientToolRegistry,
-                           ThreadPoolTaskExecutor streamExecutor,
-                           ThreadPoolTaskScheduler heartbeatScheduler,
-                           MeterRegistry meterRegistry) {
+    public AgentController(
+            AgentService agentService,
+            RateLimiterService rateLimiterService,
+            AppProperties appProperties,
+            ClientToolRegistry clientToolRegistry,
+            ThreadPoolTaskExecutor streamExecutor,
+            ThreadPoolTaskScheduler heartbeatScheduler,
+            MeterRegistry meterRegistry) {
         this.agentService = agentService;
         this.rateLimiterService = rateLimiterService;
         this.appProperties = appProperties;
         this.clientToolRegistry = clientToolRegistry;
         this.streamExecutor = streamExecutor;
         this.heartbeatScheduler = heartbeatScheduler;
-        Gauge.builder("agent.stream.executor.active", streamExecutor, ThreadPoolTaskExecutor::getActiveCount)
+        Gauge.builder(
+                        "agent.stream.executor.active",
+                        streamExecutor,
+                        ThreadPoolTaskExecutor::getActiveCount)
                 .register(meterRegistry);
-        Gauge.builder("agent.stream.executor.queue.size", streamExecutor, ThreadPoolTaskExecutor::getQueueSize)
+        Gauge.builder(
+                        "agent.stream.executor.queue.size",
+                        streamExecutor,
+                        ThreadPoolTaskExecutor::getQueueSize)
                 .register(meterRegistry);
-        Gauge.builder("agent.stream.executor.pool.size", streamExecutor, ThreadPoolTaskExecutor::getPoolSize)
+        Gauge.builder(
+                        "agent.stream.executor.pool.size",
+                        streamExecutor,
+                        ThreadPoolTaskExecutor::getPoolSize)
                 .register(meterRegistry);
         Gauge.builder("agent.stream.inflight", inFlightStreams, AtomicInteger::get)
                 .register(meterRegistry);
@@ -80,11 +88,14 @@ public class AgentController {
     }
 
     @PostMapping("/chat")
-    public ChatResponse chat(@Valid @RequestBody ChatRequest request,
-                             Authentication authentication) {
+    public ChatResponse chat(
+            @Valid @RequestBody ChatRequest request, Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
-             MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, request.sessionId().toString())) {
+        try (MDC.MDCCloseable u =
+                        MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
+                MDC.MDCCloseable s =
+                        MDC.putCloseable(
+                                RequestContext.SESSION_ID_KEY, request.sessionId().toString())) {
             enforceChatRateLimit(user);
 
             return agentService.chat(user.userId(), request);
@@ -92,73 +103,98 @@ public class AgentController {
     }
 
     @PostMapping("/chat/tool_result")
-    public ResponseEntity<Void> submitToolResult(@Valid @RequestBody ClientToolResultRequest request,
-                                                 Authentication authentication) {
+    public ResponseEntity<Void> submitToolResult(
+            @Valid @RequestBody ClientToolResultRequest request, Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         clientToolRegistry.complete(user.userId().toString(), request.callId(), request.result());
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping(value = "/chat/stream", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@Valid @RequestBody ChatRequest request,
-                             Authentication authentication) {
+    @PostMapping(
+            value = "/chat/stream",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(
+            @Valid @RequestBody ChatRequest request, Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         enforceChatRateLimit(user);
 
         SseEmitter emitter = new SseEmitter(0L);
 
         long heartbeatMs = Math.max(1_000L, appProperties.getAgent().getHeartbeatIntervalMs());
-        ScheduledFuture<?> heartbeat = heartbeatScheduler.getScheduledExecutor().scheduleAtFixedRate(
-                () -> {
-                    try {
-                        emitter.send(SseEmitter.event().name("heartbeat").data(Map.of("ts", Instant.now().toString())));
-                    } catch (Exception e) {
-                        // ignore
-                    }
-                },
-                heartbeatMs,
-                heartbeatMs,
-                TimeUnit.MILLISECONDS
-        );
+        ScheduledFuture<?> heartbeat =
+                heartbeatScheduler
+                        .getScheduledExecutor()
+                        .scheduleAtFixedRate(
+                                () -> {
+                                    try {
+                                        emitter.send(
+                                                SseEmitter.event()
+                                                        .name("heartbeat")
+                                                        .data(
+                                                                Map.of(
+                                                                        "ts",
+                                                                        Instant.now().toString())));
+                                    } catch (Exception e) {
+                                        // ignore
+                                    }
+                                },
+                                heartbeatMs,
+                                heartbeatMs,
+                                TimeUnit.MILLISECONDS);
 
         AtomicBoolean cleanedUp = new AtomicBoolean(false);
 
-        Runnable cleanup = () -> {
-            if (!cleanedUp.compareAndSet(false, true)) return;
-            heartbeat.cancel(true);
-        };
+        Runnable cleanup =
+                () -> {
+                    if (!cleanedUp.compareAndSet(false, true)) return;
+                    heartbeat.cancel(true);
+                };
         emitter.onCompletion(cleanup);
         emitter.onError(e -> cleanup.run());
         emitter.onTimeout(cleanup);
 
         try {
             inFlightStreams.incrementAndGet();
-            streamExecutor.execute(() -> {
-                try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
-                     MDC.MDCCloseable s = MDC.putCloseable(RequestContext.SESSION_ID_KEY, request.sessionId().toString())) {
-                    try {
-                        ChatResponse response = agentService.streamChat(
-                                user.userId(),
-                                request,
-                                meta -> sendSseEvent(emitter, "meta", meta),
-                                chunk -> sendSseEvent(emitter, "chunk", chunk),
-                                call -> sendSseEvent(emitter, "client_tool_call", call)
-                        );
-                        sendSseEvent(emitter, "done", response);
-                        emitter.complete();
-                    } catch (Exception ex) {
-                        if (!isClientDisconnect(ex)) {
+            streamExecutor.execute(
+                    () -> {
+                        try (MDC.MDCCloseable u =
+                                        MDC.putCloseable(
+                                                RequestContext.USER_ID_KEY,
+                                                user.userId().toString());
+                                MDC.MDCCloseable s =
+                                        MDC.putCloseable(
+                                                RequestContext.SESSION_ID_KEY,
+                                                request.sessionId().toString())) {
                             try {
-                                sendSseEvent(emitter, "error", Map.of("message", errorMessage(ex)));
-                            } catch (Exception ignore) {}
+                                ChatResponse response =
+                                        agentService.streamChat(
+                                                user.userId(),
+                                                request,
+                                                meta -> sendSseEvent(emitter, "meta", meta),
+                                                chunk -> sendSseEvent(emitter, "chunk", chunk),
+                                                call ->
+                                                        sendSseEvent(
+                                                                emitter, "client_tool_call", call));
+                                sendSseEvent(emitter, "done", response);
+                                emitter.complete();
+                            } catch (Exception ex) {
+                                if (!isClientDisconnect(ex)) {
+                                    try {
+                                        sendSseEvent(
+                                                emitter,
+                                                "error",
+                                                Map.of("message", errorMessage(ex)));
+                                    } catch (Exception ignore) {
+                                    }
+                                }
+                                emitter.completeWithError(ex);
+                            }
+                        } finally {
+                            inFlightStreams.decrementAndGet();
+                            cleanup.run();
                         }
-                        emitter.completeWithError(ex);
-                    }
-                } finally {
-                    inFlightStreams.decrementAndGet();
-                    cleanup.run();
-                }
-            });
+                    });
         } catch (RejectedExecutionException ex) {
             cleanup.run();
             rejectedStreams.incrementAndGet();
@@ -179,9 +215,12 @@ public class AgentController {
 
     private void enforceChatRateLimit(AuthenticatedUser user) {
         long standardLimit = Math.max(1, appProperties.getRateLimit().getChatPerMinute());
-        long premiumLimit = Math.max(standardLimit, appProperties.getRateLimit().getChatPremiumPerMinute());
+        long premiumLimit =
+                Math.max(standardLimit, appProperties.getRateLimit().getChatPremiumPerMinute());
         long limit = isPremium(user.email()) ? premiumLimit : standardLimit;
-        boolean allowed = rateLimiterService.allow("ratelimit:chat:" + user.userId(), limit, CHAT_RATE_LIMIT_WINDOW);
+        boolean allowed =
+                rateLimiterService.allow(
+                        "ratelimit:chat:" + user.userId(), limit, CHAT_RATE_LIMIT_WINDOW);
         if (!allowed) {
             throw new TooManyRequestsException("Too many requests");
         }
@@ -216,5 +255,4 @@ public class AgentController {
         }
         return false;
     }
-
 }

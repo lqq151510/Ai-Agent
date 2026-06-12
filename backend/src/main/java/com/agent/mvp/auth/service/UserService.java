@@ -3,12 +3,11 @@ package com.agent.mvp.auth.service;
 import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.auth.repo.UserRepository;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import java.util.UUID;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
-
-import java.util.UUID;
 
 @Service
 public class UserService {
@@ -33,7 +32,8 @@ public class UserService {
 
     public boolean existsByEmail(String email) {
         if (email == null) return false;
-        return userRepository.selectCount(new LambdaQueryWrapper<User>().eq(User::getEmail, email)) > 0;
+        return userRepository.selectCount(new LambdaQueryWrapper<User>().eq(User::getEmail, email))
+                > 0;
     }
 
     @CachePut(value = "users", key = "#user.id")

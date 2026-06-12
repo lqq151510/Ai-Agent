@@ -2,8 +2,6 @@ package com.agent.mvp.tooling.service;
 
 import com.agent.mvp.common.exception.BadRequestException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Service;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -18,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.stereotype.Service;
 
 @Service
 public class CodeToolService {
@@ -27,15 +26,19 @@ public class CodeToolService {
     private final Path workspaceRoot;
     private final ObjectMapper objectMapper;
 
-    public CodeToolService(com.agent.mvp.config.AppProperties appProperties, ObjectMapper objectMapper) {
-        this.workspaceRoot = Paths.get(appProperties.getWorkspaceRoot()).toAbsolutePath().normalize();
+    public CodeToolService(
+            com.agent.mvp.config.AppProperties appProperties, ObjectMapper objectMapper) {
+        this.workspaceRoot =
+                Paths.get(appProperties.getWorkspaceRoot()).toAbsolutePath().normalize();
         this.objectMapper = objectMapper;
     }
 
     public ToolCallOutput listRepoTree(String relativePath, int depth) {
         long start = System.currentTimeMillis();
         try {
-            Path root = resolveSafe(relativePath == null || relativePath.isBlank() ? "." : relativePath);
+            Path root =
+                    resolveSafe(
+                            relativePath == null || relativePath.isBlank() ? "." : relativePath);
             if (!Files.exists(root)) {
                 throw new BadRequestException("Path not found: " + relativePath);
             }
@@ -43,7 +46,13 @@ public class CodeToolService {
             List<String> rows = new ArrayList<>();
             try (var stream = Files.walk(root, Math.max(1, Math.min(depth, 5)))) {
                 stream.limit(500)
-                        .forEach(path -> rows.add(workspaceRoot.relativize(path.toAbsolutePath().normalize()).toString()));
+                        .forEach(
+                                path ->
+                                        rows.add(
+                                                workspaceRoot
+                                                        .relativize(
+                                                                path.toAbsolutePath().normalize())
+                                                        .toString()));
             }
 
             String output = String.join("\n", rows);
@@ -52,16 +61,14 @@ public class CodeToolService {
                     toJson(args("path", relativePath, "depth", depth)),
                     "SUCCESS",
                     System.currentTimeMillis() - start,
-                    output
-            );
+                    output);
         } catch (IOException ex) {
             return new ToolCallOutput(
                     "listRepoTree",
                     toJson(args("path", relativePath, "depth", depth)),
                     "ERROR",
                     System.currentTimeMillis() - start,
-                    "listRepoTree failed: " + ex.getMessage()
-            );
+                    "listRepoTree failed: " + ex.getMessage());
         }
     }
 
@@ -69,10 +76,23 @@ public class CodeToolService {
         long start = System.currentTimeMillis();
         String safeQuery = query == null ? "" : query.trim();
         if (safeQuery.isBlank()) {
-            return new ToolCallOutput("searchCode", toJson(args("query", query)), "ERROR", 0, "Query is empty");
+            return new ToolCallOutput(
+                    "searchCode", toJson(args("query", query)), "ERROR", 0, "Query is empty");
         }
 
-        List<String> command = new ArrayList<>(List.of("rg", "-n", "--no-heading", "--hidden", "--max-count", String.valueOf(Math.max(1, Math.min(maxResults, 100))), "--regexp", safeQuery, "--", workspaceRoot.toString()));
+        List<String> command =
+                new ArrayList<>(
+                        List.of(
+                                "rg",
+                                "-n",
+                                "--no-heading",
+                                "--hidden",
+                                "--max-count",
+                                String.valueOf(Math.max(1, Math.min(maxResults, 100))),
+                                "--regexp",
+                                safeQuery,
+                                "--",
+                                workspaceRoot.toString()));
         if (glob != null && !glob.isBlank()) {
             command.add("-g");
             command.add(glob);
@@ -86,12 +106,23 @@ public class CodeToolService {
             boolean finished = process.waitFor(8, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
-                return new ToolCallOutput("searchCode", toJson(args("query", query, "glob", glob)), "ERROR", System.currentTimeMillis() - start, "searchCode timeout");
+                return new ToolCallOutput(
+                        "searchCode",
+                        toJson(args("query", query, "glob", glob)),
+                        "ERROR",
+                        System.currentTimeMillis() - start,
+                        "searchCode timeout");
             }
 
             String output;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                output = reader.lines().limit(200).collect(java.util.stream.Collectors.joining("\n"));
+            try (BufferedReader reader =
+                    new BufferedReader(
+                            new InputStreamReader(
+                                    process.getInputStream(), StandardCharsets.UTF_8))) {
+                output =
+                        reader.lines()
+                                .limit(200)
+                                .collect(java.util.stream.Collectors.joining("\n"));
             }
 
             if (output.isBlank()) {
@@ -103,16 +134,14 @@ public class CodeToolService {
                     toJson(args("query", query, "glob", glob, "maxResults", maxResults)),
                     process.exitValue() <= 1 ? "SUCCESS" : "ERROR",
                     System.currentTimeMillis() - start,
-                    output
-            );
+                    output);
         } catch (Exception ex) {
             return new ToolCallOutput(
                     "searchCode",
                     toJson(args("query", query, "glob", glob, "maxResults", maxResults)),
                     "ERROR",
                     System.currentTimeMillis() - start,
-                    "searchCode failed: " + ex.getMessage()
-            );
+                    "searchCode failed: " + ex.getMessage());
         }
     }
 
@@ -123,7 +152,10 @@ public class CodeToolService {
             List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
 
             int from = startLine == null ? 1 : Math.max(1, startLine);
-            int to = endLine == null ? Math.min(lines.size(), from + MAX_READ_LINES - 1) : Math.min(lines.size(), endLine);
+            int to =
+                    endLine == null
+                            ? Math.min(lines.size(), from + MAX_READ_LINES - 1)
+                            : Math.min(lines.size(), endLine);
             if (to < from) {
                 throw new BadRequestException("Invalid line range");
             }
@@ -141,22 +173,21 @@ public class CodeToolService {
                     toJson(args("path", relativePath, "startLine", from, "endLine", to)),
                     "SUCCESS",
                     System.currentTimeMillis() - start,
-                    sb.toString().trim()
-            );
+                    sb.toString().trim());
         } catch (IOException ex) {
             return new ToolCallOutput(
                     "readFile",
                     toJson(args("path", relativePath, "startLine", startLine, "endLine", endLine)),
                     "ERROR",
                     System.currentTimeMillis() - start,
-                    "readFile failed: " + ex.getMessage()
-            );
+                    "readFile failed: " + ex.getMessage());
         }
     }
 
     public ToolCallOutput analyzePom(String relativePath) {
         long start = System.currentTimeMillis();
-        String filePath = (relativePath == null || relativePath.isBlank()) ? "pom.xml" : relativePath;
+        String filePath =
+                (relativePath == null || relativePath.isBlank()) ? "pom.xml" : relativePath;
 
         try {
             Path pom = resolveSafe(filePath);
@@ -180,22 +211,27 @@ public class CodeToolService {
                 dependencies.add(group + ":" + artifact + ":" + version);
             }
 
-            String output = "artifact=" + projectArtifact + "\n" + "dependencies=" + dependencies.size() + "\n" + String.join("\n", dependencies);
+            String output =
+                    "artifact="
+                            + projectArtifact
+                            + "\n"
+                            + "dependencies="
+                            + dependencies.size()
+                            + "\n"
+                            + String.join("\n", dependencies);
             return new ToolCallOutput(
                     "analyzePom",
                     toJson(args("path", filePath)),
                     "SUCCESS",
                     System.currentTimeMillis() - start,
-                    output
-            );
+                    output);
         } catch (IOException ex) {
             return new ToolCallOutput(
                     "analyzePom",
                     toJson(args("path", filePath)),
                     "ERROR",
                     System.currentTimeMillis() - start,
-                    "analyzePom failed: " + ex.getMessage()
-            );
+                    "analyzePom failed: " + ex.getMessage());
         }
     }
 
@@ -232,6 +268,6 @@ public class CodeToolService {
         }
     }
 
-    public record ToolCallOutput(String toolName, String argsJson, String status, long durationMs, String output) {
-    }
+    public record ToolCallOutput(
+            String toolName, String argsJson, String status, long durationMs, String output) {}
 }

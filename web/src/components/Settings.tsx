@@ -15,6 +15,7 @@ interface SettingsProps {
   contextTokenLimit: number | null;
   onCreateSession: (provider: Provider, model: string, title?: string, contextTokenLimit?: number | null) => void;
   onNavigateToCoach: () => void;
+  ui?: any;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -25,7 +26,8 @@ export const Settings: React.FC<SettingsProps> = ({
   modelOptions,
   contextTokenLimit,
   onCreateSession,
-  onNavigateToCoach
+  onNavigateToCoach,
+  ui
 }) => {
   const [showConfig, setShowConfig] = useState(false);
   const navigate = useNavigate();
@@ -63,6 +65,28 @@ export const Settings: React.FC<SettingsProps> = ({
           <h3>AI + Java 开发陪跑器</h3>
           <p>需求拆解、脚手架与日志诊断</p>
         </div>
+      </div>
+
+      <div style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-tertiary)', margin: '0 1rem 1rem 1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: (ui as any)?.useLocalAi ? '#10b981' : '#6b7280' }}></div>
+          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>Local AI 模式</span>
+        </div>
+        <button
+          onClick={() => (ui as any)?.setUseLocalAi(!(ui as any)?.useLocalAi)}
+          style={{
+            background: (ui as any)?.useLocalAi ? 'var(--primary-color)' : 'transparent',
+            border: `1px solid ${(ui as any)?.useLocalAi ? 'var(--primary-color)' : 'var(--border-color)'}`,
+            color: (ui as any)?.useLocalAi ? '#fff' : 'var(--text-secondary)',
+            padding: '2px 8px',
+            borderRadius: '12px',
+            fontSize: '11px',
+            cursor: 'pointer',
+            fontWeight: 600
+          }}
+        >
+          {(ui as any)?.useLocalAi ? 'ON' : 'OFF'}
+        </button>
       </div>
 
       <NewSessionForm

@@ -1,7 +1,3 @@
 package com.agent.mvp.auth.dto;
 
-public record UpdateUserConfigRequest(
-        String customBaseUrl,
-        String customApiKey
-) {
-}
+public record UpdateUserConfigRequest(String customBaseUrl, String customApiKey) {}

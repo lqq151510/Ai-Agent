@@ -1,24 +1,29 @@
 package com.agent.mvp.tools;
 
 import dev.langchain4j.agent.tool.Tool;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 
 @Component
 public class OsControlTools {
     private static final Logger log = LoggerFactory.getLogger(OsControlTools.class);
 
     // 白名单：允许安全的基础查看命令
-    private static final String[] WHITELIST = {"ls", "pwd", "echo", "cat", "whoami", "date", "java -version", "mvn -v"};
-    
-    // 黑名单：绝对禁止的高危命令
-    private static final String[] BLACKLIST = {"rm", "sudo", "chmod", "chown", "mv", "reboot", "shutdown", "mkfs", ">", ">>"};
+    private static final String[] WHITELIST = {
+        "ls", "pwd", "echo", "cat", "whoami", "date", "java -version", "mvn -v"
+    };
 
-    @Tool("Executes a terminal bash command on the macOS system. DANGEROUS: use with caution. Useful for file reading, listing directory, or running scripts.")
+    // 黑名单：绝对禁止的高危命令
+    private static final String[] BLACKLIST = {
+        "rm", "sudo", "chmod", "chown", "mv", "reboot", "shutdown", "mkfs", ">", ">>"
+    };
+
+    @Tool(
+            "Executes a terminal bash command on the macOS system. DANGEROUS: use with caution."
+                    + " Useful for file reading, listing directory, or running scripts.")
     public String executeTerminalCommand(String command) {
         log.warn("\n========================================================");
         log.warn("🤖 [OS Agent] 正在尝试执行系统终端命令:");
@@ -29,7 +34,9 @@ public class OsControlTools {
         for (String blocked : BLACKLIST) {
             if (command.contains(blocked)) {
                 log.error("拦截：命令触发黑名单限制 [{}]", blocked);
-                return "SECURITY ERROR: Command blocked due to blacklist restriction (" + blocked + ")";
+                return "SECURITY ERROR: Command blocked due to blacklist restriction ("
+                        + blocked
+                        + ")";
             }
         }
 
@@ -44,7 +51,8 @@ public class OsControlTools {
 
         if (!isWhitelisted) {
             log.error("拦截：命令不在白名单内");
-            return "SECURITY ERROR: Command blocked because it is not in the whitelist. Allowed prefixes: ls, pwd, echo, cat, whoami, date";
+            return "SECURITY ERROR: Command blocked because it is not in the whitelist. Allowed"
+                    + " prefixes: ls, pwd, echo, cat, whoami, date";
         }
 
         try {
@@ -55,7 +63,8 @@ public class OsControlTools {
             Process process = processBuilder.start();
 
             StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            try (BufferedReader reader =
+                    new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     output.append(line).append("\n");

@@ -4,8 +4,6 @@ import com.agent.mvp.coach.domain.GeneratedScaffold;
 import com.agent.mvp.coach.domain.ScaffoldFile;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.common.exception.NotFoundException;
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -14,20 +12,24 @@ import java.nio.file.Paths;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import org.springframework.stereotype.Service;
 
 @Service
 public class ScaffoldZipService {
 
-    private final Path artifactRoot = Paths.get("var", "coach-artifacts").toAbsolutePath().normalize();
+    private final Path artifactRoot =
+            Paths.get("var", "coach-artifacts").toAbsolutePath().normalize();
 
     public Path writeZip(UUID runId, GeneratedScaffold scaffold) {
         try {
             Files.createDirectories(artifactRoot);
-            Path zipPath = artifactRoot.resolve(runId + "-" + scaffold.projectName() + ".zip").normalize();
+            Path zipPath =
+                    artifactRoot.resolve(runId + "-" + scaffold.projectName() + ".zip").normalize();
             if (!zipPath.startsWith(artifactRoot)) {
                 throw new BadRequestException("Invalid scaffold artifact path");
             }
-            try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(zipPath), StandardCharsets.UTF_8)) {
+            try (ZipOutputStream zip =
+                    new ZipOutputStream(Files.newOutputStream(zipPath), StandardCharsets.UTF_8)) {
                 for (ScaffoldFile file : scaffold.files()) {
                     addFile(zip, scaffold.projectName(), file);
                 }
@@ -49,7 +51,8 @@ public class ScaffoldZipService {
         return path;
     }
 
-    private void addFile(ZipOutputStream zip, String projectName, ScaffoldFile file) throws IOException {
+    private void addFile(ZipOutputStream zip, String projectName, ScaffoldFile file)
+            throws IOException {
         String relative = sanitize(file.path());
         ZipEntry entry = new ZipEntry(projectName + "/" + relative);
         zip.putNextEntry(entry);

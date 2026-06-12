@@ -1,5 +1,11 @@
 package com.agent.mvp.system.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import com.agent.mvp.agent.ModelProviderType;
 import com.agent.mvp.config.AppProperties;
 import com.agent.mvp.system.dto.ModelsResponse;
@@ -8,12 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 class SystemDiagnosticsServiceTest {
 
     @Test
@@ -21,11 +21,9 @@ class SystemDiagnosticsServiceTest {
         AppProperties appProperties = new AppProperties();
         appProperties.setDefaultProvider(ModelProviderType.OPENAI);
         appProperties.setDefaultOpenaiModel("qwen/qwen3.5-9b");
-        SystemDiagnosticsService service = new SystemDiagnosticsService(
-                appProperties,
-                mock(JdbcTemplate.class),
-                mock(StringRedisTemplate.class)
-        );
+        SystemDiagnosticsService service =
+                new SystemDiagnosticsService(
+                        appProperties, mock(JdbcTemplate.class), mock(StringRedisTemplate.class));
 
         ModelsResponse response = service.listModels();
 
@@ -45,11 +43,9 @@ class SystemDiagnosticsServiceTest {
         JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
         when(jdbcTemplate.queryForObject("SELECT 1", Integer.class))
                 .thenThrow(new IllegalStateException("db down"));
-        SystemDiagnosticsService service = new SystemDiagnosticsService(
-                appProperties,
-                jdbcTemplate,
-                mock(StringRedisTemplate.class)
-        );
+        SystemDiagnosticsService service =
+                new SystemDiagnosticsService(
+                        appProperties, jdbcTemplate, mock(StringRedisTemplate.class));
 
         ReadinessCheck check = service.checkDatabase();
 

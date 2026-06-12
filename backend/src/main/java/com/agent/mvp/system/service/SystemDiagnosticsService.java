@@ -7,20 +7,6 @@ import com.agent.mvp.system.dto.ModelsResponse;
 import com.agent.mvp.system.dto.ProviderOption;
 import com.agent.mvp.system.dto.ReadinessCheck;
 import com.agent.mvp.system.dto.ReadinessResponse;
-import io.netty.channel.ChannelOption;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.data.redis.connection.RedisConnection;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.netty.http.client.HttpClient;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -31,6 +17,16 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
 
 @Service
 public class SystemDiagnosticsService {
@@ -41,9 +37,10 @@ public class SystemDiagnosticsService {
     private final JdbcTemplate jdbcTemplate;
     private final StringRedisTemplate redisTemplate;
 
-    public SystemDiagnosticsService(AppProperties appProperties,
-                                    JdbcTemplate jdbcTemplate,
-                                    @Autowired(required = false) StringRedisTemplate redisTemplate) {
+    public SystemDiagnosticsService(
+            AppProperties appProperties,
+            JdbcTemplate jdbcTemplate,
+            @Autowired(required = false) StringRedisTemplate redisTemplate) {
         this.appProperties = appProperties;
         this.jdbcTemplate = jdbcTemplate;
         this.redisTemplate = redisTemplate;
@@ -55,52 +52,55 @@ public class SystemDiagnosticsService {
         String defaultModel = defaultModelFor(appProperties.getDefaultProvider());
 
         for (String model : openAiProbe.models()) {
-            options.add(new ModelOption(
-                    ModelProviderType.OPENAI,
-                    model,
-                    ModelProviderType.OPENAI == appProperties.getDefaultProvider()
-                            && model.equals(defaultModel),
-                    ModelProviderType.OPENAI.providerId(),
-                    ModelProviderType.OPENAI.displayName(),
-                    ModelProviderType.OPENAI.apiStyle(),
-                    ModelProviderType.OPENAI.openAiCompatible(),
-                    true
-            ));
+            options.add(
+                    new ModelOption(
+                            ModelProviderType.OPENAI,
+                            model,
+                            ModelProviderType.OPENAI == appProperties.getDefaultProvider()
+                                    && model.equals(defaultModel),
+                            ModelProviderType.OPENAI.providerId(),
+                            ModelProviderType.OPENAI.displayName(),
+                            ModelProviderType.OPENAI.apiStyle(),
+                            ModelProviderType.OPENAI.openAiCompatible(),
+                            true));
         }
 
-        boolean hasDefaultModel = options.stream()
-                .anyMatch(option -> option.provider() == appProperties.getDefaultProvider() && option.model().equals(defaultModel));
+        boolean hasDefaultModel =
+                options.stream()
+                        .anyMatch(
+                                option ->
+                                        option.provider() == appProperties.getDefaultProvider()
+                                                && option.model().equals(defaultModel));
         boolean fallbackUsed = options.isEmpty();
         if (!hasDefaultModel) {
-            options.add(new ModelOption(
-                    appProperties.getDefaultProvider(),
-                    defaultModel,
-                    true,
-                    appProperties.getDefaultProvider().providerId(),
-                    appProperties.getDefaultProvider().displayName(),
-                    appProperties.getDefaultProvider().apiStyle(),
-                    appProperties.getDefaultProvider().openAiCompatible(),
-                    false
-            ));
+            options.add(
+                    new ModelOption(
+                            appProperties.getDefaultProvider(),
+                            defaultModel,
+                            true,
+                            appProperties.getDefaultProvider().providerId(),
+                            appProperties.getDefaultProvider().displayName(),
+                            appProperties.getDefaultProvider().apiStyle(),
+                            appProperties.getDefaultProvider().openAiCompatible(),
+                            false));
         }
 
         return new ModelsResponse(
                 appProperties.getDefaultProvider(),
                 defaultModel,
-                List.of(new ProviderOption(
-                        ModelProviderType.OPENAI,
-                        ModelProviderType.OPENAI.providerId(),
-                        ModelProviderType.OPENAI.displayName(),
-                        ModelProviderType.OPENAI.apiStyle(),
-                        ModelProviderType.OPENAI.openAiCompatible(),
-                        ModelProviderType.OPENAI == appProperties.getDefaultProvider()
-                )),
+                List.of(
+                        new ProviderOption(
+                                ModelProviderType.OPENAI,
+                                ModelProviderType.OPENAI.providerId(),
+                                ModelProviderType.OPENAI.displayName(),
+                                ModelProviderType.OPENAI.apiStyle(),
+                                ModelProviderType.OPENAI.openAiCompatible(),
+                                ModelProviderType.OPENAI == appProperties.getDefaultProvider())),
                 options,
                 openAiProbe.models().size(),
                 fallbackUsed,
                 openAiProbe.detail(),
-                Instant.now()
-        );
+                Instant.now());
     }
 
     public ReadinessResponse readiness() {
@@ -131,17 +131,10 @@ public class SystemDiagnosticsService {
                             probe.detail(),
                             "MODEL_PROVIDER_UNAVAILABLE",
                             probe.latencyMs(),
-                            metadata
-                    );
+                            metadata);
                 }
                 yield new ReadinessCheck(
-                        "model",
-                        true,
-                        probe.detail(),
-                        "OK",
-                        probe.latencyMs(),
-                        metadata
-                );
+                        "model", true, probe.detail(), "OK", probe.latencyMs(), metadata);
             }
             case VERTEXAI -> {
                 Map<String, String> metadata = new LinkedHashMap<>();
@@ -149,13 +142,7 @@ public class SystemDiagnosticsService {
                 metadata.put("apiStyle", ModelProviderType.VERTEXAI.apiStyle());
                 metadata.put("defaultModel", defaultModelFor(ModelProviderType.VERTEXAI));
                 yield new ReadinessCheck(
-                        "model",
-                        true,
-                        "Vertex AI endpoint configured",
-                        "OK",
-                        0L,
-                        metadata
-                );
+                        "model", true, "Vertex AI endpoint configured", "OK", 0L, metadata);
             }
         };
     }
@@ -171,8 +158,7 @@ public class SystemDiagnosticsService {
                     ok ? "ok" : "unexpected query result",
                     ok ? "OK" : "DATABASE_UNEXPECTED_RESULT",
                     Duration.between(start, Instant.now()).toMillis(),
-                    Map.of("query", "SELECT 1")
-            );
+                    Map.of("query", "SELECT 1"));
         } catch (Exception ex) {
             return new ReadinessCheck(
                     "database",
@@ -180,27 +166,21 @@ public class SystemDiagnosticsService {
                     sanitize(ex.getMessage()),
                     "DATABASE_UNAVAILABLE",
                     Duration.between(start, Instant.now()).toMillis(),
-                    Map.of("query", "SELECT 1")
-            );
+                    Map.of("query", "SELECT 1"));
         }
     }
 
     public ReadinessCheck checkRedis() {
         if (redisTemplate == null) {
             return new ReadinessCheck(
-                    "redis",
-                    true,
-                    "redis is disabled (using memory cache)",
-                    "OK",
-                    0L,
-                    Map.of()
-            );
+                    "redis", true, "redis is disabled (using memory cache)", "OK", 0L, Map.of());
         }
         Instant start = Instant.now();
         try {
             String pong = null;
             if (redisTemplate.getConnectionFactory() != null) {
-                try (RedisConnection connection = redisTemplate.getConnectionFactory().getConnection()) {
+                try (RedisConnection connection =
+                        redisTemplate.getConnectionFactory().getConnection()) {
                     pong = connection.ping();
                 }
             }
@@ -211,8 +191,7 @@ public class SystemDiagnosticsService {
                     ok ? "ok" : "ping failed",
                     ok ? "OK" : "REDIS_PING_FAILED",
                     Duration.between(start, Instant.now()).toMillis(),
-                    Map.of("ping", pong == null ? "" : pong)
-            );
+                    Map.of("ping", pong == null ? "" : pong));
         } catch (Exception ex) {
             return new ReadinessCheck(
                     "redis",
@@ -220,8 +199,7 @@ public class SystemDiagnosticsService {
                     sanitize(ex.getMessage()),
                     "REDIS_UNAVAILABLE",
                     Duration.between(start, Instant.now()).toMillis(),
-                    Map.of()
-            );
+                    Map.of());
         }
     }
 
@@ -230,40 +208,50 @@ public class SystemDiagnosticsService {
         String baseUrl = appProperties.getOpenai().getBaseUrl();
         String apiKey = appProperties.getOpenai().getApiKey();
         if (baseUrl == null || baseUrl.isBlank() || apiKey == null || apiKey.isBlank()) {
-            return new ModelCatalogProbe(Set.of(), "OpenAI-compatible endpoint is not configured", 0L);
+            return new ModelCatalogProbe(
+                    Set.of(), "OpenAI-compatible endpoint is not configured", 0L);
         }
 
         Instant start = Instant.now();
-        return withRetryProbe(() -> {
-            Map<String, Object> payload = WebClient.create().get()
-                    .uri(baseUrl + "/models")
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .timeout(probeTimeout())
-                    .block();
+        return withRetryProbe(
+                () -> {
+                    Map<String, Object> payload =
+                            WebClient.create()
+                                    .get()
+                                    .uri(baseUrl + "/models")
+                                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                                    .accept(MediaType.APPLICATION_JSON)
+                                    .retrieve()
+                                    .bodyToMono(Map.class)
+                                    .timeout(probeTimeout())
+                                    .block();
 
-            if (payload == null || !(payload.get("data") instanceof List<?> list)) {
-                return new ModelCatalogProbe(
-                        Set.of(),
-                        "OpenAI-compatible /models returned an empty payload",
-                        Duration.between(start, Instant.now()).toMillis()
-                );
-            }
-            Set<String> models = list.stream()
-                    .filter(Map.class::isInstance)
-                    .map(Map.class::cast)
-                    .map(item -> item.get("id"))
-                    .filter(Objects::nonNull)
-                    .map(String::valueOf)
-                    .filter(s -> !s.isBlank())
-                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-            String detail = models.isEmpty()
-                    ? "OpenAI-compatible endpoint reachable but returned no models"
-                    : "OpenAI-compatible endpoint reachable: discovered " + models.size() + " model(s)";
-            return new ModelCatalogProbe(models, detail, Duration.between(start, Instant.now()).toMillis());
-        });
+                    if (payload == null || !(payload.get("data") instanceof List<?> list)) {
+                        return new ModelCatalogProbe(
+                                Set.of(),
+                                "OpenAI-compatible /models returned an empty payload",
+                                Duration.between(start, Instant.now()).toMillis());
+                    }
+                    Set<String> models =
+                            list.stream()
+                                    .filter(Map.class::isInstance)
+                                    .map(Map.class::cast)
+                                    .map(item -> item.get("id"))
+                                    .filter(Objects::nonNull)
+                                    .map(String::valueOf)
+                                    .filter(s -> !s.isBlank())
+                                    .collect(
+                                            java.util.stream.Collectors.toCollection(
+                                                    LinkedHashSet::new));
+                    String detail =
+                            models.isEmpty()
+                                    ? "OpenAI-compatible endpoint reachable but returned no models"
+                                    : "OpenAI-compatible endpoint reachable: discovered "
+                                            + models.size()
+                                            + " model(s)";
+                    return new ModelCatalogProbe(
+                            models, detail, Duration.between(start, Instant.now()).toMillis());
+                });
     }
 
     private ModelCatalogProbe withRetryProbe(Supplier<ModelCatalogProbe> call) {
@@ -280,13 +268,13 @@ public class SystemDiagnosticsService {
             log.debug("Model probe failed after retries", last);
             return new ModelCatalogProbe(Set.of(), sanitize(last.getMessage()), 0L);
         }
-        return new ModelCatalogProbe(Set.of(), "Model probe failed without a captured exception", 0L);
+        return new ModelCatalogProbe(
+                Set.of(), "Model probe failed without a captured exception", 0L);
     }
 
-    
-
     private Duration probeTimeout() {
-        return Duration.ofMillis(Math.max(500, appProperties.getStartupValidation().getModelProbeTimeoutMs()));
+        return Duration.ofMillis(
+                Math.max(500, appProperties.getStartupValidation().getModelProbeTimeoutMs()));
     }
 
     private String defaultModelFor(ModelProviderType provider) {
@@ -300,6 +288,5 @@ public class SystemDiagnosticsService {
         return text.length() > 240 ? text.substring(0, 240) + "..." : text;
     }
 
-    private record ModelCatalogProbe(Set<String> models, String detail, long latencyMs) {
-    }
+    private record ModelCatalogProbe(Set<String> models, String detail, long latencyMs) {}
 }

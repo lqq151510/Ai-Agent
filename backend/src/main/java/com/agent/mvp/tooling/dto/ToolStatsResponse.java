@@ -15,6 +15,4 @@ public record ToolStatsResponse(
         long p99DurationMs,
         List<ToolDurationBucket> durationBuckets,
         List<ToolStatsByName> topTools,
-        Instant generatedAt
-) {
-}
+        Instant generatedAt) {}

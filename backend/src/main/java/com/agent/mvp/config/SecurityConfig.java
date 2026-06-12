@@ -5,6 +5,8 @@ import com.agent.mvp.common.context.RequestContext;
 import com.agent.mvp.common.context.RequestContextFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.List;
+import java.util.Map;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -22,9 +24,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.List;
-import java.util.Map;
-
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -34,10 +33,11 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;
 
-    public SecurityConfig(AppProperties appProperties,
-                          RequestContextFilter requestContextFilter,
-                          JwtAuthenticationFilter jwtAuthenticationFilter,
-                          ObjectMapper objectMapper) {
+    public SecurityConfig(
+            AppProperties appProperties,
+            RequestContextFilter requestContextFilter,
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            ObjectMapper objectMapper) {
         this.appProperties = appProperties;
         this.requestContextFilter = requestContextFilter;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
@@ -52,23 +52,41 @@ public class SecurityConfig {
                 .formLogin(formLogin -> formLogin.disable())
                 .logout(logout -> logout.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/refresh", "/actuator/health/liveness").permitAll()
-                        .anyRequest().authenticated())
-                .exceptionHandling(exception -> exception
-                        .authenticationEntryPoint((request, response, authException) -> {
-                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                            String requestId = RequestContext.ensureRequestId();
-                            response.setHeader(RequestContext.REQUEST_ID_HEADER, requestId);
-                            response.getWriter().write(objectMapper.writeValueAsString(Map.of(
-                                    "code", "UNAUTHORIZED",
-                                    "message", "Authentication required",
-                                    "requestId", requestId
-                            )));
-                        }))
+                .authorizeHttpRequests(
+                        auth ->
+                                auth.requestMatchers(
+                                                "/api/v1/auth/login",
+                                                "/api/v1/auth/register",
+                                                "/api/v1/auth/refresh",
+                                                "/actuator/health/liveness")
+                                        .permitAll()
+                                        .anyRequest()
+                                        .authenticated())
+                .exceptionHandling(
+                        exception ->
+                                exception.authenticationEntryPoint(
+                                        (request, response, authException) -> {
+                                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                                            response.setContentType(
+                                                    MediaType.APPLICATION_JSON_VALUE);
+                                            String requestId = RequestContext.ensureRequestId();
+                                            response.setHeader(
+                                                    RequestContext.REQUEST_ID_HEADER, requestId);
+                                            response.getWriter()
+                                                    .write(
+                                                            objectMapper.writeValueAsString(
+                                                                    Map.of(
+                                                                            "code",
+                                                                            "UNAUTHORIZED",
+                                                                            "message",
+                                                                            "Authentication"
+                                                                                    + " required",
+                                                                            "requestId",
+                                                                            requestId)));
+                                        }))
                 .addFilterBefore(requestContextFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(
+                        jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -87,9 +105,10 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        List<String> allowedOrigins = appProperties.getCors().getAllowedOrigins().stream()
-                .filter(origin -> origin != null && !origin.isBlank())
-                .toList();
+        List<String> allowedOrigins =
+                appProperties.getCors().getAllowedOrigins().stream()
+                        .filter(origin -> origin != null && !origin.isBlank())
+                        .toList();
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
@@ -105,8 +124,10 @@ public class SecurityConfig {
     @org.springframework.context.annotation.Profile("desktop")
     public CorsConfigurationSource desktopCorsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(java.util.List.of("file://*", "http://localhost:5173"));
-        configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedOriginPatterns(
+                java.util.List.of("file://*", "http://localhost:5173"));
+        configuration.setAllowedMethods(
+                java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("*"));
         configuration.setAllowCredentials(true);
 

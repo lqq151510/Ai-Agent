@@ -157,7 +157,7 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
           <Virtuoso
             className="message-virtual-list"
             data={messages}
-            followOutput="auto"
+            followOutput="smooth"
             itemContent={(_, msg) => (
               <div className="message-row" key={msg.id}>
                 <MessageItem message={msg} />

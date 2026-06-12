@@ -9,10 +9,8 @@ public enum ModelProviderType {
     private final String apiStyle;
     private final boolean openAiCompatible;
 
-    ModelProviderType(String providerId,
-                      String displayName,
-                      String apiStyle,
-                      boolean openAiCompatible) {
+    ModelProviderType(
+            String providerId, String displayName, String apiStyle, boolean openAiCompatible) {
         this.providerId = providerId;
         this.displayName = displayName;
         this.apiStyle = apiStyle;

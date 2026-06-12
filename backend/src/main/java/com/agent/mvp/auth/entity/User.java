@@ -1,19 +1,14 @@
 package com.agent.mvp.auth.entity;
 
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.IdType;
-
-
-
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.Instant;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @TableName("users")
 @Data
@@ -22,10 +17,8 @@ import java.util.UUID;
 @Builder
 public class User {
 
-    @TableId
-    private UUID id;
+    @TableId private UUID id;
 
-    
     private String email;
 
     @TableField("password_hash")
@@ -43,7 +36,6 @@ public class User {
     @TableField("created_at")
     private Instant createdAt;
 
-    
     public void onCreate() {
         if (id == null) {
             id = UUID.randomUUID();
@@ -55,32 +47,4 @@ public class User {
             tokenVersion = 0;
         }
     }
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
 }

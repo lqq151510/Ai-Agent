@@ -45,6 +45,8 @@ type ChatInput = {
   provider?: 'OPENAI';
   model?: string;
   maxContextTokens?: number;
+  customBaseUrl?: string;
+  customApiKey?: string;
 };
 
 type RequirementBreakdownInput = {

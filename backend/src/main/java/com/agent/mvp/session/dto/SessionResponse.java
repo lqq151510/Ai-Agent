@@ -1,7 +1,6 @@
 package com.agent.mvp.session.dto;
 
 import com.agent.mvp.agent.ModelProviderType;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -12,6 +11,4 @@ public record SessionResponse(
         String model,
         Integer contextTokenLimit,
         Instant createdAt,
-        Instant updatedAt
-) {
-}
+        Instant updatedAt) {}

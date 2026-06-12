@@ -8,6 +8,4 @@ public record ProviderOption(
         String displayName,
         String apiStyle,
         boolean openAiCompatible,
-        boolean isDefault
-) {
-}
+        boolean isDefault) {}

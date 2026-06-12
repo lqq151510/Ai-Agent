@@ -1,18 +1,15 @@
 package com.agent.mvp.config;
 
-import com.agent.mvp.common.exception.BadRequestException;
+import com.agent.mvp.agent.ModelProviderType;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import java.time.Duration;
 import org.flexagent.core.runtime.RuntimeTypes;
 import org.flexagent.langchain4j.FlexAgentChatModel;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import java.time.Duration;
-
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
-import com.agent.mvp.agent.ModelProviderType;
 
 @Configuration
 public class AgentConfiguration {
@@ -23,7 +20,7 @@ public class AgentConfiguration {
         if (apiKey == null || apiKey.isBlank()) {
             apiKey = "sk-placeholder";
         }
-        
+
         return OpenAiChatModel.builder()
                 .baseUrl(appProperties.getOpenai().getBaseUrl())
                 .apiKey(apiKey)
@@ -35,9 +32,12 @@ public class AgentConfiguration {
 
     @Bean
     @Primary
-    public ChatLanguageModel primaryChatModel(AppProperties appProperties, 
-                                              @Qualifier("langChain4jOpenAiChatModel") ChatLanguageModel openAiModel, 
-                                              @Qualifier("vertexAiChatModel") org.springframework.beans.factory.ObjectProvider<ChatLanguageModel> vertexAiModelProvider) {
+    public ChatLanguageModel primaryChatModel(
+            AppProperties appProperties,
+            @Qualifier("langChain4jOpenAiChatModel") ChatLanguageModel openAiModel,
+            @Qualifier("vertexAiChatModel")
+                    org.springframework.beans.factory.ObjectProvider<ChatLanguageModel>
+                            vertexAiModelProvider) {
         if (appProperties.getDefaultProvider() == ModelProviderType.VERTEXAI) {
             return vertexAiModelProvider.getIfAvailable();
         } else {
@@ -46,12 +46,18 @@ public class AgentConfiguration {
     }
 
     @Bean
-    public FlexAgentChatModel flexAgentChatModel(ChatLanguageModel delegateModel, com.agent.mvp.agent.tooling.AgentToolOrchestrator toolOrchestrator) throws Exception {
+    public FlexAgentChatModel flexAgentChatModel(
+            ChatLanguageModel delegateModel,
+            com.agent.mvp.agent.tooling.AgentToolOrchestrator toolOrchestrator)
+            throws Exception {
         java.util.List<Object> tools = new java.util.ArrayList<>();
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.ObjectMapper mapper =
+                new com.fasterxml.jackson.databind.ObjectMapper();
         for (com.agent.mvp.agent.tooling.ToolSpec spec : toolOrchestrator.listToolSpecs()) {
             String schemaJson = mapper.writeValueAsString(spec.inputJsonSchema());
-            tools.add(new org.flexagent.core.model.ToolDefinition(spec.name(), spec.description(), schemaJson));
+            tools.add(
+                    new org.flexagent.core.model.ToolDefinition(
+                            spec.name(), spec.description(), schemaJson));
         }
 
         return FlexAgentChatModel.builder()
