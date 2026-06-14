@@ -28,7 +28,12 @@ export const AuthPanel: React.FC<AuthPanelProps> = ({
 }) => {
   return (
     <section className="auth-layout animate-rise">
-      <div className="auth-intro">
+      <div className="auth-bg-aurora" aria-hidden="true">
+        <div className="aurora-blob aurora-blob-1" />
+        <div className="aurora-blob aurora-blob-2" />
+        <div className="aurora-blob aurora-blob-3" />
+      </div>
+      <div className="auth-intro glass-layer">
         <div className="auth-brand">
           <div className="brand-icon">
             <Braces size={28} />

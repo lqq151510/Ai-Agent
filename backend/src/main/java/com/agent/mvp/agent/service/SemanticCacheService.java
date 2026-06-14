@@ -8,7 +8,7 @@ import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
-import dev.langchain4j.store.embedding.milvus.MilvusEmbeddingStore;
+import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.Optional;
@@ -26,11 +26,20 @@ public class SemanticCacheService {
     private final EmbeddingModel embeddingModel;
     private EmbeddingStore<TextSegment> embeddingStore;
 
-    @Value("${milvus.host:localhost}")
-    private String milvusHost;
+    @Value("${PG_HOST:localhost}")
+    private String pgHost;
 
-    @Value("${milvus.port:19530}")
-    private int milvusPort;
+    @Value("${PG_PORT:5432}")
+    private int pgPort;
+
+    @Value("${PG_DATABASE:ai_agent}")
+    private String pgDatabase;
+
+    @Value("${PG_USERNAME:postgres}")
+    private String pgUsername;
+
+    @Value("${PG_PASSWORD:change-me}")
+    private String pgPassword;
 
     public SemanticCacheService(AppProperties appProperties) {
         this.appProperties = appProperties;
@@ -51,21 +60,24 @@ public class SemanticCacheService {
     public void init() {
         try {
             log.info(
-                    "Initializing SemanticCacheService MilvusEmbeddingStore with host: {}, port:"
+                    "Initializing SemanticCacheService PgVectorEmbeddingStore with host: {}, port:"
                             + " {}",
-                    milvusHost,
-                    milvusPort);
+                    pgHost,
+                    pgPort);
             this.embeddingStore =
-                    MilvusEmbeddingStore.builder()
-                            .host(milvusHost)
-                            .port(milvusPort)
-                            .collectionName("semantic_cache")
+                    PgVectorEmbeddingStore.builder()
+                            .host(pgHost)
+                            .port(pgPort)
+                            .database(pgDatabase)
+                            .user(pgUsername)
+                            .password(pgPassword)
+                            .table("semantic_cache")
                             .dimension(384)
                             .build();
-            log.info("SemanticCacheService MilvusEmbeddingStore initialized successfully.");
+            log.info("SemanticCacheService PgVectorEmbeddingStore initialized successfully.");
         } catch (Exception ex) {
             log.warn(
-                    "Failed to initialize MilvusEmbeddingStore for Semantic Cache. Falling back to"
+                    "Failed to initialize PgVectorEmbeddingStore for Semantic Cache. Falling back to"
                             + " InMemoryEmbeddingStore. Error: {}",
                     ex.getMessage());
             this.embeddingStore = new InMemoryEmbeddingStore<>();

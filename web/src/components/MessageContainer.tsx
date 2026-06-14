@@ -43,16 +43,6 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
   onRetryLast,
   onSendMessage
 }) => {
-  const parseTraceCount = (raw?: string) => {
-    if (!raw) return 0;
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.length : 0;
-    } catch {
-      return raw.trim() ? 1 : 0;
-    }
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       onSendMessage();
@@ -73,7 +63,18 @@ export const MessageContainer: React.FC<MessageContainerProps> = ({
     return 'status-idle';
   })();
 
-  const totalTraceCount = messages.reduce((sum, message) => sum + parseTraceCount(message.toolTrace), 0);
+  const totalTraceCount = React.useMemo(() => {
+    return messages.reduce((sum, message) => {
+      const raw = message.toolTrace;
+      if (!raw) return sum;
+      try {
+        const parsed = JSON.parse(raw);
+        return sum + (Array.isArray(parsed) ? parsed.length : 0);
+      } catch {
+        return sum + (raw.trim() ? 1 : 0);
+      }
+    }, 0);
+  }, [messages]);
   const assistantTurns = messages.filter(message => message.role === 'assistant').length;
   const modelCapabilities = [
     currentModelOption?.supportsTools ? 'Tools' : null,

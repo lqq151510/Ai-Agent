@@ -35,6 +35,7 @@ type StreamHandlers = {
   onClientToolCall?: (call: { id: string; name: string; argumentsJson: string }) => void;
   onDone?: (payload: ChatResponse) => void;
   onError?: (message: string) => void;
+  onAlert?: (payload: { rootCause: string; suggestedFix: string }) => void;
 };
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -184,6 +185,10 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       }
       if (event === 'done') {
         handlers.onDone?.(payload as ChatResponse);
+        return;
+      }
+      if (event === 'alert') {
+        handlers.onAlert?.(payload as unknown as { rootCause: string; suggestedFix: string });
         return;
       }
       if (event === 'error') {
@@ -370,6 +375,62 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
         { method: 'GET' },
         true,
       );
+    },
+
+    executeMultiAgentTask(input: { taskPrompt: string }) {
+      return request<{ result: string }>(
+        '/api/coach/execute-multi-agent',
+        {
+          method: 'POST',
+          body: JSON.stringify(input),
+        },
+        true,
+      );
+    },
+
+    async subscribeToSentinelAlerts(
+      signal: AbortSignal,
+      handlers: { onAlert: (alert: { rootCause: string; suggestedFix: string }) => void; onError?: (message: string) => void },
+      allowRetry = true
+    ): Promise<void> {
+      const headers = new Headers();
+      const accessToken = tokenAccessor.getState().accessToken;
+      if (accessToken) {
+        headers.set('Authorization', `Bearer ${accessToken}`);
+      }
+
+      try {
+        const response = await fetch(`${safeBaseUrl}/api/coach/sentinel-alerts`, {
+          method: 'GET',
+          headers,
+          signal,
+        });
+
+        if (response.status === 401 && allowRetry) {
+          const refreshed = await tryRefreshToken();
+          if (refreshed) {
+            return this.subscribeToSentinelAlerts(signal, handlers, false);
+          }
+        }
+
+        if (!response.ok) {
+          const payload = await parseBody(response);
+          handlers.onError?.(toErrorMessage(payload, response.status));
+          return;
+        }
+
+        if (!response.body) {
+          handlers.onError?.('Empty response body');
+          return;
+        }
+
+        await parseSseStream(response.body, handlers);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        handlers.onError?.(error instanceof Error ? error.message : String(error));
+      }
     },
   };
 }

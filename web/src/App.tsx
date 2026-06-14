@@ -156,6 +156,8 @@ export function App() {
 
   return (
     <div className="app-shell">
+      {/* 桌面端 macOS 拖拽区 */}
+      <div className="mac-drag-region" />
       {effectsEnabled ? <MouseFx /> : null}
       <button
         className="ghost fx-toggle icon-button"

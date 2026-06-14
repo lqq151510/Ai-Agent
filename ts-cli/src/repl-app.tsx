@@ -15,6 +15,7 @@ import type { AuthState, Message, Session } from './types.js';
 import { Header } from './components/Header.js';
 import { MessageBubble } from './components/MessageBubble.js';
 import { InputArea } from './components/InputArea.js';
+import { SentinelAlertModal } from './components/SentinelAlertModal.js';
 
 type UiMessage = {
   id: string;
@@ -46,6 +47,7 @@ function renderHelp(): string {
     '/stats [windowHours]',
     '/report [windowHours]',
     '/model <provider> <modelName>',
+    '/coach <task prompt>',
     '/clear',
     '/exit',
   ].join('\n');
@@ -80,6 +82,7 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
   const deferredMessages = useDeferredValue(messages);
   const visibleMessages = deferredMessages.slice(-MAX_RENDERED_MESSAGES);
   const activeSessionId = authState.activeSessionId;
+  const [sentinelAlert, setSentinelAlert] = useState<{ rootCause: string; suggestedFix: string } | null>(null);
 
   useEffect(() => {
     authRef.current = authState;
@@ -96,9 +99,22 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
     }),
   );
 
-  const ALL_SLASH_COMMANDS = ['/help', '/sessions', '/use', '/new', '/stats', '/report', '/model', '/clear', '/exit', '/quit'];
+  useEffect(() => {
+    const abortController = new AbortController();
+    void api.subscribeToSentinelAlerts(abortController.signal, {
+      onAlert: alert => {
+        setSentinelAlert(alert);
+      },
+      onError: () => {},
+    });
+    return () => abortController.abort();
+  }, [api]);
+
+  const ALL_SLASH_COMMANDS = ['/help', '/sessions', '/use', '/new', '/stats', '/report', '/model', '/coach', '/clear', '/exit', '/quit'];
 
   useInput((_char, key) => {
+    if (sentinelAlert) return;
+
     if (key.escape) {
       exit();
     }
@@ -430,6 +446,26 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
         pushMessage('system', `Default model set to ${provider}/${model}. It will be used for new sessions.`);
         return;
       }
+      case 'coach': {
+        const taskPrompt = args.join(' ').trim();
+        if (!taskPrompt) {
+          pushMessage('error', 'Usage: /coach <task prompt>');
+          return;
+        }
+        setLoading(true);
+        setStatusLine('Coach executing multi-agent task...');
+        try {
+          const res = await api.executeMultiAgentTask({ taskPrompt });
+          pushMessage('assistant', `🤖 Coach Result:\n${res.result}`);
+          setStatusLine('Ready');
+        } catch (error) {
+          pushMessage('error', error instanceof Error ? error.message : String(error));
+          setStatusLine('Ready');
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
       default:
         pushMessage('error', `Unknown command: /${command || ''}`);
     }
@@ -478,13 +514,21 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
         ))}
       </Box>
 
-      <InputArea 
-        input={input} 
-        setInput={setInput} 
-        onSubmit={value => void handleSubmit(value)} 
-        loading={loading} 
-        statusLine={statusLine} 
-      />
+      {sentinelAlert ? (
+        <SentinelAlertModal
+          rootCause={sentinelAlert.rootCause}
+          suggestedFix={sentinelAlert.suggestedFix}
+          onDismiss={() => setSentinelAlert(null)}
+        />
+      ) : (
+        <InputArea 
+          input={input} 
+          setInput={setInput} 
+          onSubmit={value => void handleSubmit(value)} 
+          loading={loading} 
+          statusLine={statusLine} 
+        />
+      )}
     </Box>
   );
 }

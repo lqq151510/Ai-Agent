@@ -149,13 +149,9 @@ public class CodeToolService {
         long start = System.currentTimeMillis();
         try {
             Path file = resolveSafe(relativePath);
-            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-
+            
             int from = startLine == null ? 1 : Math.max(1, startLine);
-            int to =
-                    endLine == null
-                            ? Math.min(lines.size(), from + MAX_READ_LINES - 1)
-                            : Math.min(lines.size(), endLine);
+            int to = endLine == null ? from + MAX_READ_LINES - 1 : endLine;
             if (to < from) {
                 throw new BadRequestException("Invalid line range");
             }
@@ -164,8 +160,12 @@ public class CodeToolService {
             }
 
             StringBuilder sb = new StringBuilder();
-            for (int i = from; i <= to; i++) {
-                sb.append(i).append(": ").append(lines.get(i - 1)).append('\n');
+            try (java.util.stream.Stream<String> lineStream = Files.lines(file, StandardCharsets.UTF_8)) {
+                java.util.Iterator<String> iterator = lineStream.skip(from - 1).limit(to - from + 1).iterator();
+                int currentLine = from;
+                while (iterator.hasNext()) {
+                    sb.append(currentLine++).append(": ").append(iterator.next()).append('\n');
+                }
             }
 
             return new ToolCallOutput(
@@ -191,23 +191,21 @@ public class CodeToolService {
 
         try {
             Path pom = resolveSafe(filePath);
-            String content = Files.readString(pom, StandardCharsets.UTF_8);
+            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
+            org.w3c.dom.Document doc = builder.parse(pom.toFile());
 
-            Pattern artifactPattern = Pattern.compile("<artifactId>([^<]+)</artifactId>");
-            Pattern dependencyPattern = Pattern.compile("<dependency>([\\s\\S]*?)</dependency>");
-            Pattern groupPattern = Pattern.compile("<groupId>([^<]+)</groupId>");
-            Pattern versionPattern = Pattern.compile("<version>([^<]+)</version>");
+            org.w3c.dom.NodeList artifactNodes = doc.getElementsByTagName("artifactId");
+            String projectArtifact = artifactNodes.getLength() > 0 ? artifactNodes.item(0).getTextContent() : "unknown";
 
-            Matcher artifactMatcher = artifactPattern.matcher(content);
-            String projectArtifact = artifactMatcher.find() ? artifactMatcher.group(1) : "unknown";
-
-            Matcher dependencyMatcher = dependencyPattern.matcher(content);
             List<String> dependencies = new ArrayList<>();
-            while (dependencyMatcher.find() && dependencies.size() < 80) {
-                String block = dependencyMatcher.group(1);
-                String group = matchFirst(groupPattern, block);
-                String artifact = matchFirst(artifactPattern, block);
-                String version = matchFirst(versionPattern, block);
+            org.w3c.dom.NodeList deps = doc.getElementsByTagName("dependency");
+            for (int i = 0; i < deps.getLength() && dependencies.size() < 80; i++) {
+                org.w3c.dom.Element dep = (org.w3c.dom.Element) deps.item(i);
+                String group = getTagValue("groupId", dep);
+                String artifact = getTagValue("artifactId", dep);
+                String version = getTagValue("version", dep);
                 dependencies.add(group + ":" + artifact + ":" + version);
             }
 
@@ -225,7 +223,7 @@ public class CodeToolService {
                     "SUCCESS",
                     System.currentTimeMillis() - start,
                     output);
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             return new ToolCallOutput(
                     "analyzePom",
                     toJson(args("path", filePath)),
@@ -235,9 +233,12 @@ public class CodeToolService {
         }
     }
 
-    private String matchFirst(Pattern pattern, String text) {
-        Matcher matcher = pattern.matcher(text);
-        return matcher.find() ? matcher.group(1) : "";
+    private String getTagValue(String tag, org.w3c.dom.Element element) {
+        org.w3c.dom.NodeList nodeList = element.getElementsByTagName(tag);
+        if (nodeList != null && nodeList.getLength() > 0) {
+            return nodeList.item(0).getTextContent();
+        }
+        return "";
     }
 
     private Path resolveSafe(String relativePath) {

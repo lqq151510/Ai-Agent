@@ -51,6 +51,18 @@ public class CoachController {
         }
     }
 
+    @PostMapping("/execute-multi-agent")
+    public ResponseEntity<String> executeMultiAgent(
+            @RequestBody String requirement,
+            Authentication authentication) {
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
+        try (MDC.MDCCloseable u =
+                MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+            String result = coachService.executeMultiAgentTask(user.userId(), requirement);
+            return ResponseEntity.ok(result);
+        }
+    }
+
     @PostMapping("/logs/diagnose")
     public LogDiagnosisResponse diagnose(
             @Valid @RequestBody LogDiagnosisRequest request, Authentication authentication) {

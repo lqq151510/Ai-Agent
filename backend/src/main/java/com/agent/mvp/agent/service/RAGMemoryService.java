@@ -12,7 +12,7 @@ import dev.langchain4j.model.output.Response;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
-import dev.langchain4j.store.embedding.milvus.MilvusEmbeddingStore;
+import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import jakarta.annotation.PostConstruct;
 import java.io.File;
 import java.util.ArrayList;
@@ -32,11 +32,20 @@ public class RAGMemoryService {
     private final EmbeddingModel embeddingModel;
     private EmbeddingStore<TextSegment> embeddingStore;
 
-    @Value("${milvus.host:localhost}")
-    private String milvusHost;
+    @Value("${PG_HOST:localhost}")
+    private String pgHost;
 
-    @Value("${milvus.port:19530}")
-    private int milvusPort;
+    @Value("${PG_PORT:5432}")
+    private int pgPort;
+
+    @Value("${PG_DATABASE:ai_agent}")
+    private String pgDatabase;
+
+    @Value("${PG_USERNAME:postgres}")
+    private String pgUsername;
+
+    @Value("${PG_PASSWORD:change-me}")
+    private String pgPassword;
 
     private final MarkItDownService markItDownService;
 
@@ -60,20 +69,23 @@ public class RAGMemoryService {
     public void init() {
         try {
             log.info(
-                    "Initializing MilvusEmbeddingStore with host: {}, port: {}",
-                    milvusHost,
-                    milvusPort);
+                    "Initializing PgVectorEmbeddingStore with host: {}, port: {}",
+                    pgHost,
+                    pgPort);
             this.embeddingStore =
-                    MilvusEmbeddingStore.builder()
-                            .host(milvusHost)
-                            .port(milvusPort)
-                            .collectionName("engineering_memory")
+                    PgVectorEmbeddingStore.builder()
+                            .host(pgHost)
+                            .port(pgPort)
+                            .database(pgDatabase)
+                            .user(pgUsername)
+                            .password(pgPassword)
+                            .table("engineering_memory")
                             .dimension(384)
                             .build();
-            log.info("MilvusEmbeddingStore initialized successfully.");
+            log.info("PgVectorEmbeddingStore initialized successfully.");
         } catch (Exception ex) {
             log.warn(
-                    "Failed to initialize MilvusEmbeddingStore. Falling back to"
+                    "Failed to initialize PgVectorEmbeddingStore. Falling back to"
                             + " InMemoryEmbeddingStore. Error: {}",
                     ex.getMessage());
             this.embeddingStore = new InMemoryEmbeddingStore<>();
@@ -126,6 +138,22 @@ public class RAGMemoryService {
         return results;
     }
 
+    public List<String> searchCodeContext(String queryText, int maxResults) {
+        List<String> results = new ArrayList<>();
+        try {
+            Embedding queryEmbedding = embeddingModel.embed(queryText).content();
+            List<EmbeddingMatch<TextSegment>> matches =
+                    embeddingStore.findRelevant(queryEmbedding, maxResults);
+            for (EmbeddingMatch<TextSegment> match : matches) {
+                // Return all matches since code context doesn't have a userId
+                results.add(match.embedded().text());
+            }
+        } catch (Exception ex) {
+            log.error("Failed to search code context from vector store. Error: {}", ex.getMessage());
+        }
+        return results;
+    }
+
     @Async
     public void ingestDocument(File documentFile) {
         try {
@@ -151,6 +179,25 @@ public class RAGMemoryService {
                     documentFile.getName(),
                     ex.getMessage());
             throw new RuntimeException("Document ingestion failed", ex);
+        }
+    }
+
+    public void ingestDocuments(List<Document> documents) {
+        try {
+            log.info("Starting ingestion of {} code documents", documents.size());
+            DocumentSplitter splitter = DocumentSplitters.recursive(1000, 100);
+            List<TextSegment> allSegments = new ArrayList<>();
+            for (Document doc : documents) {
+                allSegments.addAll(splitter.split(doc));
+            }
+            if (!allSegments.isEmpty()) {
+                Response<List<Embedding>> embeddingResponse = embeddingModel.embedAll(allSegments);
+                embeddingStore.addAll(embeddingResponse.content(), allSegments);
+            }
+            log.info("Successfully ingested {} code segments", allSegments.size());
+        } catch (Exception ex) {
+            log.error("Failed to ingest code documents. Error: {}", ex.getMessage());
+            throw new RuntimeException("Code document ingestion failed", ex);
         }
     }
 }

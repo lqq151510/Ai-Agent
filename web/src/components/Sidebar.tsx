@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import type { ModelOption, Session, Provider, ToolStatsResponse } from '../types';
 import { defaultModel } from '../utils';
-import { Activity, Download, LogOut, MessageSquarePlus, Plus, RadioTower, RefreshCw, Search } from 'lucide-react';
+import { LogOut, MessageSquarePlus, Plus } from 'lucide-react';
+import { ToolStatsPanel } from './sidebar/ToolStatsPanel';
+import { SessionList } from './sidebar/SessionList';
 
 interface SidebarProps {
   userEmail: string;
@@ -79,23 +81,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [createModel, setCreateModel] = useState(pickModel('OPENAI'));
 
   const providerModels = optionsByProvider[createProvider];
-  const filteredSessions = useMemo(() => {
-    const q = sessionQuery.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter(session => {
-      const title = session.title.toLowerCase();
-      const model = session.model.toLowerCase();
-      const provider = session.provider.toLowerCase();
-      return title.includes(q) || model.includes(q) || provider.includes(q);
-    });
-  }, [sessionQuery, sessions]);
-
-  const maxBucketCount = useMemo(() => {
-    if (!toolStats || toolStats.durationBuckets.length === 0) {
-      return 1;
-    }
-    return Math.max(...toolStats.durationBuckets.map(bucket => bucket.count), 1);
-  }, [toolStats]);
 
   const handleCreate = async () => {
     const model = createModel.trim() || pickModel(createProvider);
@@ -160,150 +145,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           创建会话
         </button>
       </section>
-      <section className="section tool-stats">
-        <div className="section-heading">
-          <Activity size={16} />
-          <h3>工具统计</h3>
-          <button
-            className="icon-button stat-refresh"
-            onClick={onRefreshToolStats}
-            title="刷新统计"
-            aria-label="刷新统计"
-            disabled={toolStatsLoading}
-          >
-            <RefreshCw size={14} className={toolStatsLoading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-        <div className="stats-filter-row">
-          <div className="stats-export-row">
-            <button type="button" className="ghost stat-export-btn" onClick={onExportToolStatsJson} disabled={toolStatsLoading}>
-              <Download size={13} />
-              导出 JSON
-            </button>
-            <button type="button" className="ghost stat-export-btn" onClick={onExportToolStatsMarkdown} disabled={toolStatsLoading}>
-              <Download size={13} />
-              导出 MD
-            </button>
-            <button type="button" className="ghost stat-export-btn" onClick={onExportReleaseReportJson} disabled={toolStatsLoading}>
-              <Download size={13} />
-              巡检 JSON
-            </button>
-            <button type="button" className="ghost stat-export-btn" onClick={onExportReleaseReportMarkdown} disabled={toolStatsLoading}>
-              <Download size={13} />
-              巡检 MD
-            </button>
-          </div>
-          <div className="stats-segment">
-            {[1, 24, 168].map(hours => (
-              <button
-                key={hours}
-                type="button"
-                className={toolStatsWindowHours === hours ? 'segment-btn active' : 'segment-btn'}
-                onClick={() => onChangeToolStatsWindow(hours)}
-                disabled={toolStatsLoading}
-              >
-                {hours === 168 ? '7d' : `${hours}h`}
-              </button>
-            ))}
-          </div>
-          <div className="stats-segment">
-            <button
-              type="button"
-              className={toolStatsScope === 'session' ? 'segment-btn active' : 'segment-btn'}
-              onClick={() => onChangeToolStatsScope('session')}
-              disabled={!hasActiveSession || toolStatsLoading}
-            >
-              当前会话
-            </button>
-            <button
-              type="button"
-              className={toolStatsScope === 'global' ? 'segment-btn active' : 'segment-btn'}
-              onClick={() => onChangeToolStatsScope('global')}
-              disabled={toolStatsLoading}
-            >
-              全局
-            </button>
-          </div>
-        </div>
-        {!toolStats || toolStats.totalRuns === 0 ? (
-          <p className="muted empty-copy">最近 {toolStats?.windowHours ?? 24} 小时暂无工具调用数据。</p>
-        ) : (
-          <div className="tool-stats-panel">
-            <div className="stats-kpis">
-              <div>
-                <span>总调用</span>
-                <strong>{toolStats.totalRuns}</strong>
-              </div>
-              <div>
-                <span>成功率</span>
-                <strong>{toolStats.successRate}%</strong>
-              </div>
-              <div>
-                <span>P95</span>
-                <strong>{toolStats.p95DurationMs}ms</strong>
-              </div>
-            </div>
-
-            <div className="bucket-list">
-              {toolStats.durationBuckets.map(bucket => (
-                <div key={bucket.label} className="bucket-item">
-                  <div className="bucket-label">
-                    <span>{bucket.label}</span>
-                    <span>{bucket.count}</span>
-                  </div>
-                  <div className="bucket-track">
-                    <i style={{ width: `${Math.max(6, (bucket.count / maxBucketCount) * 100)}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="tool-top-list">
-              {toolStats.topTools.slice(0, 5).map(tool => (
-                <div key={tool.toolName} className="tool-top-item">
-                  <span className="tool-name">{tool.toolName}</span>
-                  <span className="tool-meta">{tool.runs}次 / {tool.successRate}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-      <section className="section sessions">
-        <div className="section-heading">
-          <RadioTower size={16} />
-          <h3>会话列表</h3>
-          <span className="count-pill">{filteredSessions.length}</span>
-        </div>
-        <div className="session-search input-shell">
-          <Search size={14} />
-          <input
-            value={sessionQuery}
-            onChange={e => setSessionQuery(e.target.value)}
-            placeholder="搜索标题 / 模型 / Provider"
-            aria-label="搜索会话"
-          />
-        </div>
-        <div className="session-list">
-          {filteredSessions.length === 0 ? (
-            <p className="muted empty-copy">没有匹配会话，换个关键词试试。</p>
-          ) : (
-            filteredSessions.map(s => (
-              <button
-                key={s.id}
-                className={activeSessionId === s.id ? 'session-card active' : 'session-card'}
-                onClick={() => onSelectSession(s.id)}
-              >
-                <span className="title">{s.title}</span>
-                <span className="meta">
-                  <span>{s.provider}</span>
-                  <span>{s.model}</span>
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      </section>
+      <ToolStatsPanel
+        toolStats={toolStats}
+        toolStatsLoading={toolStatsLoading}
+        toolStatsWindowHours={toolStatsWindowHours}
+        toolStatsScope={toolStatsScope}
+        hasActiveSession={hasActiveSession}
+        onRefreshToolStats={onRefreshToolStats}
+        onChangeToolStatsWindow={onChangeToolStatsWindow}
+        onChangeToolStatsScope={onChangeToolStatsScope}
+        onExportToolStatsJson={onExportToolStatsJson}
+        onExportToolStatsMarkdown={onExportToolStatsMarkdown}
+        onExportReleaseReportJson={onExportReleaseReportJson}
+        onExportReleaseReportMarkdown={onExportReleaseReportMarkdown}
+      />
+      <SessionList
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={onSelectSession}
+      />
     </aside>
   );
 };

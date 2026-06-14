@@ -7,6 +7,7 @@ import com.agent.mvp.agent.service.ModelGateway;
 import com.agent.mvp.agent.service.RAGMemoryService;
 import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.auth.service.UserService;
+import com.agent.mvp.coach.agent.SupervisorAgent;
 import com.agent.mvp.coach.domain.GeneratedScaffold;
 import com.agent.mvp.coach.domain.ScaffoldFile;
 import com.agent.mvp.coach.dto.ApiEndpointPlan;
@@ -36,9 +37,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import com.agent.mvp.agent.service.CodeRAGService;
+import com.agent.mvp.coach.dto.SentinelReportRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class CoachService {
+    private static final Logger log = LoggerFactory.getLogger(CoachService.class);
 
     private final ModelGateway modelGateway;
     private final CoachPromptService promptService;
@@ -49,6 +55,8 @@ public class CoachService {
     private final ObjectMapper objectMapper;
     private final RAGMemoryService ragMemoryService;
     private final UserService userService;
+    private final SupervisorAgent supervisorAgent;
+    private final CodeRAGService codeRAGService;
 
     public CoachService(
             ModelGateway modelGateway,
@@ -59,7 +67,9 @@ public class CoachService {
             AppProperties appProperties,
             ObjectMapper objectMapper,
             RAGMemoryService ragMemoryService,
-            UserService userService) {
+            UserService userService,
+            SupervisorAgent supervisorAgent,
+            CodeRAGService codeRAGService) {
         this.modelGateway = modelGateway;
         this.promptService = promptService;
         this.scaffoldTemplateRegistry = scaffoldTemplateRegistry;
@@ -69,6 +79,23 @@ public class CoachService {
         this.objectMapper = objectMapper;
         this.ragMemoryService = ragMemoryService;
         this.userService = userService;
+        this.supervisorAgent = supervisorAgent;
+        this.codeRAGService = codeRAGService;
+    }
+
+    public void handleSentinelReport(SentinelReportRequest request) {
+        log.info("Received sentinel report for project {}: \n{}", request.projectName(), request.stackTrace());
+        
+        // 1. Find relevant code context using CodeRAGService
+        List<String> codeContext = codeRAGService.searchRelatedCode(request.stackTrace(), 3);
+        String contextStr = String.join("\n---\n", codeContext);
+        
+        // 2. Trigger SupervisorAgent to generate a fix
+        String requirement = String.format("A bug was detected in project '%s'.\nStack trace:\n%s\n\nRelevant Code Context:\n%s\nPlease analyze the bug and propose a fix.",
+                request.projectName(), request.stackTrace(), contextStr);
+        
+        String result = supervisorAgent.executeTask(requirement);
+        log.info("SupervisorAgent completed fix generation: \n{}", result);
     }
 
     public RequirementBreakdownResponse breakdown(
@@ -95,6 +122,10 @@ public class CoachService {
                         toJson(parsed.value()),
                         null);
         return new RequirementBreakdownResponse(run.getId(), parsed.value(), raw, parsed.warning());
+    }
+
+    public String executeMultiAgentTask(UUID userId, String requirement) {
+        return supervisorAgent.executeTask(requirement);
     }
 
     public LogDiagnosisResponse diagnose(UUID userId, LogDiagnosisRequest request) {

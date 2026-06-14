@@ -100,6 +100,7 @@ button:disabled {
   backdrop-filter: blur(10px);
   font-size: 12px;
   padding: 8px 10px;
+  -webkit-app-region: no-drag;
 }
 
 .coach-launch {
@@ -112,6 +113,18 @@ button:disabled {
   backdrop-filter: blur(4px);
   font-size: 12px;
   padding: 8px 12px;
+  -webkit-app-region: no-drag;
+}
+
+/* ===== Desktop Mac App Region ===== */
+.mac-drag-region {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  -webkit-app-region: drag;
+  z-index: 1000;
 }
 
 /* ===== Mouse FX ===== */
@@ -3774,4 +3787,220 @@ textarea::placeholder {
 
 .preview-main .accent {
   background: rgba(212, 242, 71, 0.24);
+}
+
+/* ===== Premium Deep Glassmorphism Auth Redesign ===== */
+.auth-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(32px, 8vw, 120px);
+  padding: clamp(24px, 5vw, 64px);
+  background: #030712 !important;
+  position: relative;
+  overflow: hidden;
+  color: #f8fafc !important;
+}
+
+/* Aurora Background */
+.auth-bg-aurora {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0) 0%, #030712 100%);
+}
+
+.aurora-blob {
+  position: absolute;
+  filter: blur(80px);
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: float 14s ease-in-out infinite alternate;
+}
+
+.aurora-blob-1 {
+  top: -10%; left: -10%; width: 50vw; height: 50vw;
+  background: rgba(56, 189, 248, 0.3);
+  animation-delay: 0s;
+}
+.aurora-blob-2 {
+  bottom: -20%; right: -10%; width: 60vw; height: 60vw;
+  background: rgba(139, 92, 246, 0.25);
+  animation-delay: -5s;
+}
+.aurora-blob-3 {
+  top: 40%; left: 40%; width: 40vw; height: 40vw;
+  background: rgba(16, 185, 129, 0.2);
+  animation-delay: -10s;
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(5%, 10%) scale(1.05); }
+  100% { transform: translate(-5%, -5%) scale(0.95); }
+}
+
+.auth-layout > * {
+  z-index: 1;
+}
+
+/* Premium Panel */
+.auth-panel {
+  background: rgba(15, 23, 42, 0.4) !important;
+  backdrop-filter: blur(24px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  border-radius: 24px !important;
+  padding: 40px !important;
+  color: #f1f5f9 !important;
+}
+
+/* Brand Icon */
+.brand-icon {
+  background: linear-gradient(135deg, #38bdf8, #8b5cf6) !important;
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
+  border-radius: 16px !important;
+}
+
+.auth-intro h1 {
+  color: #ffffff !important;
+  text-shadow: 0 4px 24px rgba(255, 255, 255, 0.2) !important;
+  font-weight: 800 !important;
+}
+
+.auth-tagline {
+  color: #94a3b8 !important;
+}
+
+/* Feature Items */
+.feature-item {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #cbd5e1 !important;
+  backdrop-filter: blur(8px) !important;
+  border-radius: 999px !important;
+}
+.feature-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  color: #38bdf8 !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.2) !important;
+  transform: translateY(-2px);
+}
+
+/* Auth Header */
+.auth-header h2 {
+  color: #ffffff !important;
+}
+.auth-header p.badge {
+  background: rgba(56, 189, 248, 0.1) !important;
+  color: #38bdf8 !important;
+  border: 1px solid rgba(56, 189, 248, 0.2) !important;
+}
+.auth-header p.muted {
+  color: #94a3b8 !important;
+}
+
+/* Inputs */
+.auth-panel .field-label {
+  color: #94a3b8 !important;
+}
+.auth-panel .input-shell {
+  background: rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #f1f5f9 !important;
+  border-radius: 12px !important;
+  transition: all 0.3s ease !important;
+}
+.auth-panel .input-shell input {
+  color: #f1f5f9 !important;
+}
+.auth-panel .input-shell input::placeholder {
+  color: #64748b !important;
+}
+.auth-panel .input-shell:focus-within {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15), inset 0 0 12px rgba(56, 189, 248, 0.1) !important;
+  background: rgba(0, 0, 0, 0.4) !important;
+}
+.auth-panel .input-shell svg {
+  color: #94a3b8 !important;
+}
+.auth-panel .input-shell:focus-within svg {
+  color: #38bdf8 !important;
+}
+
+/* Tabs */
+.auth-tabs {
+  background: rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 12px !important;
+  padding: 6px !important;
+}
+.auth-tabs .tab {
+  color: #94a3b8 !important;
+  border-radius: 8px !important;
+}
+.auth-tabs .tab.active {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Primary Button */
+.auth-panel .primary {
+  background: linear-gradient(135deg, #0ea5e9, #6366f1) !important;
+  border: none !important;
+  border-radius: 12px !important;
+  color: white !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  height: 48px !important;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.2) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.auth-panel .primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #38bdf8, #8b5cf6) !important;
+  box-shadow: 0 12px 32px rgba(99, 102, 241, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* Product Preview Floating 3D */
+.auth-product-preview {
+  background: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  transform: perspective(1000px) rotateY(4deg) rotateX(2deg) !important;
+  transition: transform 0.5s ease !important;
+  border-radius: 16px !important;
+}
+.auth-product-preview:hover {
+  transform: perspective(1000px) rotateY(0deg) rotateX(0deg) translateY(-8px) !important;
+}
+.preview-toolbar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+.preview-rail, .preview-main, .preview-side {
+  border-color: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+.preview-toolbar span, .preview-rail span, .preview-main span, .preview-side span {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+.preview-main b {
+  background: linear-gradient(90deg, #38bdf8, #8b5cf6) !important;
 }

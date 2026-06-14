@@ -1,153 +1,29 @@
-import { app, BrowserWindow, ipcMain, Menu, Tray, shell, globalShortcut } from 'electron';
-import * as path from 'path';
-import * as net from 'net';
+import { app, globalShortcut } from 'electron';
 import { BackendManager } from './backend-manager';
 import { CliManager } from './cli-manager';
+import { WindowManager } from './window-manager';
+import { TrayManager } from './tray-manager';
+import { IpcRegistry } from './ipc-registry';
+import { findFreePort } from './utils/network';
+import { getDataDir, getJrePath, getBackendJarPath, getBackendStartupTimeoutMs } from './utils/env';
 
-let mainWindow: BrowserWindow | null = null;
-let tray: Tray | null = null;
-let backendManager: BackendManager;
-let cliManager: CliManager;
-const isDev = !app.isPackaged;
+// Unhandled Promise Rejection Handling
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[desktop] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Avoid crashing the main process on backend startup timeout or similar async errors
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[desktop] Uncaught Exception:', error);
+});
 
 const DESKTOP_PORT = 18080;
 let activePort = DESKTOP_PORT;
-let isQuitting = false;
-
-function checkPortFree(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once('error', () => {
-      resolve(false);
-    });
-    server.once('listening', () => {
-      server.close(() => {
-        resolve(true);
-      });
-    });
-    server.listen(port, '127.0.0.1');
-  });
-}
-
-async function findFreePort(startPort: number, endPort: number): Promise<number> {
-  for (let port = startPort; port <= endPort; port++) {
-    const free = await checkPortFree(port);
-    if (free) {
-      return port;
-    }
-  }
-  throw new Error(`No free port found in range ${startPort}-${endPort}`);
-}
-
-function getBackendStartupTimeoutMs(): number {
-  const raw = process.env.DESKTOP_BACKEND_READY_TIMEOUT_MS;
-  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60_000;
-}
-
-function getResourcePath(): string {
-  return process.resourcesPath || path.join(__dirname, '..');
-}
-
-function getJrePath(): string {
-  const resourceRoot = getResourcePath();
-  return path.join(resourceRoot, 'backend-jre', 'jre', 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
-}
-
-function getBackendJarPath(): string {
-  const resourceRoot = getResourcePath();
-  return path.join(resourceRoot, 'backend-jre', 'backend.jar');
-}
-
-function getCliEntryPath(): string {
-  const resourceRoot = getResourcePath();
-  return path.join(resourceRoot, 'backend-jre', 'ts-cli', 'dist', 'index.js');
-}
-
-function getDataDir(): string {
-  return path.join(app.getPath('userData'), 'data');
-}
-
-function createMainWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    title: 'AI Agent',
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, '..', 'preload', 'index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
-  mainWindow.on('close', (event) => {
-    if (process.platform === 'darwin' && !isQuitting) {
-      event.preventDefault();
-      mainWindow?.hide();
-    }
-  });
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow!.show();
-  });
-
-  return mainWindow;
-}
-
-function createTray() {
-  const iconPath = path.join(getResourcePath(), 'icons', process.platform === 'win32' ? 'icon.ico' : 'iconTemplate.png');
-  try {
-    tray = new Tray(iconPath);
-  } catch {
-    return;
-  }
-
-  const contextMenu = Menu.buildFromTemplate([
-    { label: '显示窗口', click: () => { mainWindow?.show(); } },
-    { label: '打开数据目录', click: () => { shell.openPath(getDataDir()); } },
-    { label: '打开运行日志', click: () => { shell.showItemInFolder(backendManager.getStatus().logPath); } },
-    { type: 'separator' },
-    {
-      label: '重启后端',
-      click: () => {
-        void backendManager.restart().catch((error) => {
-          console.error('[desktop] backend restart failed', error);
-        });
-      },
-    },
-    { type: 'separator' },
-    { label: '退出', click: () => { app.quit(); } },
-  ]);
-
-  tray.setToolTip('AI Agent');
-  tray.setContextMenu(contextMenu);
-  tray.on('click', () => { mainWindow?.show(); });
-}
-
-function setupIpc() {
-  ipcMain.handle('backend:status', () => backendManager.getStatus());
-  ipcMain.handle('backend:restart', () => backendManager.restart());
-  ipcMain.handle('backend:open-log-file', () => shell.showItemInFolder(backendManager.getStatus().logPath));
-  ipcMain.handle('app:version', () => app.getVersion());
-  ipcMain.handle('app:data-dir', () => getDataDir());
-  ipcMain.handle('app:open-data-dir', () => {
-    shell.openPath(getDataDir());
-  });
-  ipcMain.handle('backend:port', () => activePort);
-  ipcMain.handle('cli:execute', (_event, args: string[]) => {
-    return cliManager.execute(getCliEntryPath(), args);
-  });
-  ipcMain.on('cli:input', (_event, input: string) => {
-    cliManager.sendInput(input);
-  });
-}
+let backendManager: BackendManager;
+let cliManager: CliManager;
+let windowManager: WindowManager;
+let trayManager: TrayManager;
+let ipcRegistry: IpcRegistry;
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -155,19 +31,27 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', async () => {
-  isQuitting = true;
-  if (backendManager) {
-    await backendManager.stop();
-  }
-  if (cliManager) {
+app.on('before-quit', async (event) => {
+  if (backendManager && backendManager.getStatus().status !== 'stopped') {
+    event.preventDefault();
+    try {
+      await backendManager.stop();
+    } catch (err) {
+      console.error('[desktop] Error stopping backend:', err);
+    }
+    if (cliManager) {
+      cliManager.killAll();
+    }
+    app.exit(0);
+  } else if (cliManager) {
     cliManager.killAll();
   }
 });
 
 app.on('activate', () => {
-  if (mainWindow === null) {
-    createMainWindow();
+  if (windowManager && !windowManager.mainWindow) {
+    windowManager.createMainWindow();
+    windowManager.loadContent();
   }
 });
 
@@ -176,67 +60,61 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+    if (windowManager) {
+      windowManager.showAndFocus();
     }
   });
 
   app.whenReady().then(async () => {
-    app.dock?.hide();
+    try {
+      app.dock?.hide();
 
-    globalShortcut.register('CommandOrControl+Shift+Space', () => {
-      if (mainWindow) {
-        if (mainWindow.isVisible()) {
-          mainWindow.hide();
-        } else {
-          mainWindow.show();
-          mainWindow.focus();
+      globalShortcut.register('CommandOrControl+Shift+Space', () => {
+        windowManager?.toggleVisibility();
+      });
+
+      try {
+        activePort = await findFreePort(DESKTOP_PORT, DESKTOP_PORT + 10);
+      } catch (error) {
+        console.warn('[desktop] Failed to find free port, falling back to default', error);
+      }
+
+      const dataDir = getDataDir();
+      const jrePath = getJrePath();
+      const jarPath = getBackendJarPath();
+
+      backendManager = new BackendManager(jrePath, jarPath, dataDir, activePort, {
+        startupTimeoutMs: getBackendStartupTimeoutMs(),
+      });
+      cliManager = new CliManager();
+      windowManager = new WindowManager();
+      trayManager = new TrayManager(windowManager, backendManager);
+      ipcRegistry = new IpcRegistry(backendManager, cliManager, () => activePort);
+
+      ipcRegistry.setupIpc();
+      windowManager.createMainWindow();
+      trayManager.createTray();
+      windowManager.loadContent();
+
+      backendManager.onStatusChange((status) => {
+        const win = windowManager.mainWindow;
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('backend:status-changed', status);
         }
-      }
-    });
+      });
 
-    const dataDir = getDataDir();
-    const jrePath = getJrePath();
-    const jarPath = getBackendJarPath();
-
-    try {
-      activePort = await findFreePort(DESKTOP_PORT, DESKTOP_PORT + 10);
-    } catch (error) {
-      console.warn('[desktop] Failed to find free port, falling back to default', error);
-    }
-
-    backendManager = new BackendManager(jrePath, jarPath, dataDir, activePort, {
-      startupTimeoutMs: getBackendStartupTimeoutMs(),
-    });
-    cliManager = new CliManager();
-
-    setupIpc();
-    createMainWindow();
-    createTray();
-    backendManager.onStatusChange((status) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('backend:status-changed', status);
-      }
-    });
-
-    if (isDev) {
-      mainWindow!.loadURL('http://localhost:5173');
-      mainWindow!.webContents.openDevTools();
-    } else {
-      mainWindow!.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-    }
-
-    try {
       await backendManager.start();
-    } catch (error) {
-      console.error('[desktop] backend startup failed', error);
-    }
 
-    mainWindow!.webContents.on('did-finish-load', () => {
-      mainWindow!.webContents.send('backend:status-changed', backendManager.getStatus());
-    });
+      windowManager.mainWindow?.webContents.on('did-finish-load', () => {
+        windowManager.mainWindow?.webContents.send('backend:status-changed', backendManager.getStatus());
+      });
+
+    } catch (err) {
+      console.error('[desktop] Critical error during app initialization:', err);
+    }
+  }).catch((err) => {
+    console.error('[desktop] Failed in app.whenReady:', err);
   });
 }
 
-export { mainWindow, backendManager, getDataDir, activePort as DESKTOP_PORT };
+export { backendManager, getDataDir, activePort as DESKTOP_PORT };

@@ -9,5 +9,6 @@
 
     <modules>
         <module>backend</module>
+        <module>bug-sentinel-starter</module>
     </modules>
 </project>
