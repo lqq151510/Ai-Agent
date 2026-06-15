@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Message, Session } from '../types';
 import { MessageItem } from './MessageItem';
 import { AlertCircle, Bot, Download, Loader2, MessageSquare, RefreshCw, Send, Sparkles } from 'lucide-react';
+import { SkeletonMessage } from './Skeleton';
 
 type StreamState = 'idle' | 'connecting' | 'streaming' | 'error';
 
@@ -115,7 +116,18 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
         ) : (
           messages.map((msg) => <MessageItem key={msg.id} message={msg} />)
         )}
-        {loading && (
+        {loading && streamState === 'connecting' && (
+          <div className="message assistant">
+            <div className="message-meta">
+              <span className="icon"><Bot size={14} /></span>
+              <strong>AI Assistant is thinking...</strong>
+            </div>
+            <div className="message-bubble" style={{ background: 'transparent', padding: 0 }}>
+              <SkeletonMessage className="glowing" />
+            </div>
+          </div>
+        )}
+        {loading && streamState !== 'connecting' && (
           <div className="loading-indicator">
             <Loader2 className="animate-spin" size={20} />
             <span>Loading messages...</span>

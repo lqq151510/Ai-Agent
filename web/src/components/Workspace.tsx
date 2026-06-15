@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Session, ModelOption } from '../types';
+import { Session, ModelOption, MemoryItem } from '../types';
 import { Settings } from './Settings';
 import { ChatList } from './ChatList';
 import { MessageContainer } from './MessageContainer';
+import { MemoryModal } from './MemoryModal';
 
 interface WorkspaceProps {
   api: any;
@@ -29,6 +30,36 @@ export function Workspace({
   sendMessage, defaultModel
 }: WorkspaceProps) {
   const [prompt, setPrompt] = useState('');
+  const [isMemoryOpen, setIsMemoryOpen] = useState(false);
+  const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [memoriesLoading, setMemoriesLoading] = useState(false);
+
+  const loadMemories = async () => {
+    setMemoriesLoading(true);
+    try {
+      const data = await api.listMemories();
+      setMemories(data || []);
+    } catch (err) {
+      console.error('Failed to load memories', err);
+    } finally {
+      setMemoriesLoading(false);
+    }
+  };
+
+  const handleOpenMemory = () => {
+    setIsMemoryOpen(true);
+    void loadMemories();
+  };
+
+  const handleUpdateMemory = async (id: string, text: string) => {
+    await api.updateMemory(id, text);
+    setMemories(prev => prev.map(item => item.id === id ? { ...item, text } : item));
+  };
+
+  const handleDeleteMemory = async (id: string) => {
+    await api.deleteMemory(id);
+    setMemories(prev => prev.filter(item => item.id !== id));
+  };
 
   return (
     <div className="workspace-shell">
@@ -57,6 +88,7 @@ export function Workspace({
             onCreateSession={onCreateSession}
             onNavigateToCoach={() => navigate('/coach')}
             ui={ui}
+            onOpenMemory={handleOpenMemory}
           />
           <ChatList sessions={chat.sessions} activeSessionId={chat.activeSessionId} onSelectSession={onSelectSession} />
         </aside>
@@ -102,6 +134,15 @@ export function Workspace({
         <span>{currentModelOption?.displayName || currentModelOption?.model || activeSession?.model || 'model:auto'}</span>
         <span>{ui.contextTokenLimit ? `context:${ui.contextTokenLimit}` : 'context:default'}</span>
       </footer>
+
+      <MemoryModal
+        isOpen={isMemoryOpen}
+        onClose={() => setIsMemoryOpen(false)}
+        memories={memories}
+        loading={memoriesLoading}
+        onUpdateMemory={handleUpdateMemory}
+        onDeleteMemory={handleDeleteMemory}
+      />
     </div>
   );
 }

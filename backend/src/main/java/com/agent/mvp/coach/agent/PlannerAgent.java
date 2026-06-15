@@ -31,4 +31,19 @@ public class PlannerAgent {
         ModelChatResponse response = modelGateway.chat(ModelProviderType.OPENAI, request);
         return response.content();
     }
+
+    public String replan(String requirement, String previousPlan, String feedback) {
+        ModelChatRequest request = new ModelChatRequest(
+                "gpt-4o",
+                List.of(
+                        ModelChatMessage.of("system", "You are an expert Planner Agent. Optimize and refine the previous development plan based on the provided user requirements and peer feedback. Ensure all criticisms are addressed."),
+                        ModelChatMessage.of("user", String.format("Original Requirement: %s\n\nPrevious Plan:\n%s\n\nFeedback/Critique:\n%s\n\nPlease output the revised structured development plan.",
+                                requirement, previousPlan, feedback))
+                ),
+                null, null, null, null
+        );
+
+        ModelChatResponse response = modelGateway.chat(ModelProviderType.OPENAI, request);
+        return response.content();
+    }
 }

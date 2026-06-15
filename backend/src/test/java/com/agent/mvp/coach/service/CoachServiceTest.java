@@ -37,7 +37,8 @@ class CoachServiceTest {
                         new ObjectMapper(),
                         ragMemoryService,
                         mock(com.agent.mvp.auth.service.UserService.class),
-                        mock(com.agent.mvp.coach.agent.SupervisorAgent.class));
+                        mock(com.agent.mvp.coach.agent.SupervisorAgent.class),
+                        mock(com.agent.mvp.agent.service.CodeRAGService.class));
         when(repository.insert(any(com.agent.mvp.coach.entity.DevCoachRun.class)))
                 .thenAnswer(
                         invocation -> {

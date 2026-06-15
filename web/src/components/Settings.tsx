@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ModelOption, Provider, UserProfile } from '../types';
-import { LogOut, Zap, Settings as SettingsIcon, User } from 'lucide-react';
+import { LogOut, Zap, Settings as SettingsIcon, User, Brain } from 'lucide-react';
 import { NewSessionForm } from './settings/NewSessionForm';
 import { UserConfigModal } from './settings/UserConfigModal';
 import { useState } from 'react';
@@ -16,6 +16,7 @@ interface SettingsProps {
   onCreateSession: (provider: Provider, model: string, title?: string, contextTokenLimit?: number | null) => void;
   onNavigateToCoach: () => void;
   ui?: any;
+  onOpenMemory: () => void;
 }
 
 export const Settings: React.FC<SettingsProps> = ({
@@ -27,7 +28,8 @@ export const Settings: React.FC<SettingsProps> = ({
   contextTokenLimit,
   onCreateSession,
   onNavigateToCoach,
-  ui
+  ui,
+  onOpenMemory
 }) => {
   const [showConfig, setShowConfig] = useState(false);
   const navigate = useNavigate();
@@ -86,6 +88,18 @@ export const Settings: React.FC<SettingsProps> = ({
           }}
         >
           {(ui as any)?.useLocalAi ? 'ON' : 'OFF'}
+        </button>
+      </div>
+
+      <div style={{ padding: '0px 1rem 1rem 1rem' }}>
+        <button
+          type="button"
+          className="memory-capsule-btn glow-primary-hover"
+          onClick={onOpenMemory}
+          style={{ width: '100%' }}
+        >
+          <Brain size={14} className="text-primary animate-pulse-slow" />
+          <span style={{ marginLeft: '6px' }}>Agent 记忆胶囊库</span>
         </button>
       </div>
 

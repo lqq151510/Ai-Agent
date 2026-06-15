@@ -47,7 +47,7 @@ class FlexAgentIntegrationMockTest {
 
         FlexRuntimeFactory flexRuntimeFactory = mock(FlexRuntimeFactory.class);
         AgentRuntime runtime = mock(AgentRuntime.class);
-        when(flexRuntimeFactory.createRuntime(any(), any(), any())).thenReturn(runtime);
+        when(flexRuntimeFactory.createRuntime(any(), any(), any(), any(), any())).thenReturn(runtime);
 
         AgentService service =
                 new AgentService(
@@ -62,7 +62,8 @@ class FlexAgentIntegrationMockTest {
                         clientToolRegistry,
                         flexRuntimeFactory,
                         mock(com.agent.mvp.auth.service.UserService.class),
-                        mock(com.agent.mvp.agent.service.SemanticCacheService.class));
+                        mock(com.agent.mvp.agent.service.SemanticCacheService.class),
+                        new com.agent.mvp.agent.service.AgentContextService(ragMemoryService, appProperties));
 
         UUID userId = UUID.randomUUID();
         ConversationSession session = new ConversationSession();
@@ -98,7 +99,7 @@ class FlexAgentIntegrationMockTest {
 
         ChatResponse response =
                 service.chat(
-                        userId, new ChatRequest(session.getId(), "hello", null, null, null, null));
+                        userId, new ChatRequest(session.getId(), "hello", null, null, null, null, null, null));
 
         assertEquals("Hello from flexagent", response.reply());
         assertEquals("completed", response.execution().stopReason());

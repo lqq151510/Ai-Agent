@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { ModelOption, Session, Provider, ToolStatsResponse } from '../types';
 import { defaultModel } from '../utils';
-import { LogOut, MessageSquarePlus, Plus } from 'lucide-react';
+import { LogOut, MessageSquarePlus, Plus, Brain } from 'lucide-react';
 import { ToolStatsPanel } from './sidebar/ToolStatsPanel';
 import { SessionList } from './sidebar/SessionList';
 
@@ -25,6 +25,7 @@ interface SidebarProps {
   onExportReleaseReportMarkdown: () => void;
   onSelectSession: (id: string) => void;
   onCreateSession: (provider: Provider, model: string, title?: string) => void;
+  onOpenMemory: () => void;
 }
 
 const RECENT_MODEL_KEY = 'ai_agent_recent_model';
@@ -53,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onExportReleaseReportMarkdown,
   onSelectSession,
   onCreateSession,
+  onOpenMemory,
 }) => {
   const [createProvider, setCreateProvider] = useState<Provider>('OPENAI');
   const [createTitle, setCreateTitle] = useState('');
@@ -101,6 +103,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <LogOut size={17} />
         </button>
       </header>
+      <div className="sidebar-memory-capsule-container">
+        <button type="button" className="memory-capsule-btn glow-primary-hover" onClick={onOpenMemory}>
+          <Brain size={14} className="text-primary animate-pulse-slow" />
+          <span>Agent 记忆胶囊库</span>
+        </button>
+      </div>
       <section className="section new-session-form">
         <div className="section-heading">
           <MessageSquarePlus size={16} />

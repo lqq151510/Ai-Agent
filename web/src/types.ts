@@ -213,3 +213,10 @@ export interface CoachRunResponse {
   artifactPath?: string | null;
   createdAt: string;
 }
+
+export interface MemoryItem {
+  id: string;
+  text: string;
+  metadata: string;
+}
+

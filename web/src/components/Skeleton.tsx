@@ -22,8 +22,8 @@ export const SkeletonCard: React.FC = () => (
   </div>
 );
 
-export const SkeletonMessage: React.FC = () => (
-  <div className="skeleton-message">
+export const SkeletonMessage: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <div className={`skeleton-message ${className}`}>
     <div className="skeleton-avatar" />
     <div className="skeleton-content">
       <Skeleton className="skeleton-line" count={3} />

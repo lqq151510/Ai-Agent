@@ -30,9 +30,12 @@ function parseToolTrace(raw?: string): ToolExecutionResult[] {
   return [];
 }
 
+import { useSmoothTypewriter } from '../hooks/useSmoothTypewriter';
+
 export const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
   const streamBuffer = useStreamStore(state => state.activeId === message.id ? state.buffer : null);
   const finalContent = streamBuffer !== null ? streamBuffer : message.content;
+  const smoothContent = useSmoothTypewriter(finalContent, streamBuffer !== null);
   const isAssistant = message.role === 'assistant';
   const traces = useMemo(() => parseToolTrace(message.toolTrace), [message.toolTrace]);
   const [showTrace, setShowTrace] = React.useState(false);
@@ -72,7 +75,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
               }
             }}
           >
-            {finalContent}
+            {smoothContent}
           </ReactMarkdown>
         </div>
       </div>

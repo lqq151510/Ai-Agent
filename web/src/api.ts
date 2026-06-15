@@ -12,7 +12,8 @@ import type {
   Session,
   ToolStatsResponse,
   Tokens,
-  UserProfile
+  UserProfile,
+  MemoryItem
 } from './types';
 
 type TokenAccessor = {
@@ -487,6 +488,21 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
 
     downloadScaffold(runId: string) {
       return downloadBlob(`/api/v1/coach/scaffolds/${runId}/download`);
+    },
+
+    listMemories() {
+      return request<MemoryItem[]>('/api/v1/agent/memory', { method: 'GET' }, true);
+    },
+
+    updateMemory(id: string, text: string) {
+      return request<void>(`/api/v1/agent/memory/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ text })
+      }, true);
+    },
+
+    deleteMemory(id: string) {
+      return request<void>(`/api/v1/agent/memory/${id}`, { method: 'DELETE' }, true);
     }
   };
 }
