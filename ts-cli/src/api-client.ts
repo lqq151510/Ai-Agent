@@ -379,7 +379,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
 
     executeMultiAgentTask(input: { taskPrompt: string }) {
       return request<{ result: string }>(
-        '/api/coach/execute-multi-agent',
+        '/api/v1/coach/execute-multi-agent',
         {
           method: 'POST',
           body: JSON.stringify(input),
@@ -400,7 +400,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       }
 
       try {
-        const response = await fetch(`${safeBaseUrl}/api/coach/sentinel-alerts`, {
+        const response = await fetch(`${safeBaseUrl}/api/v1/sentinel/alerts`, {
           method: 'GET',
           headers,
           signal,

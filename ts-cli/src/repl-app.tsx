@@ -100,6 +100,10 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
   );
 
   useEffect(() => {
+    if (!authState.accessToken) {
+      return;
+    }
+
     const abortController = new AbortController();
     void api.subscribeToSentinelAlerts(abortController.signal, {
       onAlert: alert => {
@@ -108,7 +112,7 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
       onError: () => {},
     });
     return () => abortController.abort();
-  }, [api]);
+  }, [api, authState.accessToken]);
 
   const ALL_SLASH_COMMANDS = ['/help', '/sessions', '/use', '/new', '/stats', '/report', '/model', '/coach', '/clear', '/exit', '/quit'];
 

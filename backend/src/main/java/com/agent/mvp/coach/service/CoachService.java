@@ -20,10 +20,12 @@ import com.agent.mvp.coach.dto.RequirementBreakdown;
 import com.agent.mvp.coach.dto.RequirementBreakdownRequest;
 import com.agent.mvp.coach.dto.RequirementBreakdownResponse;
 import com.agent.mvp.coach.dto.ScaffoldFilePreview;
+import com.agent.mvp.coach.dto.SentinelAlertResponse;
 import com.agent.mvp.coach.dto.ScaffoldRequest;
 import com.agent.mvp.coach.dto.ScaffoldResponse;
 import com.agent.mvp.coach.entity.DevCoachRun;
 import com.agent.mvp.coach.repo.DevCoachRunRepository;
+import com.agent.mvp.coach.dto.SentinelReportRequest;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.config.AppProperties;
@@ -38,7 +40,6 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import com.agent.mvp.agent.service.CodeRAGService;
-import com.agent.mvp.coach.dto.SentinelReportRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,6 +58,7 @@ public class CoachService {
     private final UserService userService;
     private final SupervisorAgent supervisorAgent;
     private final CodeRAGService codeRAGService;
+    private final SentinelAlertBroadcaster sentinelAlertBroadcaster;
 
     public CoachService(
             ModelGateway modelGateway,
@@ -69,7 +71,8 @@ public class CoachService {
             RAGMemoryService ragMemoryService,
             UserService userService,
             SupervisorAgent supervisorAgent,
-            CodeRAGService codeRAGService) {
+            CodeRAGService codeRAGService,
+            SentinelAlertBroadcaster sentinelAlertBroadcaster) {
         this.modelGateway = modelGateway;
         this.promptService = promptService;
         this.scaffoldTemplateRegistry = scaffoldTemplateRegistry;
@@ -81,21 +84,37 @@ public class CoachService {
         this.userService = userService;
         this.supervisorAgent = supervisorAgent;
         this.codeRAGService = codeRAGService;
+        this.sentinelAlertBroadcaster = sentinelAlertBroadcaster;
     }
 
     public void handleSentinelReport(SentinelReportRequest request) {
         log.info("Received sentinel report for project {}: \n{}", request.projectName(), request.stackTrace());
-        
-        // 1. Find relevant code context using CodeRAGService
+
         List<String> codeContext = codeRAGService.searchRelatedCode(request.stackTrace(), 3);
         String contextStr = String.join("\n---\n", codeContext);
-        
-        // 2. Trigger SupervisorAgent to generate a fix
-        String requirement = String.format("A bug was detected in project '%s'.\nStack trace:\n%s\n\nRelevant Code Context:\n%s\nPlease analyze the bug and propose a fix.",
-                request.projectName(), request.stackTrace(), contextStr);
-        
-        String result = supervisorAgent.executeTask(requirement);
-        log.info("SupervisorAgent completed fix generation: \n{}", result);
+
+        try {
+            LogDiagnosisAnalysis analysis =
+                    analyzeLog(
+                            request.stackTrace(),
+                            contextStr,
+                            null,
+                            null,
+                            null,
+                            null);
+            sentinelAlertBroadcaster.publish(
+                    new SentinelAlertResponse(
+                            analysis.diagnosis().rootCause(), analysis.diagnosis().minimalFix()));
+            if (analysis.parseWarning() != null) {
+                log.warn("Sentinel diagnosis parse warning: {}", analysis.parseWarning());
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to analyze sentinel report for project {}", request.projectName(), ex);
+            sentinelAlertBroadcaster.publish(
+                    new SentinelAlertResponse(
+                            "Unable to generate structured diagnosis: " + ex.getMessage(),
+                            "Inspect the stack trace and model provider configuration."));
+        }
     }
 
     public RequirementBreakdownResponse breakdown(
@@ -130,38 +149,33 @@ public class CoachService {
 
     public LogDiagnosisResponse diagnose(UUID userId, LogDiagnosisRequest request) {
         User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
-        ModelChatResponse modelResponse =
-                modelGateway.chat(
-                        resolveProvider(request.provider()),
-                        new ModelChatRequest(
-                                resolveModel(request.provider(), request.model()),
-                                promptService.logDiagnosisMessages(
-                                        request.logContent(), request.context()),
-                                List.of(),
-                                "none",
-                                user != null ? user.getCustomBaseUrl() : null,
-                                user != null ? user.getCustomApiKey() : null));
-        String raw = modelResponse.content() == null ? "" : modelResponse.content();
-        Parsed<LogDiagnosis> parsed = parseLogDiagnosis(raw);
+        LogDiagnosisAnalysis analysis =
+                analyzeLog(
+                        request.logContent(),
+                        request.context(),
+                        request.provider(),
+                        request.model(),
+                        user != null ? user.getCustomBaseUrl() : null,
+                        user != null ? user.getCustomApiKey() : null);
         DevCoachRun run =
                 saveRun(
                         userId,
                         "LOG_DIAGNOSIS",
                         titleFrom(request.logContent()),
                         request.logContent(),
-                        toJson(parsed.value()),
+                        toJson(analysis.diagnosis()),
                         null);
 
-        if (parsed.warning() == null) {
+        if (analysis.parseWarning() == null) {
             ragMemoryService.storeDiagnosis(
                     userId,
                     run.getId(),
-                    parsed.value().symptom(),
-                    parsed.value().rootCause(),
-                    parsed.value().minimalFix());
+                    analysis.diagnosis().symptom(),
+                    analysis.diagnosis().rootCause(),
+                    analysis.diagnosis().minimalFix());
         }
 
-        return new LogDiagnosisResponse(run.getId(), parsed.value(), raw, parsed.warning());
+        return new LogDiagnosisResponse(run.getId(), analysis.diagnosis(), analysis.rawText(), analysis.parseWarning());
     }
 
     public ScaffoldResponse generateScaffold(UUID userId, ScaffoldRequest request) {
@@ -216,6 +230,28 @@ public class CoachService {
             return requestedModel.trim();
         }
         return appProperties.getDefaultModel(resolveProvider(provider));
+    }
+
+    private LogDiagnosisAnalysis analyzeLog(
+            String logContent,
+            String context,
+            ModelProviderType provider,
+            String requestedModel,
+            String customBaseUrl,
+            String customApiKey) {
+        ModelChatResponse modelResponse =
+                modelGateway.chat(
+                        resolveProvider(provider),
+                        new ModelChatRequest(
+                                resolveModel(provider, requestedModel),
+                                promptService.logDiagnosisMessages(logContent, context),
+                                List.of(),
+                                "none",
+                                customBaseUrl,
+                                customApiKey));
+        String raw = modelResponse.content() == null ? "" : modelResponse.content();
+        Parsed<LogDiagnosis> parsed = parseLogDiagnosis(raw);
+        return new LogDiagnosisAnalysis(parsed.value(), raw, parsed.warning());
     }
 
     private ScaffoldResponse toScaffoldResponse(UUID runId, GeneratedScaffold scaffold) {
@@ -424,4 +460,5 @@ public class CoachService {
     }
 
     private record Parsed<T>(T value, String warning) {}
+    private record LogDiagnosisAnalysis(LogDiagnosis diagnosis, String rawText, String parseWarning) {}
 }

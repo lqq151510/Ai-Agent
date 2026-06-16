@@ -9,6 +9,7 @@ SMOKE_SCRIPT="${ROOT_DIR}/scripts/smoke.sh"
 DESKTOP_HEALTH_FILE="${ROOT_DIR}/desktop/src/main/backend-manager.ts"
 WEB_API_FILE="${ROOT_DIR}/web/src/api.ts"
 CLI_API_FILE="${ROOT_DIR}/ts-cli/src/api-client.ts"
+SENTINEL_CONTROLLER_FILE="${ROOT_DIR}/backend/src/main/java/com/agent/mvp/coach/SentinelController.java"
 
 require_file() {
   local file="$1"
@@ -36,7 +37,8 @@ for file in \
   "${SMOKE_SCRIPT}" \
   "${DESKTOP_HEALTH_FILE}" \
   "${WEB_API_FILE}" \
-  "${CLI_API_FILE}"; do
+  "${CLI_API_FILE}" \
+  "${SENTINEL_CONTROLLER_FILE}"; do
   require_file "${file}"
 done
 
@@ -44,10 +46,12 @@ require_literal "${COMPOSE_FILE}" "/api/v1/system/health/ready" "docker compose 
 require_literal "${SMOKE_SCRIPT}" "/api/v1/system/health/ready" "smoke readiness check must use /api/v1 path"
 require_literal "${README_FILE}" "/api/v1/system/health/ready" "README readiness example must use /api/v1 path"
 require_literal "${DESKTOP_HEALTH_FILE}" "/api/v1/system/health/ready" "desktop backend readiness probe must use /api/v1 path"
+require_literal "${SENTINEL_CONTROLLER_FILE}" "/api/v1/sentinel" "sentinel controller base path must use /api/v1 path"
+require_literal "${SENTINEL_CONTROLLER_FILE}" "/alerts" "sentinel alert stream must expose alerts subpath"
 
 if command -v rg >/dev/null 2>&1; then
   LEGACY_HITS="$(
-    rg -n -P '/api/(?!v1/)(auth|sessions|agent|coach|system)' \
+    rg -n -P '/api/(?!v1/)(auth|sessions|agent|coach|system|sentinel)' \
       "${README_FILE}" \
       "${COMPOSE_FILE}" \
       "${SMOKE_SCRIPT}" \
@@ -57,7 +61,7 @@ if command -v rg >/dev/null 2>&1; then
   )"
 else
   LEGACY_HITS="$(
-    grep -nE '/api/(auth|sessions|agent|coach|system)' \
+    grep -nE '/api/(auth|sessions|agent|coach|system|sentinel)' \
       "${README_FILE}" \
       "${COMPOSE_FILE}" \
       "${SMOKE_SCRIPT}" \
