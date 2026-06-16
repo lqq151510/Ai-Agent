@@ -1,13 +1,24 @@
-import { Provider } from '../types';
-import { useChatStore } from '../stores/chatStore';
+import { Provider, SessionTaskStatus, SessionTaskType } from "../types";
+import { useChatStore } from "../stores/chatStore";
 
-export function useSessionManager(api: any, chat: any, ui: any, applyError: (e: any) => void, navigate: any, refreshWorkspaceDiagnostics: any) {
+export function useSessionManager(
+  api: any,
+  chat: any,
+  ui: any,
+  applyError: (e: any) => void,
+  navigate: any,
+  refreshWorkspaceDiagnostics: any,
+) {
   async function reloadSessions(nextActiveId?: string) {
     const list = await api.listSessions();
     chat.setSessions(list);
-    const picked = (nextActiveId && list.find((s: any) => s.id === nextActiveId)) || list.find((s: any) => s.id === chat.activeSessionId) || list[0] || null;
+    const picked =
+      (nextActiveId && list.find((s: any) => s.id === nextActiveId)) ||
+      list.find((s: any) => s.id === chat.activeSessionId) ||
+      list[0] ||
+      null;
     if (!picked) {
-      chat.setActiveSessionId('');
+      chat.setActiveSessionId("");
       chat.setMessages([]);
       ui.setContextTokenLimit(null);
       await refreshWorkspaceDiagnostics(api, { sessionId: undefined });
@@ -15,16 +26,26 @@ export function useSessionManager(api: any, chat: any, ui: any, applyError: (e: 
     }
     chat.setActiveSessionId(picked.id);
     ui.setContextTokenLimit(picked.contextTokenLimit ?? null);
-    
+
     const messages = await api.listMessages(picked.id);
     if (useChatStore.getState().activeSessionId === picked.id) {
       chat.setMessages(messages);
     }
-    
+
     await refreshWorkspaceDiagnostics(api, { sessionId: picked.id });
   }
 
-  async function onCreateSession(provider: Provider, model: string, title?: string, contextTokenLimit?: number | null) {
+  async function onCreateSession(
+    provider: Provider,
+    model: string,
+    title?: string,
+    contextTokenLimit?: number | null,
+    workflow?: {
+      taskType?: SessionTaskType;
+      taskGoal?: string | null;
+      taskStatus?: SessionTaskStatus;
+    },
+  ) {
     chat.clearError();
     chat.setLoading(true);
     try {
@@ -32,11 +53,16 @@ export function useSessionManager(api: any, chat: any, ui: any, applyError: (e: 
         title: title || undefined,
         provider,
         model: model || undefined,
-        contextTokenLimit: contextTokenLimit ?? undefined
+        taskType: workflow?.taskType,
+        taskGoal: workflow?.taskGoal ?? undefined,
+        taskStatus: workflow?.taskStatus,
+        contextTokenLimit: contextTokenLimit ?? undefined,
       });
       const list = await api.listSessions();
       chat.setSessions(list);
-      ui.setContextTokenLimit(created.contextTokenLimit ?? contextTokenLimit ?? null);
+      ui.setContextTokenLimit(
+        created.contextTokenLimit ?? contextTokenLimit ?? null,
+      );
       navigate(`/chat/sessions/${created.id}`);
     } catch (e) {
       applyError(e);
@@ -56,12 +82,12 @@ export function useSessionManager(api: any, chat: any, ui: any, applyError: (e: 
     try {
       const session = chat.sessions.find((item: any) => item.id === sessionId);
       ui.setContextTokenLimit(session?.contextTokenLimit ?? null);
-      
+
       const messages = await api.listMessages(sessionId);
       if (useChatStore.getState().activeSessionId === sessionId) {
         chat.setMessages(messages);
       }
-      
+
       await refreshWorkspaceDiagnostics(api, { sessionId });
     } catch (e) {
       applyError(e);

@@ -8,6 +8,7 @@ import com.agent.mvp.session.dto.MessageResponse;
 import com.agent.mvp.session.dto.SessionExportResponse;
 import com.agent.mvp.session.dto.SessionResponse;
 import com.agent.mvp.session.dto.UpdateSessionContextTokenLimitRequest;
+import com.agent.mvp.session.dto.UpdateSessionWorkflowRequest;
 import com.agent.mvp.session.service.SessionService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -83,6 +84,25 @@ public class SessionController {
                         MDC.putCloseable(RequestContext.SESSION_ID_KEY, sessionId.toString())) {
             return sessionService.updateContextTokenLimit(
                     user.userId(), sessionId, request.contextTokenLimit());
+        }
+    }
+
+    @PatchMapping("/{sessionId}/workflow")
+    public SessionResponse updateWorkflow(
+            @PathVariable UUID sessionId,
+            @Valid @RequestBody UpdateSessionWorkflowRequest request,
+            Authentication authentication) {
+        AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
+        try (MDC.MDCCloseable u =
+                        MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString());
+                MDC.MDCCloseable s =
+                        MDC.putCloseable(RequestContext.SESSION_ID_KEY, sessionId.toString())) {
+            return sessionService.updateWorkflow(
+                    user.userId(),
+                    sessionId,
+                    request.taskType(),
+                    request.taskGoal(),
+                    request.taskStatus());
         }
     }
 

@@ -32,6 +32,15 @@ public class ConversationSession {
     @TableField("context_token_limit")
     private Integer contextTokenLimit;
 
+    @TableField("task_type")
+    private String taskType;
+
+    @TableField("task_goal")
+    private String taskGoal;
+
+    @TableField("task_status")
+    private String taskStatus;
+
     @TableField("created_at")
     private Instant createdAt;
 

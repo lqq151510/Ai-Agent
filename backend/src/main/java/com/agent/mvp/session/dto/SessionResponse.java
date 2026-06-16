@@ -9,6 +9,9 @@ public record SessionResponse(
         String title,
         ModelProviderType provider,
         String model,
+        String taskType,
+        String taskGoal,
+        String taskStatus,
         Integer contextTokenLimit,
         Instant createdAt,
         Instant updatedAt) {}

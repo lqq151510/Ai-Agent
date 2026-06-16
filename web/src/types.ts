@@ -1,4 +1,6 @@
-export type Provider = 'OPENAI';
+export type Provider = "OPENAI";
+export type SessionTaskType = "chat" | "requirements" | "scaffold" | "logs";
+export type SessionTaskStatus = "planned" | "in_progress" | "blocked" | "done";
 
 export interface ApiError {
   code?: string;
@@ -26,6 +28,9 @@ export interface Session {
   title: string;
   provider: Provider;
   model: string;
+  taskType?: SessionTaskType;
+  taskGoal?: string | null;
+  taskStatus?: SessionTaskStatus;
   contextTokenLimit?: number | null;
   createdAt: string;
   updatedAt: string;
@@ -219,4 +224,3 @@ export interface MemoryItem {
   text: string;
   metadata: string;
 }
-

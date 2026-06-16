@@ -8,13 +8,15 @@ import type {
   RequirementBreakdownResponse,
   ReleaseReportResponse,
   ScaffoldResponse,
+  SessionTaskStatus,
+  SessionTaskType,
   SessionExportResponse,
   Session,
   ToolStatsResponse,
   Tokens,
   UserProfile,
-  MemoryItem
-} from './types';
+  MemoryItem,
+} from "./types";
 
 type TokenAccessor = {
   getTokens: () => Tokens | null;
@@ -35,15 +37,24 @@ type LoginInput = RegisterInput;
 
 type CreateSessionInput = {
   title?: string;
-  provider?: 'OPENAI';
+  provider?: "OPENAI";
   model?: string;
+  taskType?: SessionTaskType;
+  taskGoal?: string | null;
+  taskStatus?: SessionTaskStatus;
   contextTokenLimit?: number;
+};
+
+type UpdateSessionWorkflowInput = {
+  taskType?: SessionTaskType;
+  taskGoal?: string | null;
+  taskStatus?: SessionTaskStatus;
 };
 
 type ChatInput = {
   sessionId: string;
   message: string;
-  provider?: 'OPENAI';
+  provider?: "OPENAI";
   model?: string;
   maxContextTokens?: number;
   customBaseUrl?: string;
@@ -52,14 +63,14 @@ type ChatInput = {
 
 type RequirementBreakdownInput = {
   requirement: string;
-  provider?: 'OPENAI';
+  provider?: "OPENAI";
   model?: string;
 };
 
 type LogDiagnosisInput = {
   logContent: string;
   context?: string;
-  provider?: 'OPENAI';
+  provider?: "OPENAI";
   model?: string;
 };
 
@@ -86,12 +97,12 @@ type PageResult<T> = {
 };
 
 function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 }
 
 async function parseBody(response: Response): Promise<unknown> {
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
     return response.json();
   }
 
@@ -108,9 +119,9 @@ async function parseBody(response: Response): Promise<unknown> {
 }
 
 function toErrorMessage(payload: unknown, status: number): string {
-  if (payload && typeof payload === 'object') {
+  if (payload && typeof payload === "object") {
     const err = payload as ApiError;
-    const req = err.requestId ? ` (requestId: ${err.requestId})` : '';
+    const req = err.requestId ? ` (requestId: ${err.requestId})` : "";
     if (err.message && err.message.trim()) {
       return `${err.message}${req}`;
     }
@@ -119,7 +130,7 @@ function toErrorMessage(payload: unknown, status: number): string {
     }
   }
 
-  if (typeof payload === 'string' && payload.trim()) {
+  if (typeof payload === "string" && payload.trim()) {
     return payload;
   }
 
@@ -144,13 +155,13 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       }
 
       const response = await fetch(`${safeBaseUrl}/api/v1/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: current.refreshToken })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: current.refreshToken }),
       });
 
       const payload = await parseBody(response);
-      if (!response.ok || !payload || typeof payload !== 'object') {
+      if (!response.ok || !payload || typeof payload !== "object") {
         tokenAccessor.setTokens(null);
         return false;
       }
@@ -174,25 +185,29 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     path: string,
     init: RequestInit = {},
     auth = true,
-    allowRetry = true
+    allowRetry = true,
   ): Promise<T> {
     const headers = new Headers(init.headers || {});
     const hasBody = init.body !== undefined && init.body !== null;
 
-    if (hasBody && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json');
+    if (
+      hasBody &&
+      !(init.body instanceof FormData) &&
+      !headers.has("Content-Type")
+    ) {
+      headers.set("Content-Type", "application/json");
     }
 
     if (auth) {
       const accessToken = tokenAccessor.getTokens()?.accessToken;
       if (accessToken) {
-        headers.set('Authorization', `Bearer ${accessToken}`);
+        headers.set("Authorization", `Bearer ${accessToken}`);
       }
     }
 
     const response = await fetch(`${safeBaseUrl}${path}`, {
       ...init,
-      headers
+      headers,
     });
 
     if (response.status === 401 && auth && allowRetry) {
@@ -215,7 +230,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     const headers = new Headers();
     const accessToken = tokenAccessor.getTokens()?.accessToken;
     if (accessToken) {
-      headers.set('Authorization', `Bearer ${accessToken}`);
+      headers.set("Authorization", `Bearer ${accessToken}`);
     }
 
     const response = await fetch(`${safeBaseUrl}${path}`, { headers });
@@ -235,40 +250,50 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     return response.blob();
   }
 
-  async function parseSseStream(body: ReadableStream<Uint8Array>, handlers: StreamHandlers) {
+  async function parseSseStream(
+    body: ReadableStream<Uint8Array>,
+    handlers: StreamHandlers,
+  ) {
     const reader = body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer = "";
 
     function emitBlock(block: string) {
       const lines = block.split(/\r?\n/);
-      const event = lines.find(line => line.startsWith('event:'))?.slice(6).trim() || 'message';
+      const event =
+        lines
+          .find((line) => line.startsWith("event:"))
+          ?.slice(6)
+          .trim() || "message";
       const data = lines
-        .filter(line => line.startsWith('data:'))
-        .map(line => line.slice(5).trimStart())
-        .join('\n');
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart())
+        .join("\n");
 
       if (!data) {
         return;
       }
 
-      if (event === 'chunk') {
+      if (event === "chunk") {
         handlers.onChunk?.(data);
         return;
       }
 
-      if (event === 'heartbeat') {
+      if (event === "heartbeat") {
         return;
       }
 
       try {
         const payload = JSON.parse(data);
-        if (event === 'meta') {
+        if (event === "meta") {
           handlers.onMeta?.(payload as ChatResponse);
-        } else if (event === 'done') {
+        } else if (event === "done") {
           handlers.onDone?.(payload as ChatResponse);
-        } else if (event === 'error') {
-          const message = typeof payload?.message === 'string' ? payload.message : 'Stream failed';
+        } else if (event === "error") {
+          const message =
+            typeof payload?.message === "string"
+              ? payload.message
+              : "Stream failed";
           handlers.onError?.(message);
           // do not re-throw — the stream is already ending and onError already reported
         }
@@ -282,16 +307,16 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     while (true) {
       const { value, done } = await reader.read();
       buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-      buffer = buffer.replace(/\r\n/g, '\n');
+      buffer = buffer.replace(/\r\n/g, "\n");
 
-      let delimiter = buffer.indexOf('\n\n');
+      let delimiter = buffer.indexOf("\n\n");
       while (delimiter >= 0) {
         const block = buffer.slice(0, delimiter).trim();
         buffer = buffer.slice(delimiter + 2);
         if (block) {
           emitBlock(block);
         }
-        delimiter = buffer.indexOf('\n\n');
+        delimiter = buffer.indexOf("\n\n");
       }
 
       if (done) {
@@ -304,18 +329,23 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     }
   }
 
-  async function streamChatRequest(input: ChatInput, handlers: StreamHandlers, allowRetry = true, signal?: AbortSignal): Promise<void> {
-    const headers = new Headers({ 'Content-Type': 'application/json' });
+  async function streamChatRequest(
+    input: ChatInput,
+    handlers: StreamHandlers,
+    allowRetry = true,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const headers = new Headers({ "Content-Type": "application/json" });
     const accessToken = tokenAccessor.getTokens()?.accessToken;
     if (accessToken) {
-      headers.set('Authorization', `Bearer ${accessToken}`);
+      headers.set("Authorization", `Bearer ${accessToken}`);
     }
 
     const response = await fetch(`${safeBaseUrl}/api/v1/agent/chat/stream`, {
-      method: 'POST',
+      method: "POST",
       headers,
       body: JSON.stringify(input),
-      signal
+      signal,
     });
 
     if (response.status === 401 && allowRetry) {
@@ -331,7 +361,7 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     }
 
     if (!response.body) {
-      throw new Error('Streaming response body is empty');
+      throw new Error("Streaming response body is empty");
     }
 
     await parseSseStream(response.body, handlers);
@@ -339,39 +369,59 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
 
   return {
     register(input: RegisterInput) {
-      return request<UserProfile>('/api/v1/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(input)
-      }, false);
+      return request<UserProfile>(
+        "/api/v1/auth/register",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        false,
+      );
     },
 
     login(input: LoginInput) {
-      return request<Tokens>('/api/v1/auth/login', {
-        method: 'POST',
-        body: JSON.stringify(input)
-      }, false);
+      return request<Tokens>(
+        "/api/v1/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        false,
+      );
     },
 
     logout(input: { refreshToken: string }) {
-      return request<void>('/api/v1/auth/logout', {
-        method: 'POST',
-        body: JSON.stringify(input)
-      }, true);
+      return request<void>(
+        "/api/v1/auth/logout",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        true,
+      );
     },
 
     me() {
-      return request<UserProfile>('/api/v1/auth/me', { method: 'GET' }, true);
+      return request<UserProfile>("/api/v1/auth/me", { method: "GET" }, true);
     },
 
     updateConfig(input: UpdateConfigInput) {
-      return request<UserProfile>('/api/v1/auth/config', {
-        method: 'PUT',
-        body: JSON.stringify(input)
-      }, true);
+      return request<UserProfile>(
+        "/api/v1/auth/config",
+        {
+          method: "PUT",
+          body: JSON.stringify(input),
+        },
+        true,
+      );
     },
 
     async listSessions() {
-      const payload = await request<Session[] | PageResult<Session>>('/api/v1/sessions', { method: 'GET' }, true);
+      const payload = await request<Session[] | PageResult<Session>>(
+        "/api/v1/sessions",
+        { method: "GET" },
+        true,
+      );
       if (Array.isArray(payload)) {
         return payload;
       }
@@ -379,111 +429,196 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     },
 
     listModels() {
-      return request<ModelsResponse>('/api/v1/system/models', { method: 'GET' }, true);
+      return request<ModelsResponse>(
+        "/api/v1/system/models",
+        { method: "GET" },
+        true,
+      );
     },
 
     toolStats(windowHours = 24, sessionId?: string) {
       const query = new URLSearchParams({ windowHours: String(windowHours) });
       if (sessionId) {
-        query.set('sessionId', sessionId);
+        query.set("sessionId", sessionId);
       }
-      return request<ToolStatsResponse>(`/api/v1/system/tool-stats?${query.toString()}`, { method: 'GET' }, true);
+      return request<ToolStatsResponse>(
+        `/api/v1/system/tool-stats?${query.toString()}`,
+        { method: "GET" },
+        true,
+      );
     },
 
-    exportToolStats(windowHours = 24, format: 'json' | 'markdown' = 'json', sessionId?: string) {
+    exportToolStats(
+      windowHours = 24,
+      format: "json" | "markdown" = "json",
+      sessionId?: string,
+    ) {
       const query = new URLSearchParams({
         windowHours: String(windowHours),
-        format
+        format,
       });
       if (sessionId) {
-        query.set('sessionId', sessionId);
+        query.set("sessionId", sessionId);
       }
-      return request<ToolStatsResponse | string>(`/api/v1/system/tool-stats/export?${query.toString()}`, { method: 'GET' }, true);
+      return request<ToolStatsResponse | string>(
+        `/api/v1/system/tool-stats/export?${query.toString()}`,
+        { method: "GET" },
+        true,
+      );
     },
 
     releaseReport(windowHours = 24, sessionId?: string) {
       const query = new URLSearchParams({ windowHours: String(windowHours) });
       if (sessionId) {
-        query.set('sessionId', sessionId);
+        query.set("sessionId", sessionId);
       }
-      return request<ReleaseReportResponse>(`/api/v1/system/release-report?${query.toString()}`, { method: 'GET' }, true);
+      return request<ReleaseReportResponse>(
+        `/api/v1/system/release-report?${query.toString()}`,
+        { method: "GET" },
+        true,
+      );
     },
 
-    exportReleaseReport(windowHours = 24, format: 'json' | 'markdown' = 'markdown', sessionId?: string) {
+    exportReleaseReport(
+      windowHours = 24,
+      format: "json" | "markdown" = "markdown",
+      sessionId?: string,
+    ) {
       const query = new URLSearchParams({
         windowHours: String(windowHours),
-        format
+        format,
       });
       if (sessionId) {
-        query.set('sessionId', sessionId);
+        query.set("sessionId", sessionId);
       }
-      return request<ReleaseReportResponse | string>(`/api/v1/system/release-report/export?${query.toString()}`, { method: 'GET' }, true);
+      return request<ReleaseReportResponse | string>(
+        `/api/v1/system/release-report/export?${query.toString()}`,
+        { method: "GET" },
+        true,
+      );
     },
 
     createSession(input: CreateSessionInput) {
-      return request<Session>('/api/v1/sessions', {
-        method: 'POST',
-        body: JSON.stringify(input)
-      }, true);
+      return request<Session>(
+        "/api/v1/sessions",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        true,
+      );
     },
 
-    updateSessionContextTokenLimit(sessionId: string, contextTokenLimit: number | null) {
-      return request<Session>(`/api/v1/sessions/${sessionId}/context-token-limit`, {
-        method: 'PATCH',
-        body: JSON.stringify({ contextTokenLimit })
-      }, true);
+    updateSessionContextTokenLimit(
+      sessionId: string,
+      contextTokenLimit: number | null,
+    ) {
+      return request<Session>(
+        `/api/v1/sessions/${sessionId}/context-token-limit`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ contextTokenLimit }),
+        },
+        true,
+      );
+    },
+
+    updateSessionWorkflow(
+      sessionId: string,
+      input: UpdateSessionWorkflowInput,
+    ) {
+      return request<Session>(
+        `/api/v1/sessions/${sessionId}/workflow`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        },
+        true,
+      );
     },
 
     deleteSession(sessionId: string) {
-      return request<void>(`/api/v1/sessions/${sessionId}`, { method: 'DELETE' }, true);
+      return request<void>(
+        `/api/v1/sessions/${sessionId}`,
+        { method: "DELETE" },
+        true,
+      );
     },
 
     listMessages(sessionId: string) {
-      return request<Message[]>(`/api/v1/sessions/${sessionId}/messages`, { method: 'GET' }, true);
+      return request<Message[]>(
+        `/api/v1/sessions/${sessionId}/messages`,
+        { method: "GET" },
+        true,
+      );
     },
 
-    exportSession(sessionId: string, format: 'json' | 'markdown') {
+    exportSession(sessionId: string, format: "json" | "markdown") {
       return request<SessionExportResponse | string>(
         `/api/v1/sessions/${sessionId}/export?format=${format}`,
-        { method: 'GET' },
-        true
+        { method: "GET" },
+        true,
       );
     },
 
     chat(input: ChatInput) {
-      return request<ChatResponse>('/api/v1/agent/chat', {
-        method: 'POST',
-        body: JSON.stringify(input)
-      }, true);
+      return request<ChatResponse>(
+        "/api/v1/agent/chat",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        true,
+      );
     },
 
-    streamChat(input: ChatInput, handlers: StreamHandlers, signal?: AbortSignal) {
+    streamChat(
+      input: ChatInput,
+      handlers: StreamHandlers,
+      signal?: AbortSignal,
+    ) {
       return streamChatRequest(input, handlers, true, signal);
     },
 
     breakdownRequirement(input: RequirementBreakdownInput) {
-      return request<RequirementBreakdownResponse>('/api/v1/coach/requirements/breakdown', {
-        method: 'POST',
-        body: JSON.stringify(input)
-      }, true);
+      return request<RequirementBreakdownResponse>(
+        "/api/v1/coach/requirements/breakdown",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        true,
+      );
     },
 
     diagnoseLog(input: LogDiagnosisInput) {
-      return request<LogDiagnosisResponse>('/api/v1/coach/logs/diagnose', {
-        method: 'POST',
-        body: JSON.stringify(input)
-      }, true);
+      return request<LogDiagnosisResponse>(
+        "/api/v1/coach/logs/diagnose",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        true,
+      );
     },
 
     createScaffold(input: ScaffoldInput) {
-      return request<ScaffoldResponse>('/api/v1/coach/scaffolds', {
-        method: 'POST',
-        body: JSON.stringify(input)
-      }, true);
+      return request<ScaffoldResponse>(
+        "/api/v1/coach/scaffolds",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        true,
+      );
     },
 
     listCoachRuns(limit = 20) {
-      return request<CoachRunResponse[]>(`/api/v1/coach/runs?limit=${limit}`, { method: 'GET' }, true);
+      return request<CoachRunResponse[]>(
+        `/api/v1/coach/runs?limit=${limit}`,
+        { method: "GET" },
+        true,
+      );
     },
 
     downloadScaffold(runId: string) {
@@ -491,19 +626,31 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     },
 
     listMemories() {
-      return request<MemoryItem[]>('/api/v1/agent/memory', { method: 'GET' }, true);
+      return request<MemoryItem[]>(
+        "/api/v1/agent/memory",
+        { method: "GET" },
+        true,
+      );
     },
 
     updateMemory(id: string, text: string) {
-      return request<void>(`/api/v1/agent/memory/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ text })
-      }, true);
+      return request<void>(
+        `/api/v1/agent/memory/${id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ text }),
+        },
+        true,
+      );
     },
 
     deleteMemory(id: string) {
-      return request<void>(`/api/v1/agent/memory/${id}`, { method: 'DELETE' }, true);
-    }
+      return request<void>(
+        `/api/v1/agent/memory/${id}`,
+        { method: "DELETE" },
+        true,
+      );
+    },
   };
 }
 

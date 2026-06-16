@@ -78,6 +78,9 @@ public class SessionService {
         session.setTitle(title);
         session.setProvider(provider);
         session.setModel(model);
+        session.setTaskType(normalizeTaskType(request.taskType()));
+        session.setTaskGoal(normalizeTaskGoal(request.taskGoal()));
+        session.setTaskStatus(normalizeTaskStatus(request.taskStatus()));
         session.setContextTokenLimit(request.contextTokenLimit());
 
         return toResponse(saveSession(session));
@@ -106,6 +109,16 @@ public class SessionService {
             UUID userId, UUID sessionId, Integer contextTokenLimit) {
         ConversationSession session = findOwnedSession(userId, sessionId);
         session.setContextTokenLimit(contextTokenLimit);
+        return toResponse(saveSession(session));
+    }
+
+    @Transactional
+    public SessionResponse updateWorkflow(
+            UUID userId, UUID sessionId, String taskType, String taskGoal, String taskStatus) {
+        ConversationSession session = findOwnedSession(userId, sessionId);
+        session.setTaskType(normalizeTaskType(taskType));
+        session.setTaskGoal(normalizeTaskGoal(taskGoal));
+        session.setTaskStatus(normalizeTaskStatus(taskStatus));
         return toResponse(saveSession(session));
     }
 
@@ -187,6 +200,11 @@ public class SessionService {
                 .append("/")
                 .append(session.model())
                 .append("\n");
+        out.append("- Task Type: ").append(session.taskType()).append("\n");
+        out.append("- Task Goal: ")
+                .append(session.taskGoal() == null ? "-" : session.taskGoal())
+                .append("\n");
+        out.append("- Task Status: ").append(session.taskStatus()).append("\n");
         out.append("- Created At: ").append(session.createdAt()).append("\n");
         out.append("- Updated At: ").append(session.updatedAt()).append("\n");
         out.append("- Exported At: ").append(exported.exportedAt()).append("\n\n");
@@ -249,6 +267,9 @@ public class SessionService {
                 session.getTitle(),
                 session.getProvider(),
                 session.getModel(),
+                normalizeTaskType(session.getTaskType()),
+                session.getTaskGoal(),
+                normalizeTaskStatus(session.getTaskStatus()),
                 session.getContextTokenLimit(),
                 session.getCreatedAt(),
                 session.getUpdatedAt());
@@ -284,5 +305,26 @@ public class SessionService {
             messageRepository.updateById(message);
         }
         return message;
+    }
+
+    private String normalizeTaskType(String taskType) {
+        if (taskType == null || taskType.isBlank()) {
+            return "chat";
+        }
+        return taskType.trim();
+    }
+
+    private String normalizeTaskGoal(String taskGoal) {
+        if (taskGoal == null || taskGoal.isBlank()) {
+            return null;
+        }
+        return taskGoal.trim();
+    }
+
+    private String normalizeTaskStatus(String taskStatus) {
+        if (taskStatus == null || taskStatus.isBlank()) {
+            return "planned";
+        }
+        return taskStatus.trim();
     }
 }

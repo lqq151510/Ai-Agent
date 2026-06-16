@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
-import { Session } from '../types';
-import { useStreamStore } from '../stores/streamStore';
-import { useChatStore } from '../stores/chatStore';
-import { useUiStore } from '../stores/uiStore';
+import { useEffect, useRef } from "react";
+import { Session } from "../types";
+import { useStreamStore } from "../stores/streamStore";
+import { useChatStore } from "../stores/chatStore";
+import { useUiStore } from "../stores/uiStore";
 
 export function useChatStreaming(
   api: any,
@@ -11,7 +11,7 @@ export function useChatStreaming(
   contextTokenLimit: number | null,
   applyError: (e: any) => string,
   armRateLimitAutoRetry: (msg?: string) => void,
-  reloadSessions: (nextActiveId?: string) => Promise<void>
+  reloadSessions: (nextActiveId?: string) => Promise<void>,
 ) {
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -24,87 +24,122 @@ export function useChatStreaming(
 
   async function sendMessage(outgoing: string) {
     if (!chat.activeSessionId || !outgoing.trim()) return;
-    
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     abortControllerRef.current = new AbortController();
-    
+
     const initialSessionId = chat.activeSessionId;
     const content = outgoing.trim();
     const assistantMessageId = `stream-assistant-${Date.now()}`;
     const now = new Date().toISOString();
     let streamedAnyChunk = false;
-    
+
     useStreamStore.getState().resetStream();
-    
+
     chat.setSending(true);
     chat.clearError();
-    chat.setPrompt('');
-    chat.setStreamState('connecting');
+    chat.setStreamState("connecting");
     chat.setMessages((prev: any[]) => [
       ...prev,
-      { id: `stream-user-${Date.now()}`, role: 'user', content, provider: activeSession?.provider ?? '', model: activeSession?.model ?? '', createdAt: now },
-      { id: assistantMessageId, role: 'assistant', content: '', toolTrace: '[]', provider: activeSession?.provider ?? '', model: activeSession?.model ?? '', createdAt: now }
+      {
+        id: `stream-user-${Date.now()}`,
+        role: "user",
+        content,
+        provider: activeSession?.provider ?? "",
+        model: activeSession?.model ?? "",
+        createdAt: now,
+      },
+      {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        toolTrace: "[]",
+        provider: activeSession?.provider ?? "",
+        model: activeSession?.model ?? "",
+        createdAt: now,
+      },
     ]);
-    
+
     try {
       const { useLocalAi } = useUiStore.getState();
-      await api.streamChat({
-        sessionId: initialSessionId,
-        message: content,
-        provider: activeSession?.provider,
-        model: useLocalAi ? 'Qwen3.5-9B' : activeSession?.model,
-        maxContextTokens: contextTokenLimit ?? undefined,
-        customBaseUrl: useLocalAi ? 'http://localhost:1234/v1' : undefined,
-        customApiKey: useLocalAi ? 'local' : undefined
-      }, {
-        onMeta: (_meta: any) => {
-          // stream metadata received (session, model, diagnostics) — mostly informational
+      await api.streamChat(
+        {
+          sessionId: initialSessionId,
+          message: content,
+          provider: activeSession?.provider,
+          model: useLocalAi ? "Qwen3.5-9B" : activeSession?.model,
+          maxContextTokens: contextTokenLimit ?? undefined,
+          customBaseUrl: useLocalAi ? "http://localhost:1234/v1" : undefined,
+          customApiKey: useLocalAi ? "local" : undefined,
         },
-        onChunk: (chunk: string) => {
-          if (useChatStore.getState().activeSessionId !== initialSessionId) return;
-          if (!streamedAnyChunk) {
-            streamedAnyChunk = true;
-            chat.setStreamState('streaming');
-          }
-          useStreamStore.getState().setStream(assistantMessageId, chunk);
+        {
+          onMeta: (_meta: any) => {
+            // stream metadata received (session, model, diagnostics) — mostly informational
+          },
+          onChunk: (chunk: string) => {
+            if (useChatStore.getState().activeSessionId !== initialSessionId)
+              return;
+            if (!streamedAnyChunk) {
+              streamedAnyChunk = true;
+              chat.setStreamState("streaming");
+            }
+            useStreamStore.getState().setStream(assistantMessageId, chunk);
+          },
+          onDone: (_done: any) => {
+            // stream completed — handled by the normal flow after streamChat resolves
+          },
+          onError: (message: string) => {
+            if (useChatStore.getState().activeSessionId !== initialSessionId)
+              return;
+            const kind = applyError(message);
+            if (kind === "rate_limit") armRateLimitAutoRetry(content);
+            chat.setStreamState("error");
+          },
         },
-        onDone: (_done: any) => {
-          // stream completed — handled by the normal flow after streamChat resolves
-        },
-        onError: (message: string) => {
-          if (useChatStore.getState().activeSessionId !== initialSessionId) return;
-          const kind = applyError(message);
-          if (kind === 'rate_limit') armRateLimitAutoRetry(content);
-          chat.setStreamState('error');
-        }
-      }, abortControllerRef.current.signal);
-      
+        abortControllerRef.current.signal,
+      );
+
       if (useChatStore.getState().activeSessionId !== initialSessionId) return;
-      
-      chat.setStreamState('idle');
-      chat.setLastFailedMessage('');
-      
+
+      chat.setStreamState("idle");
+      chat.setLastFailedMessage("");
+
       const finalBuffer = useStreamStore.getState().buffer;
-      chat.setMessages((prev: any[]) => prev.map(msg => msg.id === assistantMessageId ? { ...msg, content: finalBuffer } : msg));
+      chat.setMessages((prev: any[]) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? { ...msg, content: finalBuffer }
+            : msg,
+        ),
+      );
       useStreamStore.getState().resetStream();
-      
+
       await reloadSessions(initialSessionId);
     } catch (e: any) {
-      if (e.name === 'AbortError' || useChatStore.getState().activeSessionId !== initialSessionId) {
+      if (
+        e.name === "AbortError" ||
+        useChatStore.getState().activeSessionId !== initialSessionId
+      ) {
         return; // Ignore errors from aborted fetch due to session switch
       }
-      chat.setStreamState('error');
+      chat.setStreamState("error");
       chat.setLastFailedMessage(content);
-      
+
       const currentBuffer = useStreamStore.getState().buffer;
       const errorNotice = "\n\n💥 服务意外中断 (Generation interrupted)";
-      chat.setMessages((prev: any[]) => prev.map(msg => msg.id === assistantMessageId ? { ...msg, content: currentBuffer + errorNotice } : msg));
+      chat.setMessages((prev: any[]) =>
+        prev.map((msg) =>
+          msg.id === assistantMessageId
+            ? { ...msg, content: currentBuffer + errorNotice }
+            : msg,
+        ),
+      );
       useStreamStore.getState().resetStream();
-      
+
       const kind = applyError(e);
-      if (kind === 'rate_limit') armRateLimitAutoRetry();
+      if (kind === "rate_limit") armRateLimitAutoRetry();
       try {
         await reloadSessions(initialSessionId);
       } catch {

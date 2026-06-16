@@ -131,12 +131,20 @@ class AgentFlowIntegrationTest {
                                 "OPENAI",
                                 "model",
                                 "mock-model",
+                                "taskType",
+                                "requirements",
+                                "taskGoal",
+                                "拆解仓库里的新功能需求",
+                                "taskStatus",
+                                "planned",
                                 "contextTokenLimit",
                                 1800),
                         accessToken,
                         new ParameterizedTypeReference<>() {});
         assertStatus(createSession, 200);
         assertNotNull(createSession.getBody());
+        assertEquals("requirements", String.valueOf(createSession.getBody().get("taskType")));
+        assertEquals("planned", String.valueOf(createSession.getBody().get("taskStatus")));
         assertEquals(1800, ((Number) createSession.getBody().get("contextTokenLimit")).intValue());
         String sessionId = String.valueOf(createSession.getBody().get("id"));
 
@@ -271,6 +279,57 @@ class AgentFlowIntegrationTest {
         assertStatus(updated, 200);
         assertNotNull(updated.getBody());
         assertEquals(2200, ((Number) updated.getBody().get("contextTokenLimit")).intValue());
+    }
+
+    @Test
+    void shouldUpdateSessionWorkflow() {
+        String email = "it_workflow_" + UUID.randomUUID() + "@example.com";
+        String password = "Passw0rd123";
+
+        postJson(
+                "/api/v1/auth/register",
+                Map.of("email", email, "password", password),
+                null,
+                new ParameterizedTypeReference<>() {});
+
+        ResponseEntity<Map<String, Object>> login =
+                postJson(
+                        "/api/v1/auth/login",
+                        Map.of("email", email, "password", password),
+                        null,
+                        new ParameterizedTypeReference<>() {});
+        String accessToken = String.valueOf(login.getBody().get("accessToken"));
+
+        ResponseEntity<Map<String, Object>> createSession =
+                postJson(
+                        "/api/v1/sessions",
+                        Map.of("title", "Workflow Session", "provider", "OPENAI", "model", "mock-model"),
+                        accessToken,
+                        new ParameterizedTypeReference<>() {});
+        String sessionId = String.valueOf(createSession.getBody().get("id"));
+
+        HttpHeaders headers = authHeaders(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(
+                        Map.of(
+                                "taskType", "logs",
+                                "taskGoal", "定位 Spring Boot 启动报错",
+                                "taskStatus", "in_progress"),
+                        headers);
+
+        ResponseEntity<Map<String, Object>> updated =
+                restTemplate.exchange(
+                        url("/api/v1/sessions/" + sessionId + "/workflow"),
+                        HttpMethod.PATCH,
+                        request,
+                        new ParameterizedTypeReference<>() {});
+
+        assertStatus(updated, 200);
+        assertNotNull(updated.getBody());
+        assertEquals("logs", String.valueOf(updated.getBody().get("taskType")));
+        assertEquals("定位 Spring Boot 启动报错", String.valueOf(updated.getBody().get("taskGoal")));
+        assertEquals("in_progress", String.valueOf(updated.getBody().get("taskStatus")));
     }
 
     @Test
