@@ -1,0 +1,41 @@
+# Prometheus 全局配置
+global:
+  scrape_interval: 15s          # 默认抓取间隔
+  evaluation_interval: 15s      # 规则评估间隔
+  external_labels:
+    monitor: "ai-agent-monitor"
+
+# 告警规则文件
+rule_files:
+  - "alert.rules.yml"
+
+# 告警管理器（占位，未启用 Alertmanager 时可忽略）
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# 抓取配置
+scrape_configs:
+  # AI Agent Backend - Spring Boot Actuator Prometheus 端点
+  - job_name: "ai-agent-backend"
+    metrics_path: /actuator/prometheus
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["backend:8080"]
+        labels:
+          service: "backend"
+          application: "ai-agent-backend"
+
+  # Node Exporter - 主机级指标（CPU/内存/磁盘/网络）
+  - job_name: "node-exporter"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: "node-exporter"
+
+  # Prometheus 自身指标
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

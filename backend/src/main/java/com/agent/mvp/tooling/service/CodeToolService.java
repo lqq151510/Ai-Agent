@@ -24,12 +24,14 @@ public class CodeToolService {
     private static final int MAX_READ_LINES = 400;
 
     private final Path workspaceRoot;
+    private final Path workspaceRealRoot;
     private final ObjectMapper objectMapper;
 
     public CodeToolService(
             com.agent.mvp.config.AppProperties appProperties, ObjectMapper objectMapper) {
         this.workspaceRoot =
                 Paths.get(appProperties.getWorkspaceRoot()).toAbsolutePath().normalize();
+        this.workspaceRealRoot = resolveRealWorkspaceRoot(this.workspaceRoot);
         this.objectMapper = objectMapper;
     }
 
@@ -49,7 +51,7 @@ public class CodeToolService {
                         .forEach(
                                 path ->
                                         rows.add(
-                                                workspaceRoot
+                                                workspaceRealRoot
                                                         .relativize(
                                                                 path.toAbsolutePath().normalize())
                                                         .toString()));
@@ -149,7 +151,7 @@ public class CodeToolService {
         long start = System.currentTimeMillis();
         try {
             Path file = resolveSafe(relativePath);
-            
+
             int from = startLine == null ? 1 : Math.max(1, startLine);
             int to = endLine == null ? from + MAX_READ_LINES - 1 : endLine;
             if (to < from) {
@@ -160,8 +162,10 @@ public class CodeToolService {
             }
 
             StringBuilder sb = new StringBuilder();
-            try (java.util.stream.Stream<String> lineStream = Files.lines(file, StandardCharsets.UTF_8)) {
-                java.util.Iterator<String> iterator = lineStream.skip(from - 1).limit(to - from + 1).iterator();
+            try (java.util.stream.Stream<String> lineStream =
+                    Files.lines(file, StandardCharsets.UTF_8)) {
+                java.util.Iterator<String> iterator =
+                        lineStream.skip(from - 1).limit(to - from + 1).iterator();
                 int currentLine = from;
                 while (iterator.hasNext()) {
                     sb.append(currentLine++).append(": ").append(iterator.next()).append('\n');
@@ -250,7 +254,27 @@ public class CodeToolService {
         if (!candidate.startsWith(workspaceRoot)) {
             throw new BadRequestException("Path escapes workspace root");
         }
+
+        if (Files.exists(candidate)) {
+            try {
+                Path realCandidate = candidate.toRealPath();
+                if (!realCandidate.startsWith(workspaceRealRoot)) {
+                    throw new BadRequestException("Path escapes workspace root");
+                }
+                return realCandidate;
+            } catch (IOException ex) {
+                throw new BadRequestException("Path cannot be resolved: " + relativePath);
+            }
+        }
         return candidate;
+    }
+
+    private Path resolveRealWorkspaceRoot(Path root) {
+        try {
+            return root.toRealPath();
+        } catch (IOException ex) {
+            throw new IllegalStateException("Workspace root does not exist: " + root, ex);
+        }
     }
 
     private Map<String, Object> args(Object... pairs) {

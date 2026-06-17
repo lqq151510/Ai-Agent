@@ -9,6 +9,7 @@ BACKEND_MVN_ARGS="${DESKTOP_BACKEND_MVN_ARGS:-}"
 echo "=== Building backend JAR (desktop profile) ==="
 
 cd "$PROJECT_ROOT/backend"
+# shellcheck disable=SC2086 # BACKEND_MVN_ARGS 需要按空格拆分为多个参数
 mvn package -Pdesktop -DskipTests -q ${BACKEND_MVN_ARGS}
 
 mkdir -p "$OUTPUT_DIR"

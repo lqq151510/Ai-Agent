@@ -11,6 +11,11 @@ spec:
     metadata:
       labels:
         app: backend
+      annotations:
+        # Prometheus 抓取注解 - 允许 Prometheus 自动发现并抓取该 Pod 的指标
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
     spec:
       containers:
       - name: backend

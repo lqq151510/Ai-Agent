@@ -1,0 +1,134 @@
+# Prometheus 配置 ConfigMap - 抓取规则与告警规则
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: ai-agent
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        monitor: "ai-agent-monitor"
+    rule_files:
+      - "alert.rules.yml"
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: []
+    scrape_configs:
+      # AI Agent Backend - 通过 K8s 服务发现抓取带 prometheus.io/scrape 注解的 Pod
+      - job_name: "kubernetes-pods"
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: app
+
+  alert.rules.yml: |
+    groups:
+      - name: service-availability
+        rules:
+          - alert: ServiceDown
+            expr: up == 0
+            for: 1m
+            labels:
+              severity: critical
+              category: availability
+            annotations:
+              summary: "服务 {{ $labels.job }} 宕机"
+              description: "实例 {{ $labels.instance }} 已离线超过 1 分钟。"
+      - name: business-error-rate
+        rules:
+          - alert: AgentHighErrorRate
+            expr: |
+              sum(rate(agent_chat_errors_total[5m])) by (provider, model)
+              / clamp_min(sum(rate(agent_chat_requests_total[5m])) by (provider, model), 1)
+              > 0.1
+            for: 2m
+            labels:
+              severity: warning
+              category: business
+            annotations:
+              summary: "Agent 对话错误率过高 ({{ $labels.provider }}/{{ $labels.model }})"
+              description: "近 5 分钟错误率 {{ $value | humanizePercentage }}，超过 10% 阈值持续 2 分钟。"
+      - name: latency
+        rules:
+          - alert: AgentHighLatencyP95
+            expr: |
+              histogram_quantile(0.95,
+                sum(rate(agent_chat_duration_seconds_bucket[5m])) by (le, provider)
+              ) > 5
+            for: 5m
+            labels:
+              severity: warning
+              category: latency
+            annotations:
+              summary: "Agent 对话 P95 延迟过高 ({{ $labels.provider }})"
+              description: "近 5 分钟 P95 响应时间 {{ $value | humanizeDuration }}，超过 5 秒阈值持续 5 分钟。"
+      - name: jvm-resource
+        rules:
+          - alert: JvmHeapMemoryHigh
+            expr: |
+              jvm_memory_used_bytes{area="heap"}
+              > 0.9 * jvm_memory_max_bytes{area="heap"}
+            for: 5m
+            labels:
+              severity: warning
+              category: resource
+            annotations:
+              summary: "JVM 堆内存使用率过高"
+              description: "实例 {{ $labels.instance }} 堆内存 {{ $labels.id }} 使用率超过 90% 持续 5 分钟。"
+---
+# Prometheus RBAC - 服务发现与抓取所需权限
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  namespace: monitoring
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy", "nodes/metrics", "services", "endpoints", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: monitoring

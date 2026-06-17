@@ -49,6 +49,13 @@ class FlexAgentIntegrationMockTest {
         AgentRuntime runtime = mock(AgentRuntime.class);
         when(flexRuntimeFactory.createRuntime(any(), any(), any(), any(), any())).thenReturn(runtime);
 
+        com.agent.mvp.agent.service.AgentContextService agentContextService =
+                new com.agent.mvp.agent.service.AgentContextService(ragMemoryService, appProperties);
+        com.agent.mvp.agent.service.MessageHistoryProcessor messageHistoryProcessor =
+                new com.agent.mvp.agent.service.MessageHistoryProcessor(sessionService, agentContextService);
+        com.agent.mvp.agent.service.ToolCallManager toolCallManager =
+                mock(com.agent.mvp.agent.service.ToolCallManager.class);
+
         AgentService service =
                 new AgentService(
                         sessionService,
@@ -63,7 +70,10 @@ class FlexAgentIntegrationMockTest {
                         flexRuntimeFactory,
                         mock(com.agent.mvp.auth.service.UserService.class),
                         mock(com.agent.mvp.agent.service.SemanticCacheService.class),
-                        new com.agent.mvp.agent.service.AgentContextService(ragMemoryService, appProperties));
+                        agentContextService,
+                        new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+                        messageHistoryProcessor,
+                        toolCallManager);
 
         UUID userId = UUID.randomUUID();
         ConversationSession session = new ConversationSession();
@@ -96,6 +106,15 @@ class FlexAgentIntegrationMockTest {
                 .thenReturn(
                         java.util.concurrent.CompletableFuture.completedFuture(
                                 new ToolResult("1", "searchCode", "{}", "SUCCESS", 10, "result")));
+
+        // 配置 ToolCallManager mock：返回成功的工具调用结果
+        when(toolCallManager.executeToolCalls(any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(
+                        new com.agent.mvp.agent.service.ToolCallManager.ToolCallResult(
+                                java.util.List.of(
+                                        new com.agent.mvp.tooling.dto.ToolExecutionResult(
+                                                "searchCode", "{}", "SUCCESS", 10, "result")),
+                                false));
 
         ChatResponse response =
                 service.chat(

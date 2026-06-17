@@ -5,51 +5,57 @@ import com.agent.mvp.agent.dto.ModelChatMessage;
 import com.agent.mvp.agent.dto.ModelChatRequest;
 import com.agent.mvp.agent.dto.ModelChatResponse;
 import com.agent.mvp.agent.service.ModelGateway;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
+import java.util.UUID;
+import org.springframework.stereotype.Component;
 
 @Component
 public class CoderAgent {
 
     private final ModelGateway modelGateway;
-    private final String workspaceRoot;
+    private final SandboxManager sandboxManager;
 
-    public CoderAgent(ModelGateway modelGateway, @Value("${WORKSPACE_ROOT:/app/workspace}") String workspaceRoot) {
+    public CoderAgent(ModelGateway modelGateway, SandboxManager sandboxManager) {
         this.modelGateway = modelGateway;
-        this.workspaceRoot = workspaceRoot;
+        this.sandboxManager = sandboxManager;
     }
 
+    /**
+     * 兼容旧调用入口：不指定 runId 时自动生成一个临时 runId，仍写入沙箱目录而非工作区根目录。
+     *
+     * @deprecated 推荐使用 {@link #code(UUID, String)} 显式传入 runId，便于回滚与归档。
+     */
+    @Deprecated
     public String code(String plan) {
-        ModelChatRequest request = new ModelChatRequest(
-                "gpt-4o",
-                List.of(
-                        ModelChatMessage.of("system", "You are an expert Coder Agent. Your job is to generate Java source code based on the provided plan. Please output the code. For MVP purposes, the generated code will be saved directly into the workspace root."),
-                        ModelChatMessage.of("user", plan)
-                ),
-                null, null, null, null
-        );
+        return code(UUID.randomUUID(), plan);
+    }
+
+    /**
+     * 根据计划生成代码，并将输出写入沙箱目录 {@code workspace/coach-runs/{runId}/GeneratedOutput.txt}。
+     *
+     * @param runId 沙箱运行 ID，用于隔离与回滚
+     * @param plan  开发计划文本
+     * @return 模型生成的代码内容
+     */
+    public String code(UUID runId, String plan) {
+        ModelChatRequest request =
+                new ModelChatRequest(
+                        "gpt-4o",
+                        List.of(
+                                ModelChatMessage.of(
+                                        "system",
+                                        "You are an expert Coder Agent. Your job is to generate Java source code based on the provided plan. Please output the code. The generated code will be saved into an isolated sandbox directory for safety and rollback."),
+                                ModelChatMessage.of("user", plan)),
+                        null,
+                        null,
+                        null,
+                        null);
 
         ModelChatResponse response = modelGateway.chat(ModelProviderType.OPENAI, request);
         String codeOutput = response.content();
-        
-        try {
-            Path root = Paths.get(workspaceRoot);
-            if (!Files.exists(root)) {
-                Files.createDirectories(root);
-            }
-            // For the MVP, we dump the entire output into a single file to satisfy the file-writing requirement.
-            // A more sophisticated implementation would parse file paths from markdown blocks and write multiple files.
-            Path generatedFile = root.resolve("GeneratedOutput.txt");
-            Files.writeString(generatedFile, codeOutput);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to write code to workspace: " + workspaceRoot, e);
-        }
+
+        // 写入沙箱目录，避免直接覆盖工作区根目录下的用户文件
+        sandboxManager.writeFile(runId, "GeneratedOutput.txt", codeOutput);
 
         return codeOutput;
     }

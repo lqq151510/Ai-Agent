@@ -17,6 +17,7 @@ public class AppProperties {
     private final Agent agent = new Agent();
     private final RateLimit rateLimit = new RateLimit();
     private final StartupValidation startupValidation = new StartupValidation();
+    private final PythonService pythonService = new PythonService();
 
     public ModelProviderType getDefaultProvider() {
         return defaultProvider;
@@ -64,6 +65,10 @@ public class AppProperties {
 
     public StartupValidation getStartupValidation() {
         return startupValidation;
+    }
+
+    public PythonService getPythonService() {
+        return pythonService;
     }
 
     public String getDefaultModel(ModelProviderType provider) {
@@ -317,6 +322,53 @@ public class AppProperties {
 
         public void setModelProbeRetries(int modelProbeRetries) {
             this.modelProbeRetries = modelProbeRetries;
+        }
+    }
+
+    /** python-service 文档解析服务配置。 */
+    public static class PythonService {
+        /** 基础地址，例如 http://localhost:8000 */
+        private String baseUrl = "http://localhost:8000";
+
+        /** 连接超时（毫秒） */
+        private long connectTimeoutMs = 3_000;
+
+        /** 读取超时（毫秒），文档解析可能较慢 */
+        private long readTimeoutMs = 30_000;
+
+        /** 是否启用（不可用时降级到本地逻辑） */
+        private boolean enabled = true;
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public long getConnectTimeoutMs() {
+            return connectTimeoutMs;
+        }
+
+        public void setConnectTimeoutMs(long connectTimeoutMs) {
+            this.connectTimeoutMs = connectTimeoutMs;
+        }
+
+        public long getReadTimeoutMs() {
+            return readTimeoutMs;
+        }
+
+        public void setReadTimeoutMs(long readTimeoutMs) {
+            this.readTimeoutMs = readTimeoutMs;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
     }
 }

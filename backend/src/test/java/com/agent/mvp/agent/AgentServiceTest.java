@@ -269,7 +269,13 @@ class AgentServiceTest {
                         mock(com.agent.mvp.agent.service.FlexRuntimeFactory.class),
                         mock(com.agent.mvp.auth.service.UserService.class),
                         mock(com.agent.mvp.agent.service.SemanticCacheService.class),
-                        new com.agent.mvp.agent.service.AgentContextService(ragMemoryService, appProperties));
+                        new com.agent.mvp.agent.service.AgentContextService(ragMemoryService, appProperties),
+                        new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+                        new com.agent.mvp.agent.service.MessageHistoryProcessor(
+                                sessionService,
+                                new com.agent.mvp.agent.service.AgentContextService(
+                                        ragMemoryService, appProperties)),
+                        mock(com.agent.mvp.agent.service.ToolCallManager.class));
         final UUID userId = UUID.randomUUID();
         final ConversationSession session = new ConversationSession();
 

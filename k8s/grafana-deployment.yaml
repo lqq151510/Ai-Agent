@@ -1,0 +1,226 @@
+# Grafana Dashboard ConfigMap - 仪表盘 JSON
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: ai-agent
+data:
+  dashboard.json: |
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "graphTooltip": 0,
+      "panels": [
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "targets": [{"expr": "sum(rate(agent_chat_requests_total[1m])) by (provider, model)", "legendFormat": "{{provider}} / {{model}}", "refId": "A"}],
+          "title": "Agent 对话 QPS",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "percentunit"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "id": 2,
+          "targets": [{"expr": "sum(rate(agent_chat_errors_total[5m])) by (provider, model) / clamp_min(sum(rate(agent_chat_requests_total[5m])) by (provider, model), 1)", "legendFormat": "{{provider}} / {{model}}", "refId": "A"}],
+          "title": "Agent 对话错误率",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "id": 3,
+          "targets": [{"expr": "histogram_quantile(0.95, sum(rate(agent_chat_duration_seconds_bucket[5m])) by (le, provider))", "legendFormat": "P95 {{provider}}", "refId": "A"}],
+          "title": "Agent 对话 P95 响应时间",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
+          "id": 4,
+          "targets": [{"expr": "agent_sessions_active", "legendFormat": "活跃会话数", "refId": "A"}],
+          "title": "活跃会话数",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
+          "id": 5,
+          "targets": [{"expr": "sum(jvm_memory_used_bytes{area=\"heap\"}) by (id)", "legendFormat": "{{id}}", "refId": "A"}],
+          "title": "JVM 堆内存使用",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "id": 6,
+          "targets": [{"expr": "jvm_threads_states_threads", "legendFormat": "{{state}}", "refId": "A"}],
+          "title": "JVM 线程数",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 6, "x": 12, "y": 16},
+          "id": 7,
+          "targets": [{"expr": "increase(coach_scaffolds_generated_total[1h])", "legendFormat": "脚手架生成数（近1小时）", "refId": "A"}],
+          "title": "Coach 脚手架生成数",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 16},
+          "id": 8,
+          "targets": [{"expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, uri))", "legendFormat": "P95 {{uri}}", "refId": "A"}],
+          "title": "HTTP 请求 P95 响应时间分布",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "tags": ["ai-agent", "backend"],
+      "time": {"from": "now-1h", "to": "now"},
+      "title": "AI Agent Backend 监控",
+      "uid": "ai-agent-backend",
+      "version": 1
+    }
+---
+# Grafana Provisioning ConfigMap - 数据源与仪表盘自动加载
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: ai-agent
+data:
+  datasources.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
+        jsonData:
+          timeInterval: "15s"
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: "AI Agent Dashboards"
+        orgId: 1
+        folder: "AI Agent"
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+# Grafana Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: ai-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.3.0
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: username
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: password
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+          ports:
+            - containerPort: 3000
+              name: web
+          volumeMounts:
+            - name: provisioning
+              mountPath: /etc/grafana/provisioning
+              readOnly: true
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/grafana
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: web
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: web
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: provisioning
+          configMap:
+            name: grafana-provisioning
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: data
+          emptyDir: {}
+---
+# Grafana Service - 暴露 3000 端口
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: ai-agent
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: web
+      name: web
+  selector:
+    app.kubernetes.io/name: grafana

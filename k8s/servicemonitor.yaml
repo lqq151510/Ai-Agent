@@ -1,0 +1,30 @@
+# ServiceMonitor - Prometheus Operator CRD
+# 若集群已安装 Prometheus Operator，使用此 ServiceMonitor 自动发现抓取目标
+# 若未安装 Prometheus Operator，则使用 prometheus-config.yaml 中的 kubernetes-pods 抓取配置
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ai-agent-backend
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: ai-agent-backend
+    app.kubernetes.io/part-of: ai-agent
+    release: prometheus  # 需与 Prometheus Operator 的 serviceMonitorSelector 匹配
+spec:
+  selector:
+    matchLabels:
+      app: backend  # 匹配 backend-service.yaml 中的 labels
+  namespaceSelector:
+    matchNames:
+      - default
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 10s
+      scrapeTimeout: 5s
+      honorLabels: true
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace

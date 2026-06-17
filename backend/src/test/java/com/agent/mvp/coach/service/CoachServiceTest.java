@@ -42,7 +42,8 @@ class CoachServiceTest {
                         mock(com.agent.mvp.auth.service.UserService.class),
                         mock(com.agent.mvp.coach.agent.SupervisorAgent.class),
                         mock(com.agent.mvp.agent.service.CodeRAGService.class),
-                        mock(SentinelAlertBroadcaster.class));
+                        mock(SentinelAlertBroadcaster.class),
+                        new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
         when(repository.insert(any(com.agent.mvp.coach.entity.DevCoachRun.class)))
                 .thenAnswer(
                         invocation -> {
@@ -96,7 +97,8 @@ class CoachServiceTest {
                         mock(com.agent.mvp.auth.service.UserService.class),
                         mock(com.agent.mvp.coach.agent.SupervisorAgent.class),
                         codeRAGService,
-                        broadcaster);
+                        broadcaster,
+                        new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
 
         when(gateway.chat(any(), any()))
                 .thenReturn(

@@ -29,10 +29,12 @@ import com.agent.mvp.coach.dto.SentinelReportRequest;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.config.AppProperties;
+import com.agent.mvp.config.MetricsSupport;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +61,7 @@ public class CoachService {
     private final SupervisorAgent supervisorAgent;
     private final CodeRAGService codeRAGService;
     private final SentinelAlertBroadcaster sentinelAlertBroadcaster;
+    private final MeterRegistry meterRegistry;
 
     public CoachService(
             ModelGateway modelGateway,
@@ -72,7 +75,8 @@ public class CoachService {
             UserService userService,
             SupervisorAgent supervisorAgent,
             CodeRAGService codeRAGService,
-            SentinelAlertBroadcaster sentinelAlertBroadcaster) {
+            SentinelAlertBroadcaster sentinelAlertBroadcaster,
+            MeterRegistry meterRegistry) {
         this.modelGateway = modelGateway;
         this.promptService = promptService;
         this.scaffoldTemplateRegistry = scaffoldTemplateRegistry;
@@ -85,6 +89,7 @@ public class CoachService {
         this.supervisorAgent = supervisorAgent;
         this.codeRAGService = codeRAGService;
         this.sentinelAlertBroadcaster = sentinelAlertBroadcaster;
+        this.meterRegistry = meterRegistry;
     }
 
     public void handleSentinelReport(SentinelReportRequest request) {
@@ -119,6 +124,8 @@ public class CoachService {
 
     public RequirementBreakdownResponse breakdown(
             UUID userId, RequirementBreakdownRequest request) {
+        // 指标埋点：需求拆解计数
+        MetricsSupport.coachRequirementsBrokenDown(meterRegistry).increment();
         User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
         ModelChatResponse modelResponse =
                 modelGateway.chat(
@@ -144,7 +151,18 @@ public class CoachService {
     }
 
     public String executeMultiAgentTask(UUID userId, String requirement) {
-        return supervisorAgent.executeTask(requirement);
+        UUID runId = UUID.randomUUID();
+        String result = supervisorAgent.executeTask(runId, requirement);
+        // 记录多智能体执行 run，便于后续基于 runId 进行沙箱回滚或归档
+        saveRun(
+                userId,
+                runId,
+                "MULTI_AGENT",
+                titleFrom(requirement),
+                requirement,
+                null,
+                null);
+        return result;
     }
 
     public LogDiagnosisResponse diagnose(UUID userId, LogDiagnosisRequest request) {
@@ -179,6 +197,8 @@ public class CoachService {
     }
 
     public ScaffoldResponse generateScaffold(UUID userId, ScaffoldRequest request) {
+        // 指标埋点：脚手架生成计数
+        MetricsSupport.coachScaffoldsGenerated(meterRegistry).increment();
         UUID runId = UUID.randomUUID();
         GeneratedScaffold scaffold = scaffoldTemplateRegistry.generate(request);
         Path zipPath = scaffoldZipService.writeZip(runId, scaffold);

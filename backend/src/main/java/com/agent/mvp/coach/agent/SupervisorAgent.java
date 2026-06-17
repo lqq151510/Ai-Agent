@@ -2,6 +2,7 @@ package com.agent.mvp.coach.agent;
 
 import com.agent.mvp.coach.event.PlanProposedEvent;
 import com.agent.mvp.coach.event.PlanReviewedEvent;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -17,8 +18,11 @@ public class SupervisorAgent {
     private final ReviewerAgent reviewerAgent;
     private final ApplicationEventPublisher eventPublisher;
 
-    public SupervisorAgent(PlannerAgent plannerAgent, CoderAgent coderAgent, 
-                           ReviewerAgent reviewerAgent, ApplicationEventPublisher eventPublisher) {
+    public SupervisorAgent(
+            PlannerAgent plannerAgent,
+            CoderAgent coderAgent,
+            ReviewerAgent reviewerAgent,
+            ApplicationEventPublisher eventPublisher) {
         this.plannerAgent = plannerAgent;
         this.coderAgent = coderAgent;
         this.reviewerAgent = reviewerAgent;
@@ -26,7 +30,21 @@ public class SupervisorAgent {
     }
 
     public String executeTask(String requirement) {
-        log.info("Supervisor: Starting multi-agent task execution. Requirement: {}", requirement);
+        return executeTask(UUID.randomUUID(), requirement);
+    }
+
+    /**
+     * 执行多智能体任务，使用指定 runId 作为代码生成沙箱隔离标识。
+     *
+     * @param runId       沙箱运行 ID，CoderAgent 会将生成代码写入 {@code workspace/coach-runs/{runId}/}
+     * @param requirement 用户需求文本
+     * @return 多智能体辩论与生成结果汇总
+     */
+    public String executeTask(UUID runId, String requirement) {
+        log.info(
+                "Supervisor: Starting multi-agent task execution. runId={}, Requirement: {}",
+                runId,
+                requirement);
 
         StringBuilder debateLog = new StringBuilder();
         debateLog.append("### 🤖 多智能体协同辩论历程 (Multi-Agent Debate History)\n\n");
@@ -81,8 +99,8 @@ public class SupervisorAgent {
             }
         }
 
-        log.info("Supervisor: Proceeding to CoderAgent with the final plan...");
-        String code = coderAgent.code(currentPlan);
+        log.info("Supervisor: Proceeding to CoderAgent with the final plan... runId={}", runId);
+        String code = coderAgent.code(runId, currentPlan);
         log.info("Supervisor: Code generation completed.");
 
         log.info("Supervisor: Proceeding to ReviewerAgent for code quality review...");

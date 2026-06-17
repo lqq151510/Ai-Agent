@@ -5,11 +5,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,prometheus
+        include: health,info,prometheus,metrics
   endpoint:
     health:
       probes:
         enabled: true
+      show-details: when-authorized
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ai-agent-backend
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 spring:
   profiles:
@@ -69,3 +78,21 @@ app:
   openai:
     base-url: ${OPENAI_BASE_URL:http://localhost:1234/v1}
     api-key: ${OPENAI_API_KEY:sk-placeholder}
+
+# Bug Sentinel 配置：全局异常自动上报到 webhook，默认开启
+bug:
+  sentinel:
+    enabled: ${BUG_SENTINEL_ENABLED:true}
+    environment: ${BUG_SENTINEL_ENV:dev}
+    webhook:
+      url: ${BUG_SENTINEL_WEBHOOK_URL:http://localhost:8080/api/v1/sentinel/report}
+
+python-service:
+  # python-service 文档解析服务基础地址
+  base-url: ${PYTHON_SERVICE_BASE_URL:http://localhost:8000}
+  # 连接超时（毫秒）
+  connect-timeout-ms: ${PYTHON_SERVICE_CONNECT_TIMEOUT_MS:3000}
+  # 读取超时（毫秒），文档解析可能较慢
+  read-timeout-ms: ${PYTHON_SERVICE_READ_TIMEOUT_MS:30000}
+  # 是否启用（不可用时降级到本地 MarkItDownService 逻辑）
+  enabled: ${PYTHON_SERVICE_ENABLED:true}

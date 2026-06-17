@@ -10,6 +10,7 @@ import com.agent.mvp.coach.dto.ScaffoldRequest;
 import com.agent.mvp.coach.dto.ScaffoldResponse;
 import com.agent.mvp.coach.service.CoachService;
 import com.agent.mvp.common.context.RequestContext;
+import com.agent.sentinel.SentinelWebhook;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -52,6 +53,7 @@ public class CoachController {
     }
 
     @PostMapping("/execute-multi-agent")
+    @SentinelWebhook(tag = "coach.multi-agent")
     public ResponseEntity<String> executeMultiAgent(
             @RequestBody String requirement,
             Authentication authentication) {

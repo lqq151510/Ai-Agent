@@ -7,14 +7,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.agent.mvp.coach.domain.GeneratedScaffold;
 import com.agent.mvp.coach.domain.ScaffoldFile;
 import com.agent.mvp.common.exception.BadRequestException;
+import com.agent.mvp.common.exception.NotFoundException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.zip.ZipFile;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ScaffoldZipServiceTest {
 
     private final ScaffoldZipService zipService = new ScaffoldZipService();
+
+    @TempDir Path artifactRoot;
 
     @Test
     void shouldWriteZipWithProjectRootEntries() throws Exception {
@@ -45,5 +51,20 @@ class ScaffoldZipServiceTest {
 
         assertThrows(
                 BadRequestException.class, () -> zipService.writeZip(UUID.randomUUID(), scaffold));
+    }
+
+    @Test
+    void shouldRejectStoredArtifactSymlinkThatEscapesRoot() throws Exception {
+        Path outsideDir = Files.createTempDirectory("coach-artifact-outside");
+        Path outsideFile = outsideDir.resolve("escape.zip");
+        Files.writeString(outsideFile, "not owned");
+        Path symlink = artifactRoot.resolve("escape.zip");
+        Files.createSymbolicLink(symlink, outsideFile);
+
+        ScaffoldZipService scopedZipService = new ScaffoldZipService(artifactRoot);
+
+        assertThrows(
+                NotFoundException.class,
+                () -> scopedZipService.resolveOwnedArtifact(symlink.toString()));
     }
 }

@@ -1,0 +1,67 @@
+# AI Agent Backend 基础告警规则
+# 触发条件请配合 Alertmanager 使用（未部署 Alertmanager 时仅在 Prometheus UI 显示为 firing）
+
+groups:
+  # 服务可用性告警
+  - name: service-availability
+    rules:
+      # 服务宕机：目标连续 1 分钟抓取失败
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "服务 {{ $labels.job }} 宕机"
+          description: "实例 {{ $labels.instance }} 已离线超过 1 分钟，请立即检查服务状态。"
+
+  # 业务错误率告警
+  - name: business-error-rate
+    rules:
+      # Agent 对话错误率超过 10%
+      - alert: AgentHighErrorRate
+        expr: |
+          sum(rate(agent_chat_errors_total[5m])) by (provider, model)
+          / clamp_min(sum(rate(agent_chat_requests_total[5m])) by (provider, model), 1)
+          > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          category: business
+        annotations:
+          summary: "Agent 对话错误率过高 ({{ $labels.provider }}/{{ $labels.model }})"
+          description: "近 5 分钟错误率 {{ $value | humanizePercentage }}，超过 10% 阈值持续 2 分钟。"
+
+  # 延迟告警
+  - name: latency
+    rules:
+      # Agent 对话 P95 响应时间超过 5 秒
+      - alert: AgentHighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(agent_chat_duration_seconds_bucket[5m])) by (le, provider)
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: latency
+        annotations:
+          summary: "Agent 对话 P95 延迟过高 ({{ $labels.provider }})"
+          description: "近 5 分钟 P95 响应时间 {{ $value | humanizeDuration }}，超过 5 秒阈值持续 5 分钟。"
+
+  # JVM 资源告警
+  - name: jvm-resource
+    rules:
+      # JVM 堆内存使用率超过 90%
+      - alert: JvmHeapMemoryHigh
+        expr: |
+          jvm_memory_used_bytes{area="heap"}
+          > 0.9 * jvm_memory_max_bytes{area="heap"}
+        for: 5m
+        labels:
+          severity: warning
+          category: resource
+        annotations:
+          summary: "JVM 堆内存使用率过高"
+          description: "实例 {{ $labels.instance }} 堆内存 {{ $labels.id }} 使用率超过 90% 持续 5 分钟，可能发生 OOM。"

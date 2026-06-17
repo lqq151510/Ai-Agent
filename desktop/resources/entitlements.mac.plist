@@ -2,16 +2,28 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- Electron / V8 必需：允许 JIT 编译 -->
     <key>com.apple.security.cs.allow-jit</key>
     <true/>
+    <!-- Electron / V8 必需：允许未签名的可执行内存 -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
+    <!-- 允许加载未签名的动态库（Electron 原生模块、JNA 等） -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <!-- 允许通过 DYLD 环境变量加载库（调试/开发用，发布可按需关闭） -->
     <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <true/>
+    <!-- 后端服务需要出站网络访问（调用 LLM API、健康检查等） -->
     <key>com.apple.security.network.client</key>
     <true/>
+    <!-- 后端服务监听本地端口（HTTP 服务） -->
     <key>com.apple.security.network.server</key>
     <true/>
+    <!-- 设备网络访问（兼容旧版 API） -->
+    <key>com.apple.security.device.network</key>
+    <true/>
+    <!-- 用户选择文件读写（上传文档、导出报告等） -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 </dict>

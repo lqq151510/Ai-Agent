@@ -2,17 +2,21 @@
   "name": "ai-agent-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "AI Agent Desktop Client for Mac and Windows",
+  "description": "AI Agent Desktop Client for Mac, Windows and Linux",
+  "author": "AI Agent Team",
+  "license": "UNLICENSED",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "tsc -p tsconfig.main.json && electron .",
+    "dev": "npm run build:main && electron .",
     "build:main": "tsc -p tsconfig.main.json",
     "build:web": "rm -rf dist/renderer && mkdir -p dist/renderer && cd ../web && VITE_API_BASE=http://localhost:18080 npm run build && cp -R dist/. ../desktop/dist/renderer/",
     "build": "npm run build:main && npm run build:web",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
-    "dist:win": "npm run build && electron-builder --win"
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "clean": "rm -rf dist release backend-jre"
   },
   "dependencies": {
     "electron-store": "^8.2.0"
@@ -21,5 +25,8 @@
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

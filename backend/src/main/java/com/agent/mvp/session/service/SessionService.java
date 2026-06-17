@@ -133,6 +133,22 @@ public class SessionService {
                         () -> new ForbiddenException("Session does not exist or no permission"));
     }
 
+    /**
+     * 统计当前活跃会话数。
+     *
+     * <p>活跃定义：最近 24 小时内有更新的会话数量。供 Prometheus Gauge 指标 {@code
+     * agent.sessions.active} 使用。
+     *
+     * @return 活跃会话数
+     */
+    @Transactional(readOnly = true)
+    public long countActiveSessions() {
+        Instant since = Instant.now().minus(java.time.Duration.ofHours(24));
+        return sessionRepository.selectCount(
+                new LambdaQueryWrapper<ConversationSession>()
+                        .ge(ConversationSession::getUpdatedAt, since));
+    }
+
     @Transactional(readOnly = true)
     public List<MessageResponse> listMessages(UUID userId, UUID sessionId) {
         ConversationSession session = findOwnedSession(userId, sessionId);

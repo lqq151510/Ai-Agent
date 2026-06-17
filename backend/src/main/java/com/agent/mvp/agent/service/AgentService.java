@@ -4,21 +4,21 @@ import com.agent.mvp.agent.dto.AgentExecutionDiagnostics;
 import com.agent.mvp.agent.dto.ChatRequest;
 import com.agent.mvp.agent.dto.ChatResponse;
 import com.agent.mvp.agent.dto.ChatStreamMeta;
-import com.agent.mvp.agent.dto.ModelChatMessage;
 import com.agent.mvp.agent.dto.ResolvedModelConfig;
 import com.agent.mvp.agent.tooling.AgentToolOrchestrator;
 import com.agent.mvp.agent.tooling.ClientToolRegistry;
 import com.agent.mvp.agent.tooling.ToolCall;
-import com.agent.mvp.agent.tooling.ToolResult;
 import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.auth.service.UserService;
 import com.agent.mvp.config.AppProperties;
-import com.agent.mvp.session.dto.MessageResponse;
+import com.agent.mvp.config.MetricsSupport;
 import com.agent.mvp.session.entity.ConversationSession;
 import com.agent.mvp.session.service.SessionService;
 import com.agent.mvp.tooling.dto.ToolExecutionResult;
 import com.agent.mvp.tooling.service.ToolAuditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -49,6 +49,9 @@ public class AgentService {
     private final UserService userService;
     private final SemanticCacheService semanticCacheService;
     private final AgentContextService agentContextService;
+    private final MeterRegistry meterRegistry;
+    private final MessageHistoryProcessor messageHistoryProcessor;
+    private final ToolCallManager toolCallManager;
 
     public AgentService(
             SessionService sessionService,
@@ -63,7 +66,10 @@ public class AgentService {
             FlexRuntimeFactory flexRuntimeFactory,
             UserService userService,
             SemanticCacheService semanticCacheService,
-            AgentContextService agentContextService) {
+            AgentContextService agentContextService,
+            MeterRegistry meterRegistry,
+            MessageHistoryProcessor messageHistoryProcessor,
+            ToolCallManager toolCallManager) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
         this.modelGateway = modelGateway;
@@ -77,12 +83,33 @@ public class AgentService {
         this.userService = userService;
         this.semanticCacheService = semanticCacheService;
         this.agentContextService = agentContextService;
+        this.meterRegistry = meterRegistry;
+        this.messageHistoryProcessor = messageHistoryProcessor;
+        this.toolCallManager = toolCallManager;
     }
 
     public ChatResponse chat(UUID userId, ChatRequest request) {
         ConversationSession session = sessionService.findOwnedSession(userId, request.sessionId());
         ResolvedModelConfig resolved =
                 modelRoutingService.resolve(request.provider(), request.model(), session);
+        // 指标埋点：请求计数 + 耗时计时
+        MetricsSupport.chatRequests(meterRegistry, resolved.provider(), resolved.model())
+                .increment();
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            ChatResponse response = doChat(userId, request, session, resolved);
+            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
+            return response;
+        } catch (RuntimeException ex) {
+            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
+            MetricsSupport.chatErrors(meterRegistry, resolved.provider(), resolved.model())
+                    .increment();
+            throw ex;
+        }
+    }
+
+    private ChatResponse doChat(
+            UUID userId, ChatRequest request, ConversationSession session, ResolvedModelConfig resolved) {
         sessionService.saveMessage(
                 session,
                 "user",
@@ -157,7 +184,38 @@ public class AgentService {
         ConversationSession session = sessionService.findOwnedSession(userId, request.sessionId());
         ResolvedModelConfig resolved =
                 modelRoutingService.resolve(request.provider(), request.model(), session);
+        // 指标埋点：请求计数 + 耗时计时
+        MetricsSupport.chatRequests(meterRegistry, resolved.provider(), resolved.model())
+                .increment();
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            ChatResponse response =
+                    doStreamChat(
+                            userId,
+                            request,
+                            session,
+                            resolved,
+                            metaConsumer,
+                            chunkConsumer,
+                            clientToolConsumer);
+            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
+            return response;
+        } catch (RuntimeException ex) {
+            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
+            MetricsSupport.chatErrors(meterRegistry, resolved.provider(), resolved.model())
+                    .increment();
+            throw ex;
+        }
+    }
 
+    private ChatResponse doStreamChat(
+            UUID userId,
+            ChatRequest request,
+            ConversationSession session,
+            ResolvedModelConfig resolved,
+            Consumer<ChatStreamMeta> metaConsumer,
+            Consumer<String> chunkConsumer,
+            Consumer<ToolCall> clientToolConsumer) {
         sessionService.saveMessage(
                 session,
                 "user",
@@ -278,37 +336,54 @@ public class AgentService {
             String customApiKey,
             java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>>
                     clientToolInvoker) {
-        List<MessageResponse> history = sessionService.listMessages(userId, session.getId());
+        // 处理消息历史：获取历史、构建上下文窗口、分离最后一条用户消息
+        MessageHistoryProcessor.ProcessedHistory processedHistory =
+                messageHistoryProcessor.processHistory(
+                        userId, session.getId(), maxContextTokens, systemContext);
+
+        // 创建运行时环境并注入历史
+        User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
+        AgentRuntime runtime =
+                flexRuntimeFactory.createRuntime(
+                        user,
+                        resolved,
+                        toolOrchestrator.listToolSpecs(),
+                        customBaseUrl,
+                        customApiKey);
+        flexRuntimeFactory.injectHistory(
+                runtime, session.getId().toString(), processedHistory.historyForRuntime());
+
+        // 执行主循环
+        return executeMainLoop(
+                runtime,
+                processedHistory.lastMessage(),
+                chunkConsumer,
+                clientToolInvoker,
+                userId,
+                session,
+                resolved,
+                maxContextTokens,
+                processedHistory.historyWindow());
+    }
+
+    private AgentLoopResult executeMainLoop(
+            AgentRuntime runtime,
+            String lastMessage,
+            Consumer<String> chunkConsumer,
+            java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>>
+                    clientToolInvoker,
+            UUID userId,
+            ConversationSession session,
+            ResolvedModelConfig resolved,
+            int maxContextTokens,
+            AgentContextService.HistoryWindow historyWindow) {
         int maxToolSteps = maxToolSteps();
         boolean stopOnToolError = appProperties.getAgent().isStopOnToolError();
-        AgentContextService.HistoryWindow historyWindow =
-                agentContextService.buildMessages(userId, history, maxContextTokens, systemContext);
-        List<ModelChatMessage> messages = historyWindow.messages();
         List<ToolExecutionResult> traces = new ArrayList<>();
         StringBuilder replyBuilder = new StringBuilder();
         long startMs = System.currentTimeMillis();
         int toolRounds = 0;
         String stopReason = "completed";
-
-        User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
-        AgentRuntime runtime =
-                flexRuntimeFactory.createRuntime(user, resolved, toolOrchestrator.listToolSpecs(), customBaseUrl, customApiKey);
-
-        // The last user message has already been saved by the caller and will be
-        // sent separately via runtime.send() below — exclude it from injected history
-        // to avoid duplicating it in the model's context window.
-        String lastMessage = "";
-        List<ModelChatMessage> historyForRuntime = new ArrayList<>(messages.size());
-        for (int i = 0; i < messages.size(); i++) {
-            ModelChatMessage msg = messages.get(i);
-            boolean isLast = (i == messages.size() - 1);
-            if (isLast && "user".equals(msg.role())) {
-                lastMessage = msg.content();
-            } else {
-                historyForRuntime.add(msg);
-            }
-        }
-        flexRuntimeFactory.injectHistory(runtime, session.getId().toString(), historyForRuntime);
 
         try {
             runtime.send(lastMessage);
@@ -319,11 +394,14 @@ public class AgentService {
                         runtime.pollStep(100, java.util.concurrent.TimeUnit.MILLISECONDS);
                 if (step == null) continue;
 
+                // 处理错误状态
                 if (step.status() == org.flexagent.core.model.StepStatus.ERROR) {
                     stopReason = "flexagent_error";
                     running = false;
+                    continue;
                 }
 
+                // 处理工具调用
                 if (step.type() == org.flexagent.core.model.StepType.TOOL_CALL
                         && !step.toolCalls().isEmpty()) {
                     toolRounds++;
@@ -334,41 +412,23 @@ public class AgentService {
                         break;
                     }
 
-                    List<CompletableFuture<ToolResult>> futures = new ArrayList<>();
-                    List<org.flexagent.core.model.ToolCall> fcTools = step.toolCalls();
-                    for (org.flexagent.core.model.ToolCall fcTool : fcTools) {
-                        ToolCall localTool =
-                                new ToolCall(fcTool.id(), fcTool.name(), fcTool.argumentsJson());
-                        futures.add(toolOrchestrator.execute(localTool, clientToolInvoker));
-                    }
+                    ToolCallManager.ToolCallResult toolResult =
+                            toolCallManager.executeToolCalls(
+                                    step.toolCalls(),
+                                    clientToolInvoker,
+                                    runtime,
+                                    stopOnToolError);
+                    traces.addAll(toolResult.traces());
 
-                    // Wait for all tool calls to complete before sending results to runtime
-                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
-                    for (int i = 0; i < futures.size(); i++) {
-                        ToolResult result = futures.get(i).join();
-                        org.flexagent.core.model.ToolCall fcTool = fcTools.get(i);
-                        ToolExecutionResult trace = toTrace(result);
-                        traces.add(trace);
-
-                        org.flexagent.core.model.ToolResult fcResult =
-                                new org.flexagent.core.model.ToolResult(
-                                        fcTool.id(), fcTool.name(), null, result.output());
-                        try {
-                            runtime.sendToolResult(fcResult);
-                        } catch (Exception e) {
-                            log.error("Failed to send tool result to runtime", e);
-                        }
-
-                        if (!"SUCCESS".equalsIgnoreCase(result.status()) && stopOnToolError) {
-                            stopReason = "tool_error";
-                            replyBuilder.append("\n[Stopped safely: tool error]");
-                            running = false;
-                            break;
-                        }
+                    if (toolResult.hasError()) {
+                        stopReason = "tool_error";
+                        replyBuilder.append("\n[Stopped safely: tool error]");
+                        running = false;
+                        break;
                     }
                 }
 
+                // 处理流式响应
                 if (step.contentDelta() != null && !step.contentDelta().isEmpty()) {
                     replyBuilder.append(step.contentDelta());
                     if (chunkConsumer != null) {
@@ -376,6 +436,7 @@ public class AgentService {
                     }
                 }
 
+                // 检查是否完成
                 if (Boolean.TRUE.equals(step.isCompleteResponse())
                         && step.type() == org.flexagent.core.model.StepType.TEXT_RESPONSE) {
                     running = false;
@@ -387,6 +448,7 @@ public class AgentService {
             throw new RuntimeException("FlexAgent execution failed: " + e.getMessage(), e);
         }
 
+        // 构建结果
         String reply = replyBuilder.toString();
         long totalLatencyMs = System.currentTimeMillis() - startMs;
 
@@ -432,15 +494,6 @@ public class AgentService {
             log.warn("Failed to serialize tool trace payload", ex);
             return "[]";
         }
-    }
-
-    private ToolExecutionResult toTrace(ToolResult result) {
-        return new ToolExecutionResult(
-                result.toolName(),
-                result.argsJson(),
-                result.status(),
-                result.durationMs(),
-                result.output());
     }
 
     private int maxToolSteps() {

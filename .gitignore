@@ -4,6 +4,7 @@
 # IDE
 .idea/
 .vscode/
+.trae/
 *.iml
 .DS_Store
 **/.DS_Store
@@ -21,16 +22,19 @@ env/*.env
 
 # Logs
 *.log
+.playwright-mcp/
 
 # Python local runtime artifacts
 **/__pycache__/
 *.py[cod]
 python-service/venv/
 python-service/test.txt
+python-service/scripts/benchmark_report.json
 
 # Local deploy state and generated smoke artifacts
 .deploy/
 artifacts/smoke/*/
+login-brand-icon*.png
 
 # CLI local state
 .cli-state/

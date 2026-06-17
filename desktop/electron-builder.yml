@@ -1,45 +1,98 @@
-appId: com.ai-agent.desktop
+# ============================================================================
+# AI Agent Desktop - electron-builder 配置
+# ----------------------------------------------------------------------------
+# 说明：
+# - 输出目录使用 `release`（而非 `dist`），因为 `dist/` 下存放 tsc 编译
+#   产物（dist/main、dist/renderer），若将 electron-builder 输出设为 dist
+#   会在打包时清空该目录，导致编译产物丢失。`release/` 为独立目录，安全。
+# - macOS 公证通过环境变量 APPLE_TEAM_ID 启用，未设置时 build-all.sh 会
+#   跳过公证并输出警告。
+# - 图标文件暂未提供，使用占位路径；构建前需放入 resources/icons/。
+# ============================================================================
+
+appId: com.agent.aiagent
 productName: AI Agent
-copyright: Copyright 2025
+copyright: Copyright 2025 AI Agent
+author: AI Agent Team
 
 directories:
   output: release
   buildResources: resources
 
+# 打包进 asar 的文件：编译产物 + 渲染层 + 资源 + 生产依赖
 files:
   - dist/main/**/*
   - dist/renderer/**/*
   - package.json
+  - node_modules/**/*
+  - "!node_modules/**/{*.md,*.markdown,*.ts,*.flow,*.coffee,*. yarn*}"
+  - "!node_modules/**/{test,tests,__tests__,docs,doc,examples,example}/**"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!**/.*"
 
+# extraResources：不打入 asar，运行时通过 process.resourcesPath 访问
+# 后端 JAR、JRE、TS CLI 均放在 backend-jre/ 目录下
 extraResources:
   - from: backend-jre
     to: backend-jre
     filter:
       - "**/*"
+      - "!**/.git"
 
 asar: true
+asarUnpack:
+  - "**/*.{node,dylib,so,dll}"
 
+# ---------------------------------------------------------------------------
+# macOS 配置（首要目标：Apple Silicon / Intel）
+# ---------------------------------------------------------------------------
 mac:
   category: public.app-category.developer-tools
   target:
-    - dmg
-    - zip
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+  # 图标占位：构建前需将 icon.icns 放入 resources/icons/
   icon: resources/icons/icon.icns
   hardenedRuntime: true
+  gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
+  # 公证：通过环境变量 APPLE_TEAM_ID 启用
+  # electron-builder 会读取 process.env.APPLE_TEAM_ID（需在构建脚本中导出）
+  notarize:
+    teamId: "${APPLE_TEAM_ID}"
   artifactName: "${productName}-${version}-mac-${arch}.${ext}"
+  # 扩展信息：注册到系统（可选）
+  extendInfo:
+    NSMicrophoneUsageDescription: "AI Agent 需要麦克风权限以支持语音输入功能。"
+    NSCameraUsageDescription: "AI Agent 需要摄像头权限以支持图像识别功能。"
 
 dmg:
   title: "${productName} ${version}"
   artifactName: "${productName}-${version}-mac.${ext}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
 
+# ---------------------------------------------------------------------------
+# Windows 配置
+# ---------------------------------------------------------------------------
 win:
   target:
     - target: nsis
-      arch: [x64]
-    - target: portable
-      arch: [x64]
+      arch:
+        - x64
+  # 图标占位：构建前需将 icon.ico 放入 resources/icons/
   icon: resources/icons/icon.ico
   artifactName: "${productName}-${version}-win-${arch}.${ext}"
 
@@ -49,7 +102,34 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: "AI Agent"
+  perMachine: false
+  deleteAppDataOnUninstall: false
 
+# ---------------------------------------------------------------------------
+# Linux 配置
+# ---------------------------------------------------------------------------
 linux:
-  target: AppImage
+  target:
+    - AppImage
+    - deb
+  category: Development
   icon: resources/icons
+  artifactName: "${productName}-${version}-linux-${arch}.${ext}"
+  maintainer: "AI Agent Team"
+  vendor: "AI Agent"
+  synopsis: "AI Agent Desktop Client"
+  description: "AI Agent 桌面客户端，集成后端服务与前端界面。"
+
+AppImage:
+  artifactName: "${productName}-${version}-${arch}.AppImage"
+
+deb:
+  depends:
+    - libnotify4
+    - libxtst6
+    - libnss3
+
+# ---------------------------------------------------------------------------
+# 发布配置：暂不自动发布
+# ---------------------------------------------------------------------------
+publish: null
