@@ -79,8 +79,19 @@ public class FlexRuntimeFactory {
      */
     public void injectHistory(
             AgentRuntime runtime, String sessionId, List<ModelChatMessage> messages) {
+        if (runtime == null) {
+            throw new IllegalArgumentException("runtime must not be null");
+        }
+        if (messages == null) {
+            runtime.setHistoryMessages(List.of());
+            runtime.setSessionId(sessionId);
+            return;
+        }
         List<AgentMessage> agentMessages = new ArrayList<>(messages.size());
         for (ModelChatMessage m : messages) {
+            if (m == null) {
+                continue;
+            }
             String content = m.content() == null ? "" : m.content();
             AgentMessage agentMsg =
                     switch (m.role()) {

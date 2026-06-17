@@ -3,7 +3,11 @@ import { BackendManager } from './backend-manager';
 import { CliManager } from './cli-manager';
 import { WindowManager } from './window-manager';
 import { TrayManager } from './tray-manager';
+import { PtyManager } from './pty-manager';
 import { IpcRegistry } from './ipc-registry';
+import { WorkspaceManager } from './workspace-manager';
+import { GitManager } from './git-manager';
+import { ChatManager } from './chat-manager';
 import { findFreePort } from './utils/network';
 import { getDataDir, getJrePath, getBackendJarPath, getBackendStartupTimeoutMs } from './utils/env';
 
@@ -23,7 +27,11 @@ let backendManager: BackendManager;
 let cliManager: CliManager;
 let windowManager: WindowManager;
 let trayManager: TrayManager;
+let ptyManager: PtyManager;
 let ipcRegistry: IpcRegistry;
+let workspaceManager: WorkspaceManager;
+let gitManager: GitManager;
+let chatManager: ChatManager;
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -42,9 +50,11 @@ app.on('before-quit', async (event) => {
     if (cliManager) {
       cliManager.killAll();
     }
+    if (ptyManager) ptyManager.kill();
     app.exit(0);
   } else if (cliManager) {
     cliManager.killAll();
+    if (ptyManager) ptyManager.kill();
   }
 });
 
@@ -87,9 +97,13 @@ if (!gotTheLock) {
         startupTimeoutMs: getBackendStartupTimeoutMs(),
       });
       cliManager = new CliManager();
+      ptyManager = new PtyManager();
       windowManager = new WindowManager();
+      workspaceManager = new WorkspaceManager();
+      gitManager = new GitManager();
+      chatManager = new ChatManager();
       trayManager = new TrayManager(windowManager, backendManager);
-      ipcRegistry = new IpcRegistry(backendManager, cliManager, () => activePort);
+      ipcRegistry = new IpcRegistry(backendManager, cliManager, ptyManager, workspaceManager, gitManager, chatManager, () => activePort);
 
       ipcRegistry.setupIpc();
       windowManager.createMainWindow();

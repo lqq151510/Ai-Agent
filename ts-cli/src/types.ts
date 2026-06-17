@@ -1,5 +1,14 @@
 export type Provider = 'OPENAI';
 
+export interface AgentEvent {
+  taskId: string;
+  type: string;
+  sourceAgent: string;
+  content: string;
+  metadata?: Record<string, any>;
+}
+
+
 export interface Tokens {
   accessToken: string;
   refreshToken: string;

@@ -97,14 +97,13 @@ public class AgentService {
                 .increment();
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
-            ChatResponse response = doChat(userId, request, session, resolved);
-            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
-            return response;
+            return doChat(userId, request, session, resolved);
         } catch (RuntimeException ex) {
-            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
             MetricsSupport.chatErrors(meterRegistry, resolved.provider(), resolved.model())
                     .increment();
             throw ex;
+        } finally {
+            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
         }
     }
 
@@ -119,8 +118,13 @@ public class AgentService {
                 resolved.model());
         int maxContextTokens = agentContextService.resolveContextTokenBudget(request.maxContextTokens(), session);
 
-        Optional<String> cachedResponseOpt =
-                semanticCacheService.findCachedResponse(request.message());
+        Optional<String> cachedResponseOpt;
+        try {
+            cachedResponseOpt = semanticCacheService.findCachedResponse(request.message());
+        } catch (Exception ex) {
+            log.warn("Semantic cache lookup failed, continuing without cache", ex);
+            cachedResponseOpt = Optional.empty();
+        }
         if (cachedResponseOpt.isPresent()) {
             String cachedResponse = cachedResponseOpt.get();
             sessionService.saveMessage(
@@ -162,7 +166,11 @@ public class AgentService {
                         rejectClientTool);
 
         if (loop.reply() != null && !loop.reply().isBlank()) {
-            semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
+            try {
+                semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
+            } catch (Exception ex) {
+                log.warn("Semantic cache write failed, ignoring", ex);
+            }
         }
 
         return new ChatResponse(
@@ -189,22 +197,20 @@ public class AgentService {
                 .increment();
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
-            ChatResponse response =
-                    doStreamChat(
-                            userId,
-                            request,
-                            session,
-                            resolved,
-                            metaConsumer,
-                            chunkConsumer,
-                            clientToolConsumer);
-            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
-            return response;
+            return doStreamChat(
+                    userId,
+                    request,
+                    session,
+                    resolved,
+                    metaConsumer,
+                    chunkConsumer,
+                    clientToolConsumer);
         } catch (RuntimeException ex) {
-            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
             MetricsSupport.chatErrors(meterRegistry, resolved.provider(), resolved.model())
                     .increment();
             throw ex;
+        } finally {
+            sample.stop(MetricsSupport.chatDuration(meterRegistry, resolved.provider()));
         }
     }
 
@@ -233,8 +239,13 @@ public class AgentService {
                         "started",
                         initialExecutionDiagnostics(maxContextTokens)));
 
-        Optional<String> cachedResponseOpt =
-                semanticCacheService.findCachedResponse(request.message());
+        Optional<String> cachedResponseOpt;
+        try {
+            cachedResponseOpt = semanticCacheService.findCachedResponse(request.message());
+        } catch (Exception ex) {
+            log.warn("Semantic cache lookup failed, continuing without cache", ex);
+            cachedResponseOpt = Optional.empty();
+        }
         if (cachedResponseOpt.isPresent()) {
             String cachedResponse = cachedResponseOpt.get();
             sessionService.saveMessage(
@@ -271,9 +282,11 @@ public class AgentService {
         java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>>
                 clientToolInvoker =
                         (call) -> {
+                            String userKey = userId.toString();
+                            String callId = call.id();
                             try {
                                 java.util.concurrent.CompletableFuture<String> future =
-                                        clientToolRegistry.register(userId.toString(), call.id());
+                                        clientToolRegistry.register(userKey, callId);
                                 if (clientToolConsumer != null) {
                                     clientToolConsumer.accept(call);
                                 }
@@ -282,9 +295,9 @@ public class AgentService {
                                                 java.util.concurrent.TimeUnit.MILLISECONDS)
                                         .whenComplete(
                                                 (res, ex) ->
-                                                        clientToolRegistry.remove(
-                                                                userId.toString(), call.id()));
+                                                        clientToolRegistry.remove(userKey, callId));
                             } catch (Exception e) {
+                                clientToolRegistry.remove(userKey, callId);
                                 return java.util.concurrent.CompletableFuture.completedFuture(
                                         "ERROR: Client execution timed out or failed: "
                                                 + e.getMessage());
@@ -304,7 +317,11 @@ public class AgentService {
                         clientToolInvoker);
 
         if (loop.reply() != null && !loop.reply().isBlank()) {
-            semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
+            try {
+                semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
+            } catch (Exception ex) {
+                log.warn("Semantic cache write failed, ignoring", ex);
+            }
         }
 
         metaConsumer.accept(
@@ -412,12 +429,28 @@ public class AgentService {
                         break;
                     }
 
-                    ToolCallManager.ToolCallResult toolResult =
-                            toolCallManager.executeToolCalls(
-                                    step.toolCalls(),
-                                    clientToolInvoker,
-                                    runtime,
-                                    stopOnToolError);
+                    ToolCallManager.ToolCallResult toolResult;
+                    try {
+                        toolResult =
+                                toolCallManager.executeToolCalls(
+                                        step.toolCalls(),
+                                        clientToolInvoker,
+                                        runtime,
+                                        stopOnToolError);
+                    } catch (Exception ex) {
+                        log.error("Tool call execution failed", ex);
+                        toolResult =
+                                new ToolCallManager.ToolCallResult(
+                                        List.of(
+                                                new com.agent.mvp.tooling.dto.ToolExecutionResult(
+                                                        "tool_batch",
+                                                        "{}",
+                                                        "ERROR",
+                                                        0,
+                                                        "Tool execution failed: "
+                                                                + ex.getMessage())),
+                                        true);
+                    }
                     traces.addAll(toolResult.traces());
 
                     if (toolResult.hasError()) {
@@ -445,6 +478,10 @@ public class AgentService {
         } catch (Exception e) {
             log.error("FlexAgent runtime error", e);
             stopReason = "exception";
+            String partialReply = replyBuilder.toString();
+            persistFinalAssistant(session, resolved, partialReply, traces);
+            toolAuditService.saveAll(
+                    userId, session.getId(), resolved.provider().name(), resolved.model(), traces);
             throw new RuntimeException("FlexAgent execution failed: " + e.getMessage(), e);
         }
 

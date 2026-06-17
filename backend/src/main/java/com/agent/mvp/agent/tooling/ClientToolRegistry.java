@@ -11,7 +11,12 @@ public class ClientToolRegistry {
 
     public CompletableFuture<String> register(String userId, String callId) {
         CompletableFuture<String> future = new CompletableFuture<>();
-        pending.put(userId + ":" + callId, future);
+        String key = userId + ":" + callId;
+        CompletableFuture<String> existing = pending.put(key, future);
+        if (existing != null) {
+            existing.completeExceptionally(
+                    new IllegalStateException("Duplicate client tool registration: " + key));
+        }
         return future;
     }
 

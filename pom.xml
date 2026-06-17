@@ -10,5 +10,11 @@
     <modules>
         <module>backend</module>
         <module>bug-sentinel-starter</module>
+        <module>agent-common</module>
+        <module>agent-gateway</module>
+        <module>agent-router</module>
+        <module>agent-retrieval</module>
+        <module>agent-generation</module>
+        <module>agent-reflection</module>
     </modules>
 </project>

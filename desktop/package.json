@@ -7,10 +7,10 @@
   "license": "UNLICENSED",
   "main": "dist/main/index.js",
   "scripts": {
-    "dev": "npm run build:main && electron .",
+    "dev:renderer": "cd src/renderer && npm run dev",
     "build:main": "tsc -p tsconfig.main.json",
-    "build:web": "rm -rf dist/renderer && mkdir -p dist/renderer && cd ../web && VITE_API_BASE=http://localhost:18080 npm run build && cp -R dist/. ../desktop/dist/renderer/",
-    "build": "npm run build:main && npm run build:web",
+    "build:renderer": "cd src/renderer && npm run build && cp -R dist/. ../../dist/renderer/",
+    "build": "npm run build:main && npm run build:renderer",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
@@ -19,7 +19,8 @@
     "clean": "rm -rf dist release backend-jre"
   },
   "dependencies": {
-    "electron-store": "^8.2.0"
+    "electron-store": "^8.2.0",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "electron": "^33.2.0",

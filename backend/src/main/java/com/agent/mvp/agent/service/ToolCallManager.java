@@ -52,13 +52,37 @@ public class ToolCallManager {
             futures.add(toolOrchestrator.execute(localTool, clientToolInvoker));
         }
 
-        // 等待所有工具调用完成
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-
         boolean hasError = false;
         for (int i = 0; i < futures.size(); i++) {
-            ToolResult result = futures.get(i).join();
             org.flexagent.core.model.ToolCall fcTool = toolCalls.get(i);
+            ToolResult result;
+            try {
+                result = futures.get(i).join();
+            } catch (Exception ex) {
+                log.error(
+                        "Tool call future failed for {}::{}",
+                        fcTool.name(),
+                        fcTool.id(),
+                        ex);
+                result =
+                        new ToolResult(
+                                fcTool.id(),
+                                fcTool.name(),
+                                fcTool.argumentsJson(),
+                                "ERROR",
+                                0,
+                                "ERROR: " + ex.getMessage());
+            }
+            if (result == null) {
+                result =
+                        new ToolResult(
+                                fcTool.id(),
+                                fcTool.name(),
+                                fcTool.argumentsJson(),
+                                "ERROR",
+                                0,
+                                "ERROR: tool returned null");
+            }
 
             ToolExecutionResult trace = toTrace(result);
             traces.add(trace);
@@ -82,10 +106,13 @@ public class ToolCallManager {
     }
 
     private ToolExecutionResult toTrace(ToolResult result) {
+        if (result == null) {
+            return new ToolExecutionResult("unknown", "{}", "ERROR", 0, "null tool result");
+        }
         return new ToolExecutionResult(
-                result.toolName(),
-                result.argsJson(),
-                result.status(),
+                result.toolName() == null ? "unknown" : result.toolName(),
+                result.argsJson() == null ? "{}" : result.argsJson(),
+                result.status() == null ? "ERROR" : result.status(),
                 result.durationMs(),
                 result.output());
     }

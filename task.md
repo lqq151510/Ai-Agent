@@ -13,3 +13,7 @@ The following Spring components were created:
 4. **ReviewerAgent**: Evaluates the generated code for bugs, quality, and best practices, providing constructive feedback.
 
 All components integrate correctly with the existing `ModelGateway` for communicating with the configured LLM providers (e.g., OpenAI).
+
+- [x] Implement the `agent-reflection` microservice.
+- [x] Implement the `agent-generation` microservice.
+- [x] Implement the `agent-retrieval` microservice.

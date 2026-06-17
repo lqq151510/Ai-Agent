@@ -39,6 +39,9 @@ public class MessageHistoryProcessor {
     public ProcessedHistory processHistory(
             UUID userId, UUID sessionId, int maxContextTokens, String systemContext) {
         List<MessageResponse> history = sessionService.listMessages(userId, sessionId);
+        if (history == null) {
+            history = List.of();
+        }
         AgentContextService.HistoryWindow historyWindow =
                 agentContextService.buildMessages(userId, history, maxContextTokens, systemContext);
 

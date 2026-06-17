@@ -1,4 +1,5 @@
 import type {
+  AgentEvent,
   ApiError,
   AuthState,
   ChatResponse,
@@ -30,12 +31,8 @@ type ChatInput = {
 };
 
 type StreamHandlers = {
-  onMeta?: (payload: ChatResponse) => void;
-  onChunk?: (chunk: string) => void;
-  onClientToolCall?: (call: { id: string; name: string; argumentsJson: string }) => void;
-  onDone?: (payload: ChatResponse) => void;
+  onEvent?: (event: AgentEvent) => void;
   onError?: (message: string) => void;
-  onAlert?: (payload: { rootCause: string; suggestedFix: string }) => void;
 };
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -155,46 +152,23 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
 
     function emitBlock(block: string) {
       const lines = block.split(/\r?\n/);
-      const event = lines.find(line => line.startsWith('event:'))?.slice(6).trim() || 'message';
-      const data = lines
+      // Spring WebFlux SSE outputs 'data:' lines. 
+      // Sometimes it outputs 'event: message' or just 'data:'.
+      const dataLines = lines
         .filter(line => line.startsWith('data:'))
-        .map(line => line.slice(5).trimStart())
-        .join('\n');
+        .map(line => line.slice(5).trimStart());
 
-      if (!data) {
-        return;
-      }
-
-      if (event === 'chunk') {
-        handlers.onChunk?.(data);
-        return;
-      }
-
-      if (event === 'heartbeat') {
-        return;
-      }
-
-      const payload = JSON.parse(data) as ChatResponse | ApiError;
-      if (event === 'meta') {
-        handlers.onMeta?.(payload as ChatResponse);
-        return;
-      }
-      if (event === 'client_tool_call') {
-        handlers.onClientToolCall?.(payload as unknown as { id: string; name: string; argumentsJson: string });
-        return;
-      }
-      if (event === 'done') {
-        handlers.onDone?.(payload as ChatResponse);
-        return;
-      }
-      if (event === 'alert') {
-        handlers.onAlert?.(payload as unknown as { rootCause: string; suggestedFix: string });
-        return;
-      }
-      if (event === 'error') {
-        const message = (payload as ApiError).message || 'Stream failed';
-        handlers.onError?.(message);
-        throw new Error(message);
+      if (dataLines.length === 0) return;
+      
+      const dataStr = dataLines.join('');
+      try {
+        const payload = JSON.parse(dataStr) as AgentEvent;
+        handlers.onEvent?.(payload);
+        if (payload.type === 'ERROR') {
+          handlers.onError?.(payload.content || 'Stream failed');
+        }
+      } catch (e) {
+        // Maybe partial chunk
       }
     }
 
@@ -223,25 +197,25 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     }
   }
 
-  async function streamChatRequest(input: ChatInput, handlers: StreamHandlers, allowRetry = true): Promise<void> {
-    const headers = new Headers({ 'Content-Type': 'application/json' });
-    const accessToken = tokenAccessor.getState().accessToken;
-    if (accessToken) {
-      headers.set('Authorization', `Bearer ${accessToken}`);
-    }
-
-    const response = await fetch(`${safeBaseUrl}/api/v1/agent/chat/stream`, {
+  async function submitTaskRequest(prompt: string): Promise<string> {
+    const response = await fetch(`${safeBaseUrl}/api/v1/agent/task`, {
       method: 'POST',
-      headers,
-      body: JSON.stringify(input),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
     });
 
-    if (response.status === 401 && allowRetry) {
-      const refreshed = await tryRefreshToken();
-      if (refreshed) {
-        return streamChatRequest(input, handlers, false);
-      }
+    if (!response.ok) {
+      const payload = await parseBody(response);
+      throw new Error(toErrorMessage(payload, response.status));
     }
+
+    return response.text(); // returns taskId directly as plain string
+  }
+
+  async function streamTaskEvents(taskId: string, handlers: StreamHandlers): Promise<void> {
+    const response = await fetch(`${safeBaseUrl}/api/v1/agent/stream/${taskId}`, {
+      method: 'GET',
+    });
 
     if (!response.ok) {
       const payload = await parseBody(response);
@@ -253,6 +227,19 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     }
 
     await parseSseStream(response.body, handlers);
+  }
+
+  async function approvePlanRequest(taskId: string, approved: boolean): Promise<void> {
+    const response = await fetch(`${safeBaseUrl}/api/v1/agent/task/${taskId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved }),
+    });
+
+    if (!response.ok) {
+      const payload = await parseBody(response);
+      throw new Error(toErrorMessage(payload, response.status));
+    }
   }
 
   return {
@@ -318,8 +305,16 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
       );
     },
 
-    streamChat(input: ChatInput, handlers: StreamHandlers) {
-      return streamChatRequest(input, handlers);
+    submitTask(prompt: string) {
+      return submitTaskRequest(prompt);
+    },
+
+    streamTask(taskId: string, handlers: StreamHandlers) {
+      return streamTaskEvents(taskId, handlers);
+    },
+
+    approvePlan(taskId: string, approved: boolean) {
+      return approvePlanRequest(taskId, approved);
     },
 
     submitToolResult(callId: string, result: string) {

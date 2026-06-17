@@ -16,6 +16,7 @@ import { Header } from './components/Header.js';
 import { MessageBubble } from './components/MessageBubble.js';
 import { InputArea } from './components/InputArea.js';
 import { SentinelAlertModal } from './components/SentinelAlertModal.js';
+import { PlanApprovalModal } from './components/PlanApprovalModal.js';
 
 type UiMessage = {
   id: string;
@@ -83,6 +84,7 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
   const visibleMessages = deferredMessages.slice(-MAX_RENDERED_MESSAGES);
   const activeSessionId = authState.activeSessionId;
   const [sentinelAlert, setSentinelAlert] = useState<{ rootCause: string; suggestedFix: string } | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<{ taskId: string; content: string } | null>(null);
 
   useEffect(() => {
     authRef.current = authState;
@@ -117,7 +119,7 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
   const ALL_SLASH_COMMANDS = ['/help', '/sessions', '/use', '/new', '/stats', '/report', '/model', '/coach', '/clear', '/exit', '/quit'];
 
   useInput((_char, key) => {
-    if (sentinelAlert) return;
+    if (sentinelAlert || pendingPlan) return;
 
     if (key.escape) {
       exit();
@@ -250,64 +252,40 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
   }
 
   async function submitChat(content: string) {
-
     const session = await ensureSession();
     pushMessage('user', content);
 
     const draftId = nowId('assistant');
     setMessages(current => [...current, { id: draftId, role: 'assistant', content: '' }]);
     setLoading(true);
-    setStatusLine('Collecting repo context...');
+    setStatusLine('Submitting task...');
 
     try {
-      const systemContext = await collectSystemContext();
-      setStatusLine(`Streaming from ${session.provider}/${session.model}...`);
-      await api.streamChat(
-        {
-          sessionId: session.id,
-          message: content,
-          provider: session.provider,
-          model: session.model,
-          systemContext,
+      // 1. Submit task and get taskId
+      const taskId = await api.submitTask(content);
+      setStatusLine(`Task started (ID: ${taskId.slice(0, 8)}). Streaming events...`);
+
+      // 2. Stream events
+      await api.streamTask(taskId, {
+        onEvent: event => {
+          if (event.type === 'CHUNK') {
+            updateDraftAssistant(draftId, event.content);
+          } else if (event.type === 'PLAN_GENERATED') {
+            setPendingPlan({ taskId: event.taskId, content: event.content });
+          } else if (event.type === 'START') {
+            setStatusLine('Agent started routing...');
+          } else if (event.type === 'DONE') {
+            setStatusLine(`Task ${taskId.slice(0, 8)} completed.`);
+          } else if (event.type === 'ERROR') {
+            setStatusLine('Agent reported error.');
+            pushMessage('error', event.content);
+          }
         },
-        {
-          onMeta: payload => {
-            setStatusLine(`Connected: ${payload.provider}/${payload.model}`);
-          },
-          onChunk: chunk => {
-            updateDraftAssistant(draftId, chunk);
-          },
-          onClientToolCall: async call => {
-            if (call.name === 'execute_cli_command') {
-              try {
-                const args = JSON.parse(call.argumentsJson);
-                setStatusLine(`⚙️ Executing local command: ${args.command}`);
-                pushMessage('system', `⚙️ Local tool execution: \`${args.command}\``);
-                const { exec } = await import('node:child_process');
-                const { promisify } = await import('node:util');
-                const execAsync = promisify(exec);
-                const { stdout, stderr } = await execAsync(args.command, { cwd: args.cwd || process.cwd() });
-                const output = stdout + (stderr ? '\n[stderr]\n' + stderr : '');
-                await api.submitToolResult(call.id, output || 'Command executed successfully with no output.');
-              } catch (error) {
-                await api.submitToolResult(call.id, `Error: ${error instanceof Error ? error.message : String(error)}`);
-              }
-            } else {
-              await api.submitToolResult(call.id, `Error: Unknown client tool ${call.name}`);
-            }
-          },
-          onDone: payload => {
-            if (payload.reply && !messages.find(message => message.id === draftId)?.content) {
-              updateDraftAssistant(draftId, payload.reply);
-            }
-            setStatusLine(`Done in ${payload.latencyMs}ms`);
-          },
-          onError: message => {
-            setStatusLine('Stream failed');
-            pushMessage('error', message);
-          },
+        onError: message => {
+          setStatusLine('Stream failed');
+          pushMessage('error', message);
         },
-      );
+      });
       await refreshSessions(session.id);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -315,7 +293,7 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
       setMessages(current =>
         current.map(item => (item.id === draftId ? { ...item, role: 'error', content: displayMsg } : item)),
       );
-      setStatusLine('Stream failed');
+      setStatusLine('Task submission failed');
     } finally {
       setLoading(false);
     }
@@ -523,6 +501,28 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
           rootCause={sentinelAlert.rootCause}
           suggestedFix={sentinelAlert.suggestedFix}
           onDismiss={() => setSentinelAlert(null)}
+        />
+      ) : pendingPlan ? (
+        <PlanApprovalModal
+          planJson={pendingPlan.content}
+          onApprove={async () => {
+            try {
+              await api.approvePlan(pendingPlan.taskId, true);
+              pushMessage('system', '✅ Plan approved. Continuing execution...');
+            } catch (e) {
+              pushMessage('error', `Approval failed: ${e}`);
+            }
+            setPendingPlan(null);
+          }}
+          onReject={async () => {
+            try {
+              await api.approvePlan(pendingPlan.taskId, false);
+              pushMessage('system', '❌ Plan rejected.');
+            } catch (e) {
+              pushMessage('error', `Rejection failed: ${e}`);
+            }
+            setPendingPlan(null);
+          }}
         />
       ) : (
         <InputArea 
