@@ -50,6 +50,8 @@ export class IpcRegistry {
     ipcMain.handle('git:get-current-branch', (_event, path) => this.gitManager.getCurrentBranch(path));
     ipcMain.handle('git:checkout', (_event, path, branch) => this.gitManager.checkoutBranch(path, branch));
     ipcMain.handle('git:create-branch', (_event, path, branch) => this.gitManager.createBranch(path, branch));
+    ipcMain.handle('git:get-status', (_event, path) => this.gitManager.getStatus(path));
+    ipcMain.handle('git:get-diff', (_event, path, file) => this.gitManager.getDiff(path, file));
 
     // Chat Handlers
     ipcMain.handle('chat:get-sessions', () => this.chatManager.getSessionsSummary());

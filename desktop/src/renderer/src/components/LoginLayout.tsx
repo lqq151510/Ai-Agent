@@ -32,19 +32,7 @@ export const LoginLayout = ({ onLoginSuccess }: { onLoginSuccess: () => void }) 
           <p className="text-[13px] text-[#666] mt-2 text-center">Sign in to your account to continue</p>
         </div>
 
-        <div className="space-y-3 mb-6">
-          <button 
-            type="button"
-            className="w-full flex items-center justify-center gap-2 bg-white border border-[#e5e5e5] hover:bg-[#f9f9f9] text-[#333] py-2.5 rounded-lg text-[14px] font-medium transition-colors cursor-pointer"
-          >
-            Continue with GitHub
-          </button>
-          
-          <div className="relative flex items-center justify-center py-2">
-            <div className="absolute border-t border-[#e5e5e5] w-full"></div>
-            <span className="bg-white px-3 text-[12px] text-[#888] relative z-10">or sign in with email</span>
-          </div>
-        </div>
+
 
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <div>
@@ -84,6 +72,13 @@ export const LoginLayout = ({ onLoginSuccess }: { onLoginSuccess: () => void }) 
             ) : (
               <>Sign In <ArrowRight size={16} /></>
             )}
+          </button>
+          <button 
+            type="button" 
+            onClick={() => onLoginSuccess()}
+            className="w-full bg-transparent text-[#666] hover:text-[#333] hover:bg-[#f5f5f5] py-2.5 rounded-lg text-[13px] font-medium transition-all cursor-pointer"
+          >
+            免登录体验 (Skip for now)
           </button>
         </form>
       </div>

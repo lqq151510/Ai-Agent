@@ -134,34 +134,6 @@ services:
         reservations:
           memory: 512M
 
-  web:
-    image: ${WEB_IMAGE_REPO:-ai-agent-web}:${APP_IMAGE_TAG:-latest}
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE: ${VITE_API_BASE:-}
-    container_name: ai-agent-web
-    depends_on:
-      backend:
-        condition: service_healthy
-    ports:
-      - "${WEB_PORT:-8088}:8080"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          memory: 128M
-
 
 
   python-service:

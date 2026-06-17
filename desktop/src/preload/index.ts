@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getCurrentBranch: (path: string) => ipcRenderer.invoke('git:get-current-branch', path),
     checkout: (path: string, branch: string) => ipcRenderer.invoke('git:checkout', path, branch),
     createBranch: (path: string, branch: string) => ipcRenderer.invoke('git:create-branch', path, branch),
+    getStatus: (path: string) => ipcRenderer.invoke('git:get-status', path),
+    getDiff: (path: string, file?: string) => ipcRenderer.invoke('git:get-diff', path, file),
   },
 
   // Chat API

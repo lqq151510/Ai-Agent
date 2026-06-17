@@ -2,7 +2,6 @@
 
 This repo delivers a runnable Beta stack:
 - `backend`: Spring Boot API (JWT auth, sessions, SSE chat, system readiness/models API)
-- `web`: React + TypeScript frontend (white minimal UI, streaming status/retry)
 - `ts-cli`: TypeScript + React (Ink) terminal client
 - `docker-compose`: one-command single-host deployment with PostgreSQL + Redis
 

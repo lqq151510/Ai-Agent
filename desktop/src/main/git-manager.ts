@@ -50,4 +50,36 @@ export class GitManager {
       return false;
     }
   }
+
+  public async getStatus(projectPath: string) {
+    if (!projectPath) return [];
+    try {
+      // Get all changes, untracked, etc.
+      const { stdout } = await execAsync('git status -s', { cwd: projectPath });
+      const files = stdout.trim().split('\n').filter(line => line.length > 0).map(line => {
+        const status = line.substring(0, 2);
+        const file = line.substring(3);
+        return { file, status: status.trim() };
+      });
+      return files;
+    } catch (e) {
+      console.error('Failed to get git status', e);
+      return [];
+    }
+  }
+
+  public async getDiff(projectPath: string, filePath?: string) {
+    if (!projectPath) return '';
+    try {
+      // If filePath is provided, diff specific file, otherwise diff all
+      // We do HEAD diff to include staged and unstaged changes, or just un-staged.
+      // git diff + git diff --cached is complex, so we will use `git diff HEAD`
+      const cmd = filePath ? `git diff HEAD -- "${filePath}"` : 'git diff HEAD';
+      const { stdout } = await execAsync(cmd, { cwd: projectPath });
+      return stdout;
+    } catch (e) {
+      console.error('Failed to get git diff', e);
+      return '';
+    }
+  }
 }
