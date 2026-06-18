@@ -14,7 +14,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('backend:status-changed', (_event, status) => callback(status));
   },
   onTerminalData: (callback: (data: string) => void) => {
-    ipcRenderer.on('terminal:incomingData', (_event, data) => callback(data));
+    const listener = (_event: Electron.IpcRendererEvent, data: string) => callback(data);
+    ipcRenderer.on('terminal:incomingData', listener);
+    return () => ipcRenderer.removeListener('terminal:incomingData', listener);
   },
   terminalKeystroke: (data: string) => ipcRenderer.send('terminal:keystroke', data),
   terminalResize: (cols: number, rows: number) => ipcRenderer.send('terminal:resize', cols, rows),
@@ -68,11 +70,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   terminal: {
-    spawn: () => ipcRenderer.invoke('terminal:spawn'),
+    spawn: (cwd?: string) => ipcRenderer.invoke('terminal:spawn', cwd),
     write: (data: string) => ipcRenderer.send('terminal:keystroke', data),
     resize: (cols: number, rows: number) => ipcRenderer.send('terminal:resize', cols, rows),
     onData: (callback: (data: string) => void) => {
-      ipcRenderer.on('terminal:incomingData', (_event, data) => callback(data));
+      const listener = (_event: Electron.IpcRendererEvent, data: string) => callback(data);
+      ipcRenderer.on('terminal:incomingData', listener);
+      return () => ipcRenderer.removeListener('terminal:incomingData', listener);
     }
   }
 });

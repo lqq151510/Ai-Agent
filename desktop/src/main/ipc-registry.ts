@@ -74,11 +74,12 @@ export class IpcRegistry {
     ipcMain.handle('chat:summarize-title', (_event, id, text) => this.chatManager.summarizeTitle(id, text));
 
     // Terminal PTY Handlers
-    ipcMain.handle('terminal:spawn', (event) => {
-      this.ptyManager.spawn();
+    ipcMain.handle('terminal:spawn', (event, cwd?: string) => {
+      this.ptyManager.spawn(cwd);
       this.ptyManager.onData((data) => {
         event.sender.send('terminal:incomingData', data);
       });
+      return { ok: true };
     });
 
     ipcMain.on('terminal:keystroke', (_event, data: string) => {

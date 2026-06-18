@@ -253,7 +253,7 @@ html, body, #root {
 /* Terminal panel */
 .chat-area__terminal {
   border-top: 1px solid var(--color-border);
-  height: 200px;
+  height: 220px;
   display: flex;
   flex-direction: column;
   background: #0d0d0d;
@@ -262,7 +262,7 @@ html, body, #root {
 .chat-area__terminal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   padding: 4px 12px;
   font-size: 12px;
   color: var(--color-text-muted);
@@ -270,7 +270,19 @@ html, body, #root {
   border-bottom: 1px solid var(--color-border);
 }
 
+.chat-area__terminal-cwd {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .chat-area__terminal-close {
+  margin-left: auto;
   background: none;
   border: none;
   color: var(--color-text-muted);
@@ -282,13 +294,15 @@ html, body, #root {
 .chat-area__terminal-body {
   flex: 1;
   overflow: hidden;
+  padding: 6px 8px;
 }
 
-.chat-area__terminal-placeholder {
-  padding: 16px;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: 12px;
+.chat-area__terminal-body .xterm {
+  height: 100%;
+}
+
+.chat-area__terminal-body .xterm-viewport {
+  overflow-y: auto;
 }
 
 /* Input area */

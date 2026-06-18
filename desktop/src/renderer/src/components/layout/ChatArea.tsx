@@ -1,4 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import { Terminal } from 'xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import 'xterm/css/xterm.css';
 import type { ChatMessage } from './MainLayout';
 
 interface ChatAreaProps {
@@ -18,11 +21,76 @@ export function ChatArea({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const xtermRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!terminalOpen || !terminalRef.current || xtermRef.current) {
+      return;
+    }
+
+    const term = new Terminal({
+      theme: {
+        background: '#15171c',
+        foreground: '#d7dae0',
+        cursor: '#3b82f6',
+        selectionBackground: 'rgba(59,130,246,0.28)',
+      },
+      fontFamily: 'JetBrains Mono, Fira Code, SFMono-Regular, Menlo, monospace',
+      fontSize: 12,
+      lineHeight: 1.25,
+      cursorBlink: true,
+      convertEol: true,
+    });
+    const fitAddon = new FitAddon();
+    fitAddonRef.current = fitAddon;
+    xtermRef.current = term;
+
+    term.loadAddon(fitAddon);
+    term.open(terminalRef.current);
+    fitAddon.fit();
+
+    void window.electronAPI?.terminal?.spawn(workspacePath ?? undefined);
+
+    const disposeIncoming = window.electronAPI?.terminal?.onData?.((data: string) => {
+      term.write(data);
+    });
+
+    term.onData(data => {
+      window.electronAPI?.terminal?.write(data);
+    });
+
+    term.onResize(({ cols, rows }) => {
+      window.electronAPI?.terminal?.resize(cols, rows);
+    });
+
+    const onResize = () => fitAddon.fit();
+    window.addEventListener('resize', onResize);
+    setTimeout(() => fitAddon.fit(), 0);
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (typeof disposeIncoming === 'function') {
+        disposeIncoming();
+      }
+      term.dispose();
+      xtermRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, [terminalOpen, workspacePath]);
+
+  useEffect(() => {
+    if (!terminalOpen || !xtermRef.current) {
+      return;
+    }
+    void window.electronAPI?.terminal?.spawn(workspacePath ?? undefined);
+    fitAddonRef.current?.fit();
+  }, [terminalOpen, workspacePath]);
 
   const handleSend = async () => {
     const text = inputText.trim();
@@ -104,9 +172,12 @@ export function ChatArea({
 
       {/* Terminal Panel (collapsible) */}
       {terminalOpen && (
-        <div className="chat-area__terminal" ref={terminalRef}>
+        <div className="chat-area__terminal">
           <div className="chat-area__terminal-header">
             <span>终端</span>
+            <span className="chat-area__terminal-cwd" title={workspacePath ?? ''}>
+              {workspacePath ?? '~'}
+            </span>
             <button
               id="btn-close-terminal"
               className="chat-area__terminal-close"
@@ -115,12 +186,7 @@ export function ChatArea({
               ✕
             </button>
           </div>
-          <div className="chat-area__terminal-body" id="terminal-container">
-            {/* xterm.js will mount here from existing ChatLayout logic */}
-            <div className="chat-area__terminal-placeholder">
-              Terminal panel — 连接到 PTY 主进程
-            </div>
-          </div>
+          <div className="chat-area__terminal-body" id="terminal-container" ref={terminalRef} />
         </div>
       )}
 
