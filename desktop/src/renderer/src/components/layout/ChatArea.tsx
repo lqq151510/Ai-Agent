@@ -7,14 +7,16 @@ import type { ChatMessage } from './MainLayout';
 interface ChatAreaProps {
   messages: ChatMessage[];
   onSendMessage: (text: string) => void;
+  onSubmitTask: (text: string) => void;
   terminalOpen: boolean;
   onToggleTerminal: () => void;
   workspacePath: string | null;
   selectedFiles: string[];
+  taskRunning: boolean;
 }
 
 export function ChatArea({
-  messages, onSendMessage, terminalOpen, onToggleTerminal, workspacePath, selectedFiles
+  messages, onSendMessage, onSubmitTask, terminalOpen, onToggleTerminal, workspacePath, selectedFiles, taskRunning
 }: ChatAreaProps) {
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
@@ -94,7 +96,7 @@ export function ChatArea({
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || sending) return;
+    if (!text || sending || taskRunning) return;
     setInputText('');
     setSending(true);
     try {
@@ -108,6 +110,18 @@ export function ChatArea({
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       void handleSend();
+    }
+  };
+
+  const handleSubmitTask = async () => {
+    const text = inputText.trim();
+    if (!text || sending || taskRunning) return;
+    setInputText('');
+    setSending(true);
+    try {
+      await onSubmitTask(text);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -210,14 +224,24 @@ export function ChatArea({
           onKeyDown={handleKeyDown}
           placeholder="输入消息… (Cmd/Ctrl+Enter 发送)"
           rows={3}
-          disabled={sending}
+          disabled={sending || taskRunning}
         />
+
+        <button
+          id="btn-submit-task"
+          className="chat-area__plan-btn"
+          onClick={() => void handleSubmitTask()}
+          disabled={!inputText.trim() || sending || taskRunning}
+          title="计划执行"
+        >
+          Plan
+        </button>
 
         <button
           id="btn-send-message"
           className="chat-area__send-btn"
           onClick={() => void handleSend()}
-          disabled={!inputText.trim() || sending}
+          disabled={!inputText.trim() || sending || taskRunning}
           title="发送 (Cmd+Enter)"
         >
           {sending ? '…' : '↑'}

@@ -63,6 +63,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  agent: {
+    submitTask: (prompt: string) => ipcRenderer.invoke('agent:submit-task', { prompt }),
+    approvePlan: (taskId: string, approved: boolean) =>
+      ipcRenderer.invoke('agent:approve-plan', { taskId, approved }),
+    onTaskEvent: (callback: (event: any) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
+      ipcRenderer.on('agent:task-event', listener);
+      return () => ipcRenderer.removeListener('agent:task-event', listener);
+    },
+  },
+
   // Local Service API
   localService: {
     port: () => ipcRenderer.invoke('local-service:port'),

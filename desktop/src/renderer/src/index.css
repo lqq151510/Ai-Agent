@@ -365,6 +365,139 @@ html, body, #root {
 .chat-area__send-btn:hover { background: var(--color-accent-dim); }
 .chat-area__send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+.chat-area__plan-btn {
+  background: transparent;
+  color: var(--color-accent);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  border-radius: 8px;
+  min-width: 58px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.chat-area__plan-btn:hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: var(--color-accent);
+}
+.chat-area__plan-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.plan-approval {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.plan-approval__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 10, 15, 0.64);
+  backdrop-filter: blur(6px);
+}
+
+.plan-approval__dialog {
+  position: relative;
+  width: min(680px, calc(100vw - 40px));
+  max-height: calc(100vh - 80px);
+  overflow: auto;
+  background: linear-gradient(180deg, #1b1f27 0%, #14171d 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+  padding: 22px 22px 18px;
+}
+
+.plan-approval__label {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(59,130,246,0.14);
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.plan-approval__title {
+  margin-top: 12px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.plan-approval__body {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.plan-approval__step {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  line-height: 1.5;
+}
+
+.plan-approval__step-index {
+  color: #93c5fd;
+  font-family: var(--font-mono);
+}
+
+.plan-approval__step-action {
+  font-weight: 600;
+}
+
+.plan-approval__step-target {
+  color: var(--color-text-muted);
+}
+
+.plan-approval__raw {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  color: #d6dae3;
+}
+
+.plan-approval__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.plan-approval__btn {
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.plan-approval__btn--ghost {
+  background: rgba(255,255,255,0.06);
+  color: var(--color-text);
+}
+
+.plan-approval__btn--primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+
 /* ── ContextPanel ──────────────────────────────────── */
 .context-panel {
   display: flex;

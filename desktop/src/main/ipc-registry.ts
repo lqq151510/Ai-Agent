@@ -99,6 +99,31 @@ export class IpcRegistry {
       return this.localServiceManager.isReady();
     });
 
+    ipcMain.handle('agent:submit-task', async (event, payload: { prompt: string }) => {
+      const taskId = await this.submitAgentTask(payload.prompt);
+      event.sender.send('agent:task-event', {
+        taskId,
+        type: 'START',
+        sourceAgent: 'DESKTOP',
+        content: payload.prompt,
+      });
+      void this.streamAgentTask(taskId, event.sender).catch(err => {
+        console.error('[agent-task] stream failed', err);
+        event.sender.send('agent:task-event', {
+          taskId,
+          type: 'ERROR',
+          sourceAgent: 'DESKTOP',
+          content: err instanceof Error ? err.message : String(err),
+        });
+      });
+      return { ok: true, taskId };
+    });
+
+    ipcMain.handle('agent:approve-plan', async (_event, payload: { taskId: string; approved: boolean }) => {
+      await this.approveAgentPlan(payload.taskId, payload.approved);
+      return { ok: true };
+    });
+
     /**
      * chat:send-with-context
      * Aggregates workspace context from local-service then forwards to backend Gateway.
@@ -193,6 +218,49 @@ export class IpcRegistry {
       id: String(response.id),
       title: typeof response.title === 'string' && response.title.trim() ? response.title : '新对话',
     };
+  }
+
+  private async submitAgentTask(prompt: string): Promise<string> {
+    const response = await fetch(`${this.getAgentGatewayBaseUrl()}/api/v1/agent/task`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    if (!response.ok) {
+      throw new Error(await this.toErrorMessage(response));
+    }
+    return (await response.text()).trim();
+  }
+
+  private async approveAgentPlan(taskId: string, approved: boolean): Promise<void> {
+    const response = await fetch(`${this.getAgentGatewayBaseUrl()}/api/v1/agent/task/${taskId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved }),
+    });
+    if (!response.ok) {
+      throw new Error(await this.toErrorMessage(response));
+    }
+  }
+
+  private async streamAgentTask(taskId: string, sender: Electron.WebContents): Promise<void> {
+    const response = await fetch(`${this.getAgentGatewayBaseUrl()}/api/v1/agent/stream/${taskId}`, {
+      method: 'GET',
+    });
+    if (!response.ok) {
+      throw new Error(await this.toErrorMessage(response));
+    }
+    if (!response.body) {
+      throw new Error('Task stream body is empty');
+    }
+
+    await this.parseSseStream(response.body, (_eventName, data) => {
+      const parsed = this.tryParseJson(data);
+      if (!parsed) {
+        return;
+      }
+      sender.send('agent:task-event', parsed);
+    });
   }
 
   private async streamBackendChat(input: {
@@ -398,6 +466,14 @@ export class IpcRegistry {
         return;
       }
     }
+  }
+
+  private getAgentGatewayBaseUrl(): string {
+    const configured = process.env.AGENT_GATEWAY_BASE_URL || process.env.AGENT_API_BASE_URL;
+    if (configured && configured.trim()) {
+      return configured.replace(/\/$/, '');
+    }
+    return `http://127.0.0.1:${this.getActivePort()}`;
   }
 
   private tryParseJson(input: string): any | null {
