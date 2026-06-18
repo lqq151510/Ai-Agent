@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 const CONTEXT_CHAR_LIMIT = 50000;
 const FILE_CHAR_LIMIT = 20000;
 const REDACT_LINE = /(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie)/i;
+const LOCAL_SERVICE_URL = process.env.LOCAL_SERVICE_URL || `http://127.0.0.1:${process.env.LOCAL_SERVICE_PORT || '8765'}`;
 
 function sanitizeText(input: string): string {
   let output = input.replace(/\r\n/g, '\n');
@@ -47,7 +48,34 @@ function readWhitelistedFile(fullPath: string): string {
   }
 }
 
+async function collectFromLocalService(): Promise<string | undefined> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1200);
+
+  try {
+    const response = await fetch(
+      `${LOCAL_SERVICE_URL}/context?path=${encodeURIComponent(process.cwd())}`,
+      { signal: controller.signal },
+    );
+    if (!response.ok) {
+      return undefined;
+    }
+    const payload = await response.json() as { context?: string };
+    const context = typeof payload.context === 'string' ? sanitizeText(payload.context) : '';
+    return context ? context.slice(0, CONTEXT_CHAR_LIMIT) : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function collectSystemContext(): Promise<string | undefined> {
+  const localServiceContext = await collectFromLocalService();
+  if (localServiceContext) {
+    return localServiceContext;
+  }
+
   const sections: string[] = [];
   sections.push(`Current time: ${new Date().toISOString()}`);
 

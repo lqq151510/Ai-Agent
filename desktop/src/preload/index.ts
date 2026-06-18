@@ -48,13 +48,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createSession: (branch?: string) => ipcRenderer.invoke('chat:create-session', branch),
     appendMessage: (id: string, msg: any) => ipcRenderer.invoke('chat:append-message', id, msg),
     summarizeTitle: (id: string, text: string) => ipcRenderer.invoke('chat:summarize-title', id, text),
-    // Phase 1 MVP: send message + workspace context
-    sendWithContext: (payload: {
+    streamWithContext: (payload: {
       message: string;
       workspacePath?: string;
       selectedFiles?: string[];
       sessionId?: string;
     }) => ipcRenderer.invoke('chat:send-with-context', payload),
+    onStreamEvent: (callback: (event: any) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
+      ipcRenderer.on('chat:stream-event', listener);
+      return () => ipcRenderer.removeListener('chat:stream-event', listener);
+    },
   },
 
   // Local Service API

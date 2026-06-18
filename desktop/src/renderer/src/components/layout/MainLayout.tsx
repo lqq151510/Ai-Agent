@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { SessionList } from './SessionList';
 import { ChatArea } from './ChatArea';
 import { ContextPanel } from './ContextPanel';
@@ -17,6 +17,12 @@ export interface ChatMessage {
   time: string;
 }
 
+type StreamState = {
+  requestId: string;
+  sessionId: string;
+  assistantMessageId: string;
+} | null;
+
 export function MainLayout() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -24,6 +30,67 @@ export function MainLayout() {
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [streamState, setStreamState] = useState<StreamState>(null);
+
+  const refreshSessions = useCallback(async () => {
+    const data = await window.electronAPI?.invoke('chat:get-sessions');
+    if (Array.isArray(data)) {
+      setSessions(data);
+    }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.chat?.onStreamEvent?.((event: any) => {
+      setStreamState(current => {
+        if (!current || current.requestId !== event.requestId) {
+          return current;
+        }
+
+        if (event.type === 'chunk') {
+          setMessages(prev =>
+            prev.map(message =>
+              message.id === current.assistantMessageId
+                ? { ...message, content: `${message.content}${event.chunk ?? ''}` }
+                : message,
+            ),
+          );
+          return current;
+        }
+
+        if (event.type === 'done') {
+          const reply = typeof event.reply === 'string' ? event.reply : '';
+          setMessages(prev =>
+            prev.map(message =>
+              message.id === current.assistantMessageId
+                ? { ...message, content: reply || message.content || '已完成，但无文本输出。' }
+                : message,
+            ),
+          );
+          void refreshSessions();
+          return null;
+        }
+
+        if (event.type === 'error') {
+          setMessages(prev =>
+            prev.map(message =>
+              message.id === current.assistantMessageId
+                ? { ...message, role: 'error', content: event.message || '流式请求失败' }
+                : message,
+            ),
+          );
+          return null;
+        }
+
+        return current;
+      });
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [refreshSessions]);
 
   const handleSelectSession = useCallback(async (id: string) => {
     setActiveSessionId(id);
@@ -39,44 +106,59 @@ export function MainLayout() {
       setSessions(prev => [session, ...prev]);
       setActiveSessionId(session.id);
       setMessages([]);
+      void refreshSessions();
     }
-  }, []);
+  }, [refreshSessions]);
 
   const handleSendMessage = useCallback(async (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() || streamState) return;
 
+    const now = new Date().toLocaleTimeString();
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       content: text,
-      time: new Date().toLocaleTimeString(),
+      time: now,
     };
-    setMessages(prev => [...prev, userMsg]);
+    const assistantMsg: ChatMessage = {
+      id: `agent-${Date.now()}`,
+      role: 'agent',
+      content: '',
+      time: now,
+    };
+    setMessages(prev => [...prev, userMsg, assistantMsg]);
 
     try {
-      await window.electronAPI?.invoke('chat:send-with-context', {
+      const result = await window.electronAPI?.chat?.streamWithContext({
         message: text,
         workspacePath: workspacePath ?? undefined,
         selectedFiles,
         sessionId: activeSessionId ?? undefined,
       });
-
-      // Persist to local session store
-      if (activeSessionId) {
-        await window.electronAPI?.invoke('chat:append-message', activeSessionId, {
-          role: 'user', content: text, time: userMsg.time,
-        });
+      if (!result?.requestId || !result?.sessionId) {
+        throw new Error('stream request did not return identifiers');
       }
+      setActiveSessionId(result.sessionId);
+      setStreamState({
+        requestId: result.requestId,
+        sessionId: result.sessionId,
+        assistantMessageId: assistantMsg.id,
+      });
     } catch (err) {
-      const errMsg: ChatMessage = {
-        id: `err-${Date.now()}`,
-        role: 'error',
-        content: `发送失败: ${err instanceof Error ? err.message : String(err)}`,
-        time: new Date().toLocaleTimeString(),
-      };
-      setMessages(prev => [...prev, errMsg]);
+      setMessages(prev =>
+        prev.map(message =>
+          message.id === assistantMsg.id
+            ? {
+                ...message,
+                role: 'error',
+                content: `发送失败: ${err instanceof Error ? err.message : String(err)}`,
+              }
+            : message,
+        ),
+      );
+      setStreamState(null);
     }
-  }, [activeSessionId, workspacePath, selectedFiles]);
+  }, [activeSessionId, workspacePath, selectedFiles, streamState, refreshSessions]);
 
   return (
     <div className="main-layout">

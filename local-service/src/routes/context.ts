@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { execFile } from 'child_process';
-import { existsSync, readFileSync, readdirSync } from 'fs';
-import { resolve, sep } from 'path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { extname, resolve, sep, basename } from 'path';
 import { promisify } from 'util';
 
 export const contextRouter = Router();
@@ -10,10 +10,20 @@ const execFileAsync = promisify(execFile);
 
 const CONTEXT_CHAR_LIMIT = 50_000;
 const FILE_CHAR_LIMIT = 8_000;
+const FILE_BATCH_LIMIT = 5;
+const MAX_FILE_BYTES = 200 * 1024;
 const REDACT_LINE_RE = /(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie)/i;
 const TREE_IGNORE = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', 'target',
   '__pycache__', '.venv', 'venv', 'coverage', '.cache', '.nyc_output',
+]);
+const BINARY_EXT = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.ico',
+  '.pdf', '.zip', '.tar', '.gz', '.7z', '.rar',
+  '.exe', '.dll', '.so', '.dylib',
+  '.mp3', '.mp4', '.mov', '.avi',
+  '.woff', '.woff2', '.ttf', '.eot',
+  '.jar', '.class',
 ]);
 
 function sanitize(text: string): string {
@@ -63,6 +73,32 @@ function treeLines(dir: string, depth: number, maxDepth: number): string[] {
     }
   } catch { /* ignore unreadable dirs */ }
   return lines;
+}
+
+function readFilePreview(filePath: string): {
+  path: string;
+  name: string;
+  content: string;
+  truncated: boolean;
+} | null {
+  const resolved = resolve(filePath);
+  const ext = extname(resolved).toLowerCase();
+  if (!existsSync(resolved) || BINARY_EXT.has(ext)) return null;
+
+  try {
+    const stat = statSync(resolved);
+    if (!stat.isFile() || stat.size > MAX_FILE_BYTES) return null;
+
+    const content = sanitize(readFileSync(resolved, 'utf8')).slice(0, FILE_CHAR_LIMIT);
+    return {
+      path: resolved,
+      name: basename(resolved),
+      content,
+      truncated: content.length >= FILE_CHAR_LIMIT,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // GET /context?path=<workspace-dir>
@@ -117,4 +153,20 @@ contextRouter.get('/', async (req, res) => {
 
   const merged = sections.join('\n\n').slice(0, CONTEXT_CHAR_LIMIT);
   return res.json({ context: merged, workspacePath: cwd });
+});
+
+contextRouter.post('/files', (req, res) => {
+  const input = Array.isArray(req.body?.paths) ? req.body.paths : [];
+  const previews = input
+    .filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
+    .slice(0, FILE_BATCH_LIMIT)
+    .map((value: string) => readFilePreview(value))
+    .filter((value: ReturnType<typeof readFilePreview>): value is NonNullable<ReturnType<typeof readFilePreview>> => value !== null);
+
+  return res.json({
+    files: previews,
+    requested: input.length,
+    returned: previews.length,
+    maxFiles: FILE_BATCH_LIMIT,
+  });
 });

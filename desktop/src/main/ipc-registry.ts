@@ -1,4 +1,7 @@
 import { app, ipcMain, shell } from 'electron';
+import { randomBytes, randomUUID } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { BackendManager } from './backend-manager';
 import { CliManager } from './cli-manager';
 import { PtyManager } from './pty-manager';
@@ -9,6 +12,8 @@ import { LocalServiceManager } from './local-service-manager';
 import { getDataDir, getCliEntryPath } from './utils/env';
 
 export class IpcRegistry {
+  private desktopAuthTokens: { accessToken: string; refreshToken?: string } | null = null;
+
   constructor(
     private backendManager: BackendManager,
     private cliManager: CliManager,
@@ -58,7 +63,13 @@ export class IpcRegistry {
     // Chat Handlers
     ipcMain.handle('chat:get-sessions', () => this.chatManager.getSessionsSummary());
     ipcMain.handle('chat:get-session', (_event, id) => this.chatManager.getSession(id));
-    ipcMain.handle('chat:create-session', (_event, branch) => this.chatManager.createSession(branch));
+    ipcMain.handle('chat:create-session', async (_event, branch) => {
+      const remoteSession = await this.createBackendSession();
+      return this.chatManager.createSession(branch, {
+        id: remoteSession.id,
+        title: remoteSession.title,
+      });
+    });
     ipcMain.handle('chat:append-message', (_event, id, msg) => this.chatManager.appendMessage(id, msg));
     ipcMain.handle('chat:summarize-title', (_event, id, text) => this.chatManager.summarizeTitle(id, text));
 
@@ -92,21 +103,27 @@ export class IpcRegistry {
      * Aggregates workspace context from local-service then forwards to backend Gateway.
      * Body: { workspacePath?: string, selectedFiles?: string[], message: string, sessionId?: string }
      */
-    ipcMain.handle('chat:send-with-context', async (_event, payload: {
+    ipcMain.handle('chat:send-with-context', async (event, payload: {
       message: string;
       workspacePath?: string;
       selectedFiles?: string[];
       sessionId?: string;
     }) => {
       const { message, workspacePath, selectedFiles = [], sessionId } = payload;
+      const requestId = randomUUID();
+      const isNewSession = !sessionId;
+      const resolvedSessionId = sessionId ?? (await this.createBackendSession()).id;
 
-      // Resolve session
-      let resolvedSessionId = sessionId;
-      if (!resolvedSessionId) {
-        const active = this.workspaceManager.getActiveWorkspace();
-        if (active) {
-          resolvedSessionId = active;
-        }
+      if (!this.chatManager.getSession(resolvedSessionId)) {
+        this.chatManager.createSession('main', { id: resolvedSessionId });
+      }
+      const appendResult = this.chatManager.appendMessage(resolvedSessionId, {
+        role: 'user',
+        content: message,
+        time: new Date().toLocaleTimeString(),
+      });
+      if (appendResult.session.messages.length === 1) {
+        void this.chatManager.summarizeTitle(resolvedSessionId, message);
       }
 
       // Build systemContext by calling local-service
@@ -114,27 +131,27 @@ export class IpcRegistry {
       if (this.localServiceManager.isReady() && workspacePath) {
         try {
           const port = this.localServiceManager.getPort();
-          const resp = await fetch(
+          const [contextResp, filesResp] = await Promise.all([
+            fetch(
             `http://127.0.0.1:${port}/context?path=${encodeURIComponent(workspacePath)}`,
-          );
-          if (resp.ok) {
-            const data = await resp.json() as { context: string };
+            ),
+            selectedFiles.length > 0
+              ? fetch(`http://127.0.0.1:${port}/context/files`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ paths: selectedFiles }),
+                })
+              : Promise.resolve(null),
+          ]);
+          if (contextResp.ok) {
+            const data = await contextResp.json() as { context: string };
             let ctx = data.context;
 
-            // Append selected file contents
-            if (selectedFiles.length > 0) {
-              const fileContents: string[] = [];
-              for (const filePath of selectedFiles.slice(0, 5)) { // max 5 files
-                try {
-                  const fResp = await fetch(
-                    `http://127.0.0.1:${port}/file?path=${encodeURIComponent(filePath)}`,
-                  );
-                  if (fResp.ok) {
-                    const fData = await fResp.json() as { name: string; content: string };
-                    fileContents.push(`[File: ${fData.name}]\n${fData.content}`);
-                  }
-                } catch { /* skip unreadable file */ }
-              }
+            if (filesResp?.ok) {
+              const fileData = await filesResp.json() as {
+                files?: Array<{ name: string; content: string }>;
+              };
+              const fileContents = (fileData.files ?? []).map(file => `[File: ${file.name}]\n${file.content}`);
               if (fileContents.length > 0) {
                 ctx += '\n\nSelected files:\n' + fileContents.join('\n\n---\n\n');
               }
@@ -146,23 +163,261 @@ export class IpcRegistry {
         }
       }
 
-      // Forward to backend gateway
-      const port = this.getActivePort();
-      const resp = await fetch(`http://127.0.0.1:${port}/api/v1/chat/stream`, {
+      event.sender.send('chat:stream-event', {
+        requestId,
+        sessionId: resolvedSessionId,
+        type: 'started',
+      });
+
+      void this.streamBackendChat({
+        requestId,
+        sessionId: resolvedSessionId,
+        message,
+        systemContext,
+        sender: event.sender,
+      }).catch(err => {
+        console.error('[chat] stream failed', err);
+      });
+
+      return { ok: true, requestId, sessionId: resolvedSessionId, isNewSession };
+    });
+  }
+
+  private async createBackendSession(): Promise<{ id: string; title: string }> {
+    const response = await this.backendRequest('/api/v1/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ title: '新对话', provider: 'OPENAI' }),
+    });
+    return {
+      id: String(response.id),
+      title: typeof response.title === 'string' && response.title.trim() ? response.title : '新对话',
+    };
+  }
+
+  private async streamBackendChat(input: {
+    requestId: string;
+    sessionId: string;
+    message: string;
+    systemContext?: string;
+    sender: Electron.WebContents;
+  }) {
+    const { requestId, sessionId, message, systemContext, sender } = input;
+    let assistantReply = '';
+
+    try {
+      const response = await this.backendRequestRaw('/api/v1/agent/chat/stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          sessionId,
           message,
-          sessionId: resolvedSessionId,
           systemContext,
         }),
       });
 
-      if (!resp.ok) {
-        throw new Error(`Gateway error: ${resp.status}`);
+      if (!response.body) {
+        throw new Error('Streaming response body is empty');
       }
 
-      return { ok: true, status: resp.status };
-    });
+      await this.parseSseStream(response.body, (eventName, data) => {
+        if (eventName === 'chunk') {
+          assistantReply += data;
+          sender.send('chat:stream-event', { requestId, sessionId, type: 'chunk', chunk: data });
+          return;
+        }
+
+        if (eventName === 'meta' || eventName === 'client_tool_call' || eventName === 'heartbeat') {
+          sender.send('chat:stream-event', { requestId, sessionId, type: eventName, data });
+          return;
+        }
+
+        if (eventName === 'done') {
+          const parsed = this.tryParseJson(data);
+          const reply =
+            parsed && typeof parsed.reply === 'string' && parsed.reply.trim().length > 0
+              ? parsed.reply
+              : assistantReply;
+          assistantReply = reply;
+          sender.send('chat:stream-event', { requestId, sessionId, type: 'done', data: parsed, reply });
+          return;
+        }
+
+        if (eventName === 'error') {
+          const parsed = this.tryParseJson(data);
+          const messageText =
+            parsed && typeof parsed.message === 'string' ? parsed.message : data || 'Stream failed';
+          sender.send('chat:stream-event', { requestId, sessionId, type: 'error', message: messageText });
+        }
+      });
+
+      if (assistantReply.trim()) {
+        this.chatManager.appendMessage(sessionId, {
+          role: 'agent',
+          content: assistantReply,
+          time: new Date().toLocaleTimeString(),
+        });
+      }
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : String(error);
+      sender.send('chat:stream-event', { requestId, sessionId, type: 'error', message: messageText });
+      throw error;
+    }
+  }
+
+  private async backendRequest(pathname: string, init: RequestInit): Promise<any> {
+    const response = await this.backendRequestRaw(pathname, init);
+    const text = await response.text();
+    if (!text) return null;
+    return JSON.parse(text);
+  }
+
+  private async backendRequestRaw(pathname: string, init: RequestInit): Promise<Response> {
+    const token = await this.ensureDesktopAccessToken();
+    const port = this.getActivePort();
+    const headers = new Headers(init.headers || {});
+    headers.set('Content-Type', 'application/json');
+    headers.set('Authorization', `Bearer ${token}`);
+
+    const response = await fetch(`http://127.0.0.1:${port}${pathname}`, { ...init, headers });
+    if (response.status === 401) {
+      this.desktopAuthTokens = null;
+      const retryToken = await this.ensureDesktopAccessToken();
+      headers.set('Authorization', `Bearer ${retryToken}`);
+      const retry = await fetch(`http://127.0.0.1:${port}${pathname}`, { ...init, headers });
+      if (!retry.ok) {
+        throw new Error(await this.toErrorMessage(retry));
+      }
+      return retry;
+    }
+
+    if (!response.ok) {
+      throw new Error(await this.toErrorMessage(response));
+    }
+    return response;
+  }
+
+  private async ensureDesktopAccessToken(): Promise<string> {
+    if (this.desktopAuthTokens?.accessToken) {
+      return this.desktopAuthTokens.accessToken;
+    }
+
+    const credentials = this.loadDesktopCredentials();
+    const login = async () => {
+      const port = this.getActivePort();
+      const response = await fetch(`http://127.0.0.1:${port}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+      });
+      if (!response.ok) {
+        throw new Error(await this.toErrorMessage(response));
+      }
+      const tokens = await response.json() as { accessToken: string; refreshToken?: string };
+      this.desktopAuthTokens = tokens;
+      return tokens.accessToken;
+    };
+
+    try {
+      return await login();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('Invalid credentials')
+        && !message.includes('Invalid email or password')
+        && !message.includes('Request failed (401)')) {
+        throw error;
+      }
+
+      const port = this.getActivePort();
+      const registerResponse = await fetch(`http://127.0.0.1:${port}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+      });
+      if (!registerResponse.ok) {
+        const registerMessage = await this.toErrorMessage(registerResponse);
+        if (!registerMessage.includes('already')) {
+          throw new Error(registerMessage);
+        }
+      }
+      return login();
+    }
+  }
+
+  private loadDesktopCredentials(): { email: string; password: string } {
+    const credentialsPath = path.join(getDataDir(), 'desktop-auth.json');
+    fs.mkdirSync(path.dirname(credentialsPath), { recursive: true });
+    if (fs.existsSync(credentialsPath)) {
+      return JSON.parse(fs.readFileSync(credentialsPath, 'utf8')) as {
+        email: string;
+        password: string;
+      };
+    }
+
+    const credentials = {
+      email: `desktop-${app.getVersion().replace(/[^0-9a-z]+/gi, '')}@example.com`,
+      password: `Desktop!${randomBytes(12).toString('hex')}Aa1`,
+    };
+    fs.writeFileSync(credentialsPath, JSON.stringify(credentials, null, 2));
+    return credentials;
+  }
+
+  private async parseSseStream(
+    body: ReadableStream<Uint8Array>,
+    onEvent: (eventName: string, data: string) => void,
+  ) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      buffer = buffer.replace(/\r\n/g, '\n');
+
+      let delimiter = buffer.indexOf('\n\n');
+      while (delimiter >= 0) {
+        const block = buffer.slice(0, delimiter).trim();
+        buffer = buffer.slice(delimiter + 2);
+        if (block) {
+          const eventName = block
+            .split('\n')
+            .find(line => line.startsWith('event:'))
+            ?.slice(6)
+            .trim() || 'message';
+          const data = block
+            .split('\n')
+            .filter(line => line.startsWith('data:'))
+            .map(line => line.slice(5).trimStart())
+            .join('');
+          onEvent(eventName, data);
+        }
+        delimiter = buffer.indexOf('\n\n');
+      }
+
+      if (done) {
+        return;
+      }
+    }
+  }
+
+  private tryParseJson(input: string): any | null {
+    if (!input) return null;
+    try {
+      return JSON.parse(input);
+    } catch {
+      return null;
+    }
+  }
+
+  private async toErrorMessage(response: Response): Promise<string> {
+    const text = await response.text();
+    if (!text) {
+      return `Request failed (${response.status})`;
+    }
+    try {
+      const parsed = JSON.parse(text) as { message?: string; code?: string };
+      return parsed.message || parsed.code || `Request failed (${response.status})`;
+    } catch {
+      return text;
+    }
   }
 }

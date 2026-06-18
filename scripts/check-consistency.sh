@@ -36,11 +36,26 @@ for file in \
   "${COMPOSE_FILE}" \
   "${SMOKE_SCRIPT}" \
   "${DESKTOP_HEALTH_FILE}" \
-  "${WEB_API_FILE}" \
   "${CLI_API_FILE}" \
   "${SENTINEL_CONTROLLER_FILE}"; do
   require_file "${file}"
 done
+
+OPTIONAL_FILES=()
+if [[ -f "${WEB_API_FILE}" ]]; then
+  OPTIONAL_FILES+=("${WEB_API_FILE}")
+fi
+
+FILES_TO_SCAN=(
+  "${README_FILE}"
+  "${COMPOSE_FILE}"
+  "${SMOKE_SCRIPT}"
+  "${DESKTOP_HEALTH_FILE}"
+  "${CLI_API_FILE}"
+)
+if [[ ${#OPTIONAL_FILES[@]} -gt 0 ]]; then
+  FILES_TO_SCAN+=("${OPTIONAL_FILES[@]}")
+fi
 
 require_literal "${COMPOSE_FILE}" "/api/v1/system/health/ready" "docker compose backend healthcheck must use /api/v1 path"
 require_literal "${SMOKE_SCRIPT}" "/api/v1/system/health/ready" "smoke readiness check must use /api/v1 path"
@@ -52,22 +67,12 @@ require_literal "${SENTINEL_CONTROLLER_FILE}" "/alerts" "sentinel alert stream m
 if command -v rg >/dev/null 2>&1; then
   LEGACY_HITS="$(
     rg -n -P '/api/(?!v1/)(auth|sessions|agent|coach|system|sentinel)' \
-      "${README_FILE}" \
-      "${COMPOSE_FILE}" \
-      "${SMOKE_SCRIPT}" \
-      "${DESKTOP_HEALTH_FILE}" \
-      "${WEB_API_FILE}" \
-      "${CLI_API_FILE}" || true
+      "${FILES_TO_SCAN[@]}" || true
   )"
 else
   LEGACY_HITS="$(
     grep -nE '/api/(auth|sessions|agent|coach|system|sentinel)' \
-      "${README_FILE}" \
-      "${COMPOSE_FILE}" \
-      "${SMOKE_SCRIPT}" \
-      "${DESKTOP_HEALTH_FILE}" \
-      "${WEB_API_FILE}" \
-      "${CLI_API_FILE}" | grep -v '/api/v1/' || true
+      "${FILES_TO_SCAN[@]}" | grep -v '/api/v1/' || true
   )"
 fi
 

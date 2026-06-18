@@ -69,11 +69,11 @@ export class ChatManager {
     return this.sessions.get(id) || null;
   }
 
-  public createSession(branch: string = 'main') {
-    const id = Date.now().toString();
+  public createSession(branch: string = 'main', options?: { id?: string; title?: string }) {
+    const id = options?.id ?? Date.now().toString();
     const newSession: ChatSession = {
       id,
-      title: '新对话',
+      title: options?.title ?? '新对话',
       updatedAt: Date.now(),
       branch,
       messages: []
