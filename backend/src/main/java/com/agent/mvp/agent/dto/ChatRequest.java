@@ -1,12 +1,14 @@
 package com.agent.mvp.agent.dto;
 
 import com.agent.mvp.agent.ModelProviderType;
+import com.agent.mvp.agent.tooling.ToolSpec;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import java.util.UUID;
 
 public record ChatRequest(
@@ -19,8 +21,9 @@ public record ChatRequest(
                 @Pattern(regexp = "^[\\w./:-]{0,128}$", message = "model format is invalid")
                 String model,
         @Min(value = 500, message = "maxContextTokens must be >= 500")
-                @Max(value = 32768, message = "maxContextTokens must be <= 32768")
+                @Max(value = 200000, message = "maxContextTokens must be <= 200000")
                 Integer maxContextTokens,
-        @Size(max = 2000, message = "systemContext must be <= 2000 chars") String systemContext,
+        @Size(max = 50000, message = "systemContext must be <= 50000 chars") String systemContext,
         String customBaseUrl,
-        String customApiKey) {}
+        String customApiKey,
+        List<ToolSpec> clientTools) {}

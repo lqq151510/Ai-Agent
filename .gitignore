@@ -45,6 +45,10 @@ desktop/dist/
 desktop/release/
 desktop/backend-jre/
 
+# Local service
+local-service/node_modules/
+local-service/dist/
+
 # Runtime generated coach scaffold artifacts
 var/coach-artifacts/
 **/var/coach-artifacts/

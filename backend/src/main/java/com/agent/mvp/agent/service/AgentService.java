@@ -163,6 +163,7 @@ public class AgentService {
                         request.systemContext(),
                         request.customBaseUrl(),
                         request.customApiKey(),
+                        request.clientTools(),
                         rejectClientTool);
 
         if (loop.reply() != null && !loop.reply().isBlank()) {
@@ -314,6 +315,7 @@ public class AgentService {
                         request.systemContext(),
                         request.customBaseUrl(),
                         request.customApiKey(),
+                        request.clientTools(),
                         clientToolInvoker);
 
         if (loop.reply() != null && !loop.reply().isBlank()) {
@@ -351,6 +353,7 @@ public class AgentService {
             String systemContext,
             String customBaseUrl,
             String customApiKey,
+            List<com.agent.mvp.agent.tooling.ToolSpec> clientTools,
             java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>>
                     clientToolInvoker) {
         // 处理消息历史：获取历史、构建上下文窗口、分离最后一条用户消息
@@ -360,11 +363,17 @@ public class AgentService {
 
         // 创建运行时环境并注入历史
         User user = Optional.ofNullable(userService.getUserById(userId)).orElse(null);
+        
+        List<com.agent.mvp.agent.tooling.ToolSpec> allTools = new ArrayList<>(toolOrchestrator.listToolSpecs());
+        if (clientTools != null) {
+            allTools.addAll(clientTools);
+        }
+
         AgentRuntime runtime =
                 flexRuntimeFactory.createRuntime(
                         user,
                         resolved,
-                        toolOrchestrator.listToolSpecs(),
+                        allTools,
                         customBaseUrl,
                         customApiKey);
         flexRuntimeFactory.injectHistory(

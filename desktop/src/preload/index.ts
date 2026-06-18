@@ -19,6 +19,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   terminalKeystroke: (data: string) => ipcRenderer.send('terminal:keystroke', data),
   terminalResize: (cols: number, rows: number) => ipcRenderer.send('terminal:resize', cols, rows),
 
+  // Generic invoke — allows renderer to call any IPC handler by channel name.
+  // Used by new layout components (MainLayout, SessionList, ChatArea, ContextPanel).
+  invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+
   // Workspace API
   workspace: {
     getAll: () => ipcRenderer.invoke('workspace:get-all'),
@@ -44,6 +48,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createSession: (branch?: string) => ipcRenderer.invoke('chat:create-session', branch),
     appendMessage: (id: string, msg: any) => ipcRenderer.invoke('chat:append-message', id, msg),
     summarizeTitle: (id: string, text: string) => ipcRenderer.invoke('chat:summarize-title', id, text),
+    // Phase 1 MVP: send message + workspace context
+    sendWithContext: (payload: {
+      message: string;
+      workspacePath?: string;
+      selectedFiles?: string[];
+      sessionId?: string;
+    }) => ipcRenderer.invoke('chat:send-with-context', payload),
+  },
+
+  // Local Service API
+  localService: {
+    port: () => ipcRenderer.invoke('local-service:port'),
+    isReady: () => ipcRenderer.invoke('local-service:is-ready'),
   },
 
   terminal: {

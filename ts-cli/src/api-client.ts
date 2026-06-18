@@ -35,6 +35,13 @@ type StreamHandlers = {
   onError?: (message: string) => void;
 };
 
+type ChatStreamHandlers = {
+  onMeta?: (payload: any) => void;
+  onChunk?: (chunk: string) => void;
+  onDone?: (payload: any) => void;
+  onError?: (message: string) => void;
+};
+
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 }
@@ -229,6 +236,93 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
     await parseSseStream(response.body, handlers);
   }
 
+  async function parseChatSseStream(body: ReadableStream<Uint8Array>, handlers: ChatStreamHandlers) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    function emitBlock(block: string) {
+      const lines = block.split(/\r?\n/);
+      const eventLine = lines.find(line => line.startsWith('event:'));
+      const eventName = eventLine ? eventLine.slice(6).trim() : '';
+      
+      const dataLines = lines
+        .filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).trimStart());
+
+      if (dataLines.length === 0) return;
+      const dataStr = dataLines.join('');
+
+      try {
+        if (eventName === 'meta') {
+          handlers.onMeta?.(JSON.parse(dataStr));
+        } else if (eventName === 'chunk') {
+          handlers.onChunk?.(dataStr);
+        } else if (eventName === 'done') {
+          handlers.onDone?.(JSON.parse(dataStr));
+        } else if (eventName === 'error') {
+          handlers.onError?.(dataStr);
+        } else if (!eventName && dataStr) {
+          try {
+            const parsed = JSON.parse(dataStr);
+            if (parsed.status === 'started') handlers.onMeta?.(parsed);
+            else if (parsed.status === 'completed') handlers.onDone?.(parsed);
+          } catch {
+            handlers.onChunk?.(dataStr);
+          }
+        }
+      } catch (e) {
+        // ignore partial parse errors
+      }
+    }
+
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      buffer = buffer.replace(/\r\n/g, '\n');
+
+      let delimiter = buffer.indexOf('\n\n');
+      while (delimiter >= 0) {
+        const block = buffer.slice(0, delimiter).trim();
+        buffer = buffer.slice(delimiter + 2);
+        if (block) {
+          emitBlock(block);
+        }
+        delimiter = buffer.indexOf('\n\n');
+      }
+
+      if (done) {
+        const tail = buffer.trim();
+        if (tail) {
+          emitBlock(tail);
+        }
+        return;
+      }
+    }
+  }
+
+  async function streamChatRequest(input: ChatInput, handlers: ChatStreamHandlers): Promise<void> {
+    const response = await fetch(`${safeBaseUrl}/api/v1/agent/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${tokenAccessor.getState().accessToken}`,
+      },
+      body: JSON.stringify(input),
+    });
+
+    if (!response.ok) {
+      const payload = await parseBody(response);
+      throw new Error(toErrorMessage(payload, response.status));
+    }
+
+    if (!response.body) {
+      throw new Error('Streaming response body is empty');
+    }
+
+    await parseChatSseStream(response.body, handlers);
+  }
+
   async function approvePlanRequest(taskId: string, approved: boolean): Promise<void> {
     const response = await fetch(`${safeBaseUrl}/api/v1/agent/task/${taskId}/approve`, {
       method: 'POST',
@@ -303,6 +397,10 @@ export function createApiClient(baseUrl: string, tokenAccessor: TokenAccessor) {
         },
         true,
       );
+    },
+
+    streamChat(input: ChatInput, handlers: ChatStreamHandlers) {
+      return streamChatRequest(input, handlers);
     },
 
     submitTask(prompt: string) {

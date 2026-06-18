@@ -8,6 +8,7 @@ import { IpcRegistry } from './ipc-registry';
 import { WorkspaceManager } from './workspace-manager';
 import { GitManager } from './git-manager';
 import { ChatManager } from './chat-manager';
+import { LocalServiceManager } from './local-service-manager';
 import { findFreePort } from './utils/network';
 import { getDataDir, getJrePath, getBackendJarPath, getBackendStartupTimeoutMs } from './utils/env';
 
@@ -32,6 +33,7 @@ let ipcRegistry: IpcRegistry;
 let workspaceManager: WorkspaceManager;
 let gitManager: GitManager;
 let chatManager: ChatManager;
+let localServiceManager: LocalServiceManager;
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -51,10 +53,12 @@ app.on('before-quit', async (event) => {
       cliManager.killAll();
     }
     if (ptyManager) ptyManager.kill();
+    if (localServiceManager) localServiceManager.stop();
     app.exit(0);
   } else if (cliManager) {
     cliManager.killAll();
     if (ptyManager) ptyManager.kill();
+    if (localServiceManager) localServiceManager.stop();
   }
 });
 
@@ -102,8 +106,14 @@ if (!gotTheLock) {
       workspaceManager = new WorkspaceManager();
       gitManager = new GitManager();
       chatManager = new ChatManager();
+      localServiceManager = new LocalServiceManager();
       trayManager = new TrayManager(windowManager, backendManager);
-      ipcRegistry = new IpcRegistry(backendManager, cliManager, ptyManager, workspaceManager, gitManager, chatManager, () => activePort);
+      ipcRegistry = new IpcRegistry(
+        backendManager, cliManager, ptyManager,
+        workspaceManager, gitManager, chatManager,
+        localServiceManager,
+        () => activePort,
+      );
 
       ipcRegistry.setupIpc();
       windowManager.createMainWindow();
@@ -115,6 +125,11 @@ if (!gotTheLock) {
         if (win && !win.isDestroyed()) {
           win.webContents.send('backend:status-changed', status);
         }
+      });
+
+      // Start local-service (non-blocking — best effort)
+      localServiceManager.start().catch(err => {
+        console.warn('[desktop] local-service failed to start (non-fatal):', err);
       });
 
       await backendManager.start();
@@ -131,4 +146,4 @@ if (!gotTheLock) {
   });
 }
 
-export { backendManager, getDataDir, activePort as DESKTOP_PORT };
+export { backendManager, localServiceManager, getDataDir, activePort as DESKTOP_PORT };

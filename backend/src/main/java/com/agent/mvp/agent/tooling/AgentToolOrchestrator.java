@@ -19,7 +19,7 @@ public class AgentToolOrchestrator {
     }
 
     public List<ToolSpec> listToolSpecs() {
-        return List.of(
+        List<ToolSpec> specs = new java.util.ArrayList<>(List.of(
                 new ToolSpec(
                         "execute_cli_command",
                         "Run a bash command on the user's local machine via the CLI client. Use"
@@ -59,7 +59,62 @@ public class AgentToolOrchestrator {
                 new ToolSpec(
                         "analyzePom",
                         "Summarize pom.xml dependencies and artifact info.",
-                        schema(List.of(), "path", type("string"))));
+                        schema(List.of(), "path", type("string")))));
+        
+        // Progressive Disclosure: Dynamic Skill Loading
+        specs.addAll(scanDynamicSkills());
+        return specs;
+    }
+
+    private List<ToolSpec> scanDynamicSkills() {
+        List<ToolSpec> dynamicSpecs = new java.util.ArrayList<>();
+        java.io.File skillsDir = new java.io.File(".agents/skills");
+        if (!skillsDir.exists() || !skillsDir.isDirectory()) {
+            // Also try fallback to .Codex/skills if available
+            skillsDir = new java.io.File(".Codex/skills");
+            if (!skillsDir.exists() || !skillsDir.isDirectory()) {
+                return dynamicSpecs;
+            }
+        }
+
+        java.io.File[] skillDirs = skillsDir.listFiles(java.io.File::isDirectory);
+        if (skillDirs == null) return dynamicSpecs;
+
+        for (java.io.File dir : skillDirs) {
+            java.io.File skillMd = new java.io.File(dir, "SKILL.md");
+            if (skillMd.exists()) {
+                try {
+                    String content = java.nio.file.Files.readString(skillMd.toPath());
+                    String name = dir.getName();
+                    String description = "Execute skill " + name;
+                    
+                    // Basic YAML frontmatter parsing for name/description
+                    if (content.startsWith("---")) {
+                        int endIdx = content.indexOf("---", 3);
+                        if (endIdx > 3) {
+                            String frontmatter = content.substring(3, endIdx);
+                            for (String line : frontmatter.split("\n")) {
+                                if (line.startsWith("name:")) {
+                                    name = line.substring(5).trim().replaceAll("^[\"']|[\"']$", "");
+                                } else if (line.startsWith("description:")) {
+                                    description = line.substring(12).trim().replaceAll("^[\"']|[\"']$", "");
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Provide a tool schema for the skill. Progressive Disclosure only needs optional params
+                    // But we allow passing an 'instruction' argument if the LLM wants to pass context to the skill
+                    dynamicSpecs.add(new ToolSpec(
+                            name,
+                            description,
+                            schema(List.of(), "instruction", type("string"))));
+                } catch (Exception ex) {
+                    // Ignore parse errors for individual skills
+                }
+            }
+        }
+        return dynamicSpecs;
     }
 
     public java.util.concurrent.CompletableFuture<ToolResult> execute(
@@ -122,12 +177,7 @@ public class AgentToolOrchestrator {
                     case "analyzePom" ->
                             codeToolService.analyzePom(fallback(text(args, "path"), "pom.xml"));
                     default ->
-                            new CodeToolService.ToolCallOutput(
-                                    name,
-                                    call.argumentsJson(),
-                                    "ERROR",
-                                    0,
-                                    "Unknown tool: " + name);
+                            executeDynamicSkill(name, argsJson(args));
                 };
 
         return java.util.concurrent.CompletableFuture.completedFuture(
@@ -149,6 +199,46 @@ public class AgentToolOrchestrator {
         } catch (Exception ex) {
             return objectMapper.createObjectNode();
         }
+    }
+
+    private String argsJson(JsonNode args) {
+        return args == null ? "{}" : args.toString();
+    }
+
+    private CodeToolService.ToolCallOutput executeDynamicSkill(String name, String argsJson) {
+        long start = System.currentTimeMillis();
+        java.io.File skillsDir = new java.io.File(".agents/skills");
+        if (!skillsDir.exists() || !skillsDir.isDirectory()) {
+            skillsDir = new java.io.File(".Codex/skills");
+        }
+        java.io.File skillDir = new java.io.File(skillsDir, name);
+        java.io.File skillMd = new java.io.File(skillDir, "SKILL.md");
+
+        if (skillMd.exists()) {
+            try {
+                String content = java.nio.file.Files.readString(skillMd.toPath());
+                return new CodeToolService.ToolCallOutput(
+                        name,
+                        argsJson,
+                        "SUCCESS",
+                        System.currentTimeMillis() - start,
+                        "PROGRESSIVE DISCLOSURE (Read SKILL.md successfully):\n\n" + content);
+            } catch (Exception ex) {
+                return new CodeToolService.ToolCallOutput(
+                        name,
+                        argsJson,
+                        "ERROR",
+                        System.currentTimeMillis() - start,
+                        "Failed to read SKILL.md: " + ex.getMessage());
+            }
+        }
+
+        return new CodeToolService.ToolCallOutput(
+                name,
+                argsJson,
+                "ERROR",
+                System.currentTimeMillis() - start,
+                "Unknown tool or skill not found: " + name);
     }
 
     private String text(JsonNode node, String field) {

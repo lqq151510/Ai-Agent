@@ -1,21 +1,9 @@
-import { useState } from 'react';
-import { SettingsLayout } from './components/SettingsLayout';
-import { ChatLayout } from './components/ChatLayout';
-import { LoginLayout } from './components/LoginLayout';
+import { MainLayout } from './components/layout/MainLayout';
 
+// Phase 1 MVP: Direct render without login gate.
+// The original ChatLayout is preserved in components/ChatLayout.tsx for reference.
 export const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentView, setCurrentView] = useState<'chat' | 'settings'>('chat');
-
-  if (!isAuthenticated) {
-    return <LoginLayout onLoginSuccess={() => setIsAuthenticated(true)} />;
-  }
-
-  if (currentView === 'settings') {
-    return <SettingsLayout onBack={() => setCurrentView('chat')} />;
-  }
-
-  return <ChatLayout onOpenSettings={() => setCurrentView('settings')} />;
+  return <MainLayout />;
 };
 
 export default App;
