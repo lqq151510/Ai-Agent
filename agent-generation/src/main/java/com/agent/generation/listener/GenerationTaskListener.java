@@ -3,8 +3,9 @@ package com.agent.generation.listener;
 import com.agent.common.config.KafkaTopicConstants;
 import com.agent.common.event.AgentEvent;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
-import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
+import dev.langchain4j.model.StreamingResponseHandler;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.model.output.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -38,7 +39,7 @@ public class GenerationTaskListener {
             prompt = query;
         }
 
-        streamingChatModel.generate(prompt, new StreamingChatResponseHandler() {
+        streamingChatModel.generate(prompt, new StreamingResponseHandler<AiMessage>() {
             @Override
             public void onNext(String token) {
                 AgentEvent chunkEvent = AgentEvent.builder()
@@ -51,7 +52,7 @@ public class GenerationTaskListener {
             }
 
             @Override
-            public void onComplete(ChatResponse response) {
+            public void onComplete(Response<AiMessage> response) {
                 log.info("Generation completed for taskId: {}", taskId);
                 
                 // Notify frontend: Generation finished
@@ -68,7 +69,7 @@ public class GenerationTaskListener {
                         .taskId(taskId)
                         .type("START")
                         .sourceAgent("GENERATION")
-                        .content(response.aiMessage().text())
+                        .content(response.content().text())
                         .metadata(metadata)
                         .build();
                 kafkaTemplate.send(KafkaTopicConstants.TOPIC_REFLECTION, taskId, reflectionEvent);
