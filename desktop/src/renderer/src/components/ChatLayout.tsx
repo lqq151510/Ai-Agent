@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import 'xterm/css/xterm.css';
-import { Settings, Search, PlusCircle, User, Zap, Folder, CheckSquare, MessageSquare, ChevronDown, Mic, ArrowUp, Link2, Monitor, FileText, PanelRight, X, ChevronRight, ThumbsUp, ThumbsDown, CornerUpLeft, Share, LayoutGrid as LayoutGridIcon, Check as CheckIcon, Pin, Trash2, RefreshCw, TerminalSquare, Filter as FilterIcon, Hand, ShieldAlert, CircleAlert, Plus, Paperclip, Hexagon, Waypoints, Target, Wand2, Minus, GitBranch, Globe, ArrowLeft, ArrowRight, ExternalLink, MoreVertical, Maximize2, MoreHorizontal, Copy, PlusSquare, GitCommit, Columns, Square, UploadCloud, Bot, Archive } from 'lucide-react';
+import { Settings, Search, PlusCircle, User, Zap, Folder, CheckSquare, MessageSquare, ChevronDown, Mic, ArrowUp, Monitor, FileText, PanelRight, X, ChevronRight, ThumbsUp, ThumbsDown, CornerUpLeft, Share, LayoutGrid as LayoutGridIcon, Check as CheckIcon, Pin, Trash2, RefreshCw, TerminalSquare, Filter as FilterIcon, Hand, ShieldAlert, CircleAlert, Plus, Paperclip, Hexagon, Waypoints, Target, Wand2, Minus, GitBranch, Globe, ArrowLeft, ArrowRight, ExternalLink, MoreVertical, Maximize2, MoreHorizontal, Copy, PlusSquare, GitCommit, Columns, UploadCloud, Bot, Archive } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -1748,4 +1748,3 @@ const RightTool = ({ icon: Icon, label, shortcut, onClick }: any) => (
     {shortcut && <div className="text-[11px] text-[#888] bg-[#ebebeb] px-1.5 rounded font-mono border border-[#ddd]">{shortcut}</div>}
   </div>
 );
-

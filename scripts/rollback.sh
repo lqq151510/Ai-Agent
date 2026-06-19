@@ -32,7 +32,7 @@ if [[ -f "${CURRENT_TAG_FILE}" ]]; then
 fi
 
 echo "[rollback] env=${ENV_NAME}, targetTag=${TARGET_TAG}"
-APP_IMAGE_TAG="${TARGET_TAG}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --no-build backend web
+APP_IMAGE_TAG="${TARGET_TAG}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --no-build backend python-service
 
 echo "${TARGET_TAG}" > "${CURRENT_TAG_FILE}"
 if [[ -n "${CURRENT_TAG}" && "${CURRENT_TAG}" != "${TARGET_TAG}" ]]; then

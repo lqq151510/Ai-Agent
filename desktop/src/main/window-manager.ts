@@ -51,10 +51,13 @@ export class WindowManager {
 
   public loadContent() {
     if (!this.mainWindow) return;
-    
-    // Load LobeChat preview URL. 
-    // This allows users to configure the backend API address within LobeChat's interface.
-    this.mainWindow.loadURL('https://chat-preview.lobehub.com');
+
+    if (this.isDev) {
+      const rendererUrl = process.env.DESKTOP_RENDERER_URL || 'http://localhost:5173';
+      this.mainWindow.loadURL(rendererUrl);
+    } else {
+      this.mainWindow.loadFile(path.join(__dirname, '..', '..', 'renderer', 'index.html'));
+    }
     
     if (this.isDev) {
       this.mainWindow.webContents.openDevTools();

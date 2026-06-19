@@ -18,6 +18,9 @@
         <java.version>21</java.version>
         <jjwt.version>0.12.6</jjwt.version>
         <flyway.version>10.22.0</flyway.version>
+        <tomcat.version>10.1.55</tomcat.version>
+        <netty.version>4.1.135.Final</netty.version>
+        <kafka.version>3.9.2</kafka.version>
     </properties>
 
     <dependencies>
@@ -73,6 +76,21 @@
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.14.0</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-beanutils</groupId>
+            <artifactId>commons-beanutils</artifactId>
+            <version>1.11.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+            <version>9.37.4</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>

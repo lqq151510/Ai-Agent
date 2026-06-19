@@ -3,13 +3,13 @@
 # AI Agent Desktop - 全量构建脚本
 # ----------------------------------------------------------------------------
 # 用法：
-#   ./scripts/build-all.sh [--mac|--win|--linux] [--skip-backend] [--skip-web]
+#   ./scripts/build-all.sh [--mac|--win|--linux] [--skip-backend] [--skip-web|--skip-renderer]
 #
 # 功能：
 #   1. 检查构建依赖（node / java / maven / jlink）
 #   2. 构建后端 JAR（backend，desktop profile）
 #   3. 使用 jlink 生成最小化 JRE
-#   4. 构建 Web 前端并复制到 desktop/dist/renderer
+#   4. 构建 Desktop Renderer 并复制到 desktop/dist/renderer
 #   5. 编译 Electron 主进程（tsc）
 #   6. 调用 electron-builder 打包
 #
@@ -22,7 +22,7 @@
 #
 # 其他环境变量：
 #   DESKTOP_SKIP_NPM_INSTALL=true  - 跳过 npm install
-#   DESKTOP_VITE_API_BASE          - Web 前端 API 基址（默认 http://localhost:18080）
+#   DESKTOP_VITE_API_BASE          - Renderer API 基址（默认 http://localhost:18080）
 #   DESKTOP_BACKEND_MVN_ARGS       - 额外 Maven 参数
 #   DESKTOP_ELECTRON_BUILDER_ARGS  - 额外 electron-builder 参数
 # ============================================================================
@@ -81,7 +81,7 @@ while [[ $# -gt 0 ]]; do
             SKIP_BACKEND="true"
             shift
             ;;
-        --skip-web)
+        --skip-web|--skip-renderer)
             SKIP_WEB="true"
             shift
             ;;
@@ -166,12 +166,12 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# 构建 Web 前端
+# 构建 Desktop Renderer
 # ----------------------------------------------------------------------------
 if [[ "$SKIP_WEB" == "true" ]]; then
-    log_warn "跳过 Web 前端构建 (--skip-web)"
+    log_warn "跳过 Desktop Renderer 构建 (--skip-web/--skip-renderer)"
 else
-    log_step "[3/6] 构建 Web 前端"
+    log_step "[3/6] 构建 Desktop Renderer"
 
     install_deps_if_needed() {
         local target_dir="$1"
@@ -186,14 +186,15 @@ else
         (cd "$target_dir" && npm install --silent)
     }
 
-    install_deps_if_needed "$PROJECT_ROOT/web"
-    (cd "$PROJECT_ROOT/web" && VITE_API_BASE="${WEB_API_BASE}" npm run build)
+    RENDERER_DIR="$DESKTOP_DIR/src/renderer"
+    install_deps_if_needed "$RENDERER_DIR"
+    (cd "$RENDERER_DIR" && VITE_API_BASE="${WEB_API_BASE}" npm run build)
 
-    log_step "[4/6] 复制 Web 构建产物到 desktop/dist/renderer"
+    log_step "[4/6] 复制 Renderer 构建产物到 desktop/dist/renderer"
     rm -rf "$DESKTOP_DIR/dist/renderer"
     mkdir -p "$DESKTOP_DIR/dist/renderer"
-    cp -R "$PROJECT_ROOT/web/dist/." "$DESKTOP_DIR/dist/renderer/"
-    log_ok "Web 前端已复制"
+    cp -R "$RENDERER_DIR/dist/." "$DESKTOP_DIR/dist/renderer/"
+    log_ok "Desktop Renderer 已复制"
 fi
 
 # ----------------------------------------------------------------------------

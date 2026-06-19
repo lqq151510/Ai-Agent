@@ -182,7 +182,6 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
 
   // --- Computed ---
   const selectedCount = files.filter(f => f.selected).length;
-  const selectedDiffs = diffs.filter(d => files.find(f => f.file === d.file && f.selected));
 
   // Render
   return (

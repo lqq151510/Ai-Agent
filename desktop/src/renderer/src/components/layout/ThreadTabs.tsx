@@ -1,9 +1,15 @@
 import { useRef, useEffect } from 'react';
-import type { ThreadSummary } from '../../../../../main/thread-manager';
 
 // --------------- Types ---------------
 
-type ThreadTab = ThreadSummary & {
+type ThreadTab = {
+  id: string;
+  name: string;
+  status: string;
+  mode: string;
+  branch: string;
+  projectName: string;
+  updatedAt: number;
   /** Terminal id if one is attached */
   terminalId?: string;
 };

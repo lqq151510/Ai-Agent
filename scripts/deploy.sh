@@ -85,7 +85,7 @@ run_compose() {
   APP_IMAGE_TAG="${TAG}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "${args[@]}"
 }
 
-run_compose build backend web
+run_compose build backend python-service
 run_compose up -d --remove-orphans
 
 if [[ -n "${PREV_CURRENT}" && "${PREV_CURRENT}" != "${TAG}" ]]; then
