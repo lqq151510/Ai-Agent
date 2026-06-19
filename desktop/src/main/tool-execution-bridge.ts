@@ -13,6 +13,7 @@
 
 import { PtyPool } from './pty-pool';
 import { ApprovalEngine, type ToolApprovalRequest, type ApprovalMode } from './approval-engine';
+import { ComputerUseManager } from './computer-use-manager';
 
 // --------------- Types ---------------
 
@@ -35,6 +36,7 @@ export type ToolExecutionEvent = {
   threadId: string;
   message?: string;
   result?: ToolResultPayload;
+  toolCall?: BackendToolCall;
 };
 
 export type ToolExecutionCallback = (event: ToolExecutionEvent) => void;
@@ -58,8 +60,9 @@ export class ToolExecutionBridge {
     private approvalEngine: ApprovalEngine,
     private localServicePort: () => number,
     private backendPort: () => number,
-    private authToken: () => string,
+    private authToken: () => string | Promise<string>,
     private currentMode: () => ApprovalMode,
+    private computerUseManager?: ComputerUseManager,
   ) {}
 
   /**
@@ -102,10 +105,17 @@ export class ToolExecutionBridge {
       return result;
     }
 
-    if (approval.decision === 'approved' && mode !== 'full-auto') {
+    if (approval.decision === 'requires-approval') {
       // Needs user approval — emit event and wait (caller should show dialog)
-      onEvent?.({ type: 'tool:awaiting-approval', toolCallId, toolName, threadId, message: this.describeToolCall(toolName, args) });
-      // Return a pending result; caller should re-invoke after user responds
+      onEvent?.({
+        type: 'tool:awaiting-approval',
+        toolCallId,
+        toolName,
+        threadId,
+        message: this.describeToolCall(toolName, args),
+        toolCall,
+      });
+      // Caller should re-invoke executeApproved/reject through IPC after user responds.
       return { toolCallId, output: '', status: 'error' };
     }
 
@@ -187,13 +197,16 @@ export class ToolExecutionBridge {
         return this.execReadFile(args);
 
       case 'writeFile':
-        return this.execWriteFile(args);
+        return this.execWriteFile(args, threadId);
 
       case 'searchCode':
-        return this.execSearchCode(args);
+        return this.execSearchCode(args, threadId);
 
       case 'listRepoTree':
         return this.execListTree(args);
+
+      case 'computer_use':
+        return this.execComputerUse(args);
 
       default:
         // Unknown tool — try executing as a raw shell command
@@ -216,7 +229,7 @@ export class ToolExecutionBridge {
 
     // For read-only commands, collect output directly
     if (this.isReadOnlyCommand(command)) {
-      return this.collectOutput(command, terminal.process.pid.toString(), timeoutMs);
+      return this.collectOutput(command, terminal.cwd, timeoutMs);
     }
 
     // Write command to the PTY
@@ -266,7 +279,7 @@ export class ToolExecutionBridge {
     return data.content ?? '';
   }
 
-  private async execWriteFile(args: Record<string, unknown>): Promise<string> {
+  private async execWriteFile(args: Record<string, unknown>, threadId: string): Promise<string> {
     // WriteFile is handled by the backend tool via local filesystem
     // For now, delegate to the PTY using cat / tee
     const filePath = String(args.path || '');
@@ -277,10 +290,10 @@ export class ToolExecutionBridge {
     const escaped = content.replace(/\\/g, '\\\\').replace(/'/g, "'\\''");
     return this.execCli({
       command: `cat > '${filePath}' << 'ENDOFFILE'\n${content}\nENDOFFILE`,
-    }, '');
+    }, threadId);
   }
 
-  private async execSearchCode(args: Record<string, unknown>): Promise<string> {
+  private async execSearchCode(args: Record<string, unknown>, threadId: string): Promise<string> {
     const query = String(args.query || '');
     const path = String(args.path || '.');
 
@@ -288,7 +301,7 @@ export class ToolExecutionBridge {
 
     // Use ripgrep if available, fall back to grep
     const cmd = `rg -n --context 1 '${query.replace(/'/g, "'\\''")}' '${path}' 2>/dev/null || grep -rn --context 1 '${query.replace(/'/g, "'\\''")}' '${path}' 2>/dev/null || echo '(no matches found)'`;
-    return this.execCli({ command: cmd }, '');
+    return this.execCli({ command: cmd }, threadId);
   }
 
   private async execListTree(args: Record<string, unknown>): Promise<string> {
@@ -302,11 +315,19 @@ export class ToolExecutionBridge {
     return JSON.stringify(data.tree ?? [], null, 2);
   }
 
+  private async execComputerUse(args: Record<string, unknown>): Promise<string> {
+    if (!this.computerUseManager) {
+      throw new Error('Computer Use manager is not available');
+    }
+    const result = await this.computerUseManager.execute(args);
+    return JSON.stringify(result, null, 2);
+  }
+
   // ---- Backend Result Submission ----
 
   private async submitResult(result: ToolResultPayload): Promise<void> {
     const port = this.backendPort();
-    const token = this.authToken();
+    const token = await this.authToken();
     const resp = await fetch(`http://127.0.0.1:${port}/api/v1/agent/chat/tool_result`, {
       method: 'POST',
       headers: {
@@ -345,6 +366,7 @@ export class ToolExecutionBridge {
       }
       return 'shell:read'; // project-local file reads are safe-read ops
     }
+    if (toolName === 'computer_use') return 'computer';
     return 'shell:command';
   }
 
@@ -373,13 +395,13 @@ export class ToolExecutionBridge {
     }
   }
 
-  private collectOutput(command: string, _pidHint: string, _timeoutMs: number): Promise<string> {
+  private collectOutput(command: string, cwd: string, _timeoutMs: number): Promise<string> {
     // For simple read-only commands, execute via child_process directly
     const { exec } = require('child_process');
     const util = require('util');
     const execAsync = util.promisify(exec);
 
-    return execAsync(command, { timeout: _timeoutMs })
+    return execAsync(command, { timeout: _timeoutMs, cwd })
       .then((r: { stdout: string; stderr: string }) => {
         const output = r.stdout || r.stderr || '';
         return output.trim() || '(no output)';

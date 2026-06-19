@@ -5,6 +5,7 @@ export type ApprovalMode = 'suggest' | 'auto-edit' | 'full-auto';
 export type ResourceType =
   | 'file:write'
   | 'file:read-external'
+  | 'computer'
   | 'network'
   | 'shell:command'
   | 'shell:install'
@@ -22,7 +23,7 @@ export type ToolApprovalRequest = {
   mode: ApprovalMode;
 };
 
-export type ApprovalDecision = 'approved' | 'rejected' | 'auto-approved';
+export type ApprovalDecision = 'auto-approved' | 'requires-approval' | 'rejected';
 
 export type ApprovalResult = {
   decision: ApprovalDecision;
@@ -56,6 +57,7 @@ const BUILTIN_RULES: ApprovalRule[] = [
 
   // Network: always requires approval in auto-edit
   { resource: 'network', level: 'request', comment: 'Network access' },
+  { resource: 'computer', level: 'request', comment: 'Computer Use actions' },
 
   // Reads outside workspace: deny by default
   { resource: 'file:read-external', pattern: '~/.ssh/*', level: 'deny', comment: 'SSH keys' },
@@ -95,7 +97,7 @@ export class ApprovalEngine {
 
     // suggest: always request user approval
     if (request.mode === 'suggest') {
-      return { decision: 'approved', approvedAt: Date.now() }; // defer to user
+      return { decision: 'requires-approval' };
     }
 
     // auto-edit: evaluate against policy
@@ -104,7 +106,7 @@ export class ApprovalEngine {
     }
 
     // Unknown mode: fall back to request
-    return { decision: 'approved' };
+    return { decision: 'requires-approval' };
   }
 
   /**
@@ -159,7 +161,7 @@ export class ApprovalEngine {
         return { decision: 'rejected' };
       case 'request':
       default:
-        return { decision: 'approved' }; // Renderer will show dialog
+        return { decision: 'requires-approval' };
     }
   }
 
@@ -183,6 +185,10 @@ export class ApprovalEngine {
 
     if (toolName === 'searchCode' || toolName === 'listRepoTree') {
       return 'shell:read';
+    }
+
+    if (toolName === 'computer_use') {
+      return String(args.action || 'computer');
     }
 
     return String(args.command || args.path || args.url || '');
