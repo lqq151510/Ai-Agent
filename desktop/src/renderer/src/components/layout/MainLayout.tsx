@@ -3,6 +3,11 @@ import { SessionList } from './SessionList';
 import { ChatArea } from './ChatArea';
 import { ContextPanel } from './ContextPanel';
 import { PlanApprovalDialog } from './PlanApprovalDialog';
+import { ThreadTabs } from './ThreadTabs';
+import { ReviewPanel } from '../review/ReviewPanel';
+import { SkillsPanel } from '../skills/SkillsPanel';
+
+// --------------- Types ---------------
 
 export interface ChatSession {
   id: string;
@@ -18,6 +23,16 @@ export interface ChatMessage {
   time: string;
 }
 
+interface ThreadSummary {
+  id: string;
+  name: string;
+  status: string;
+  mode: string;
+  branch: string;
+  projectName: string;
+  updatedAt: number;
+}
+
 type StreamState = {
   requestId: string;
   sessionId: string;
@@ -29,16 +44,44 @@ type TaskStreamState = {
   assistantMessageId: string;
 } | null;
 
+// --------------- Component ---------------
+
 export function MainLayout() {
+  // ---- Existing state ----
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const [streamState, setStreamState] = useState<StreamState>(null);
   const [taskStreamState, setTaskStreamState] = useState<TaskStreamState>(null);
   const [pendingPlan, setPendingPlan] = useState<{ taskId: string; content: string } | null>(null);
+
+  // ---- Thread state (Phase 1 multi-agent) ----
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [creatingThread, setCreatingThread] = useState(false);
+
+  // ---- Init ----
+
+  useEffect(() => {
+    refreshSessions();
+    refreshThreads();
+    // Update skill scan paths when workspace changes
+    if (workspacePath) {
+      window.electronAPI?.skill?.setProjectPaths(workspacePath, workspacePath);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspacePath]);
+
+  useEffect(() => {
+    refreshSessions();
+    refreshThreads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refreshSessions = useCallback(async () => {
     const data = await window.electronAPI?.invoke('chat:get-sessions');
@@ -46,6 +89,25 @@ export function MainLayout() {
       setSessions(data);
     }
   }, []);
+
+  const refreshThreads = useCallback(async () => {
+    const data = await window.electronAPI?.thread?.list();
+    if (Array.isArray(data)) {
+      setThreads(data);
+    }
+  }, []);
+
+  // Listen for thread events pushed from main process
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.thread?.onEvent?.((_thread: any) => {
+      void refreshThreads();
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [refreshThreads]);
+
+  // ---- Stream event handling (same as original) ----
 
   useEffect(() => {
     const unsubscribe = window.electronAPI?.chat?.onStreamEvent?.((event: any) => {
@@ -167,6 +229,8 @@ export function MainLayout() {
     };
   }, []);
 
+  // ---- Session handlers (existing) ----
+
   const handleSelectSession = useCallback(async (id: string) => {
     setActiveSessionId(id);
     const session = await window.electronAPI?.invoke('chat:get-session', id);
@@ -184,6 +248,76 @@ export function MainLayout() {
       void refreshSessions();
     }
   }, [refreshSessions]);
+
+  // ---- Thread handlers (Phase 1 new) ----
+
+  const handleCreateThread = useCallback(async () => {
+    if (creatingThread) return;
+    if (!workspacePath) {
+      // If no workspace selected, prompt user to select one first
+      alert('请先选择一个工作区目录');
+      return;
+    }
+
+    setCreatingThread(true);
+    try {
+      const name = `thread-${Date.now() % 100000}`;
+      const thread = await window.electronAPI?.thread?.create({
+        name,
+        projectPath: workspacePath,
+        mode: 'worktree',
+      });
+      if (thread?.id) {
+        setActiveThreadId(thread.id);
+        // Create a backend session for the thread
+        const session = await window.electronAPI?.invoke('chat:create-session', thread.branch);
+        if (session) {
+          setSessions(prev => [session, ...prev]);
+          setActiveSessionId(session.id);
+          setMessages([]);
+        }
+        void refreshThreads();
+      }
+    } catch (err) {
+      console.error('[main-layout] failed to create thread:', err);
+    } finally {
+      setCreatingThread(false);
+    }
+  }, [workspacePath, creatingThread, refreshThreads]);
+
+  const handleSwitchThread = useCallback(async (id: string) => {
+    setActiveThreadId(id);
+    await window.electronAPI?.thread?.switch(id);
+
+    // Update workspace to match the thread's project
+    const threadDetail = await window.electronAPI?.thread?.get(id);
+    if (threadDetail?.projectPath) {
+      setWorkspacePath(threadDetail.projectPath);
+    }
+    if (threadDetail?.backendSession?.id) {
+      const session = await window.electronAPI?.invoke('chat:get-session', threadDetail.backendSession.id);
+      if (session) {
+        setActiveSessionId(session.id);
+        setMessages(session.messages || []);
+      } else {
+        setActiveSessionId(null);
+        setMessages([]);
+      }
+    }
+    void refreshSessions();
+  }, []);
+
+  const handleCloseThread = useCallback(async (id: string) => {
+    await window.electronAPI?.thread?.remove(id);
+    if (activeThreadId === id) {
+      setActiveThreadId(null);
+      setActiveSessionId(null);
+      setMessages([]);
+    }
+    void refreshThreads();
+  }, [activeThreadId, refreshThreads]);
+
+  // ---- Chat handlers (existing, unchanged) ----
 
   const handleSendMessage = useCallback(async (text: string) => {
     if (!text.trim() || streamState || taskStreamState) return;
@@ -293,10 +427,42 @@ export function MainLayout() {
     setPendingPlan(null);
   }, [pendingPlan]);
 
+  // ---- Render ----
+
   return (
     <div className="main-layout">
-      {/* Left: Session List */}
+      {/* Left: Session List + Thread list */}
       <aside className="main-layout__sidebar">
+        {/* Threads section */}
+        <div className="sidebar-section">
+          <div className="sidebar-section__header">
+            <span className="sidebar-section__title">线程</span>
+            <button
+              className="sidebar-section__action"
+              onClick={() => void handleCreateThread()}
+              disabled={creatingThread}
+              title="新建线程"
+            >
+              + {creatingThread ? '...' : ''}
+            </button>
+          </div>
+          {threads.length === 0 && (
+            <div className="sidebar-section__empty">暂无线程</div>
+          )}
+          {threads.map(t => (
+            <div
+              key={t.id}
+              className={`sidebar-item${t.id === activeThreadId ? ' sidebar-item--active' : ''}`}
+              onClick={() => void handleSwitchThread(t.id)}
+            >
+              <span className="sidebar-item__dot" data-status={t.status} />
+              <span className="sidebar-item__name">{t.name}</span>
+              <span className="sidebar-item__branch">{t.branch}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Sessions (existing, below threads) */}
         <SessionList
           sessions={sessions}
           setSessions={setSessions}
@@ -306,7 +472,7 @@ export function MainLayout() {
         />
       </aside>
 
-      {/* Center: Chat Area */}
+      {/* Center: Chat Area + Terminal Tabs */}
       <main className="main-layout__chat">
         <ChatArea
           messages={messages}
@@ -318,20 +484,58 @@ export function MainLayout() {
           selectedFiles={selectedFiles}
           taskRunning={Boolean(taskStreamState)}
         />
+
+        {/* Bottom terminal tabs bar */}
+        <ThreadTabs
+          threads={threads}
+          activeThreadId={activeThreadId}
+          terminalOpen={terminalOpen}
+          onSwitchThread={handleSwitchThread}
+          onCloseThread={handleCloseThread}
+          onToggleTerminal={() => setTerminalOpen(v => !v)}
+        />
       </main>
 
-      {/* Right: Context Panel */}
+      {/* Right: Review / Skills toggle buttons */}
+      <div className="review-toggle-bar">
+        <button
+          className={`review-toggle-bar__btn${reviewOpen ? ' active' : ''}`}
+          onClick={() => { setReviewOpen(v => !v); setSkillsOpen(false); }}
+          title="切换审查面板"
+          disabled={!workspacePath}
+        >
+          {reviewOpen ? '✕ 审查' : '审查'}
+        </button>
+        <button
+          className={`review-toggle-bar__btn${skillsOpen ? ' active' : ''}`}
+          onClick={() => { setSkillsOpen(v => !v); setReviewOpen(false); }}
+          title="切换技能面板"
+        >
+          {skillsOpen ? '✕ 技能' : '技能'}
+        </button>
+      </div>
+
+      {/* Right: Review Panel / Skills Panel / Context Panel */}
       <aside className="main-layout__context">
-        <ContextPanel
-          workspacePath={workspacePath}
-          onSelectWorkspace={setWorkspacePath}
-          selectedFiles={selectedFiles}
-          onToggleFile={(path) => {
-            setSelectedFiles(prev =>
-              prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
-            );
-          }}
-        />
+        {reviewOpen && workspacePath ? (
+          <ReviewPanel
+            projectPath={workspacePath}
+            onClose={() => setReviewOpen(false)}
+          />
+        ) : skillsOpen ? (
+          <SkillsPanel onClose={() => setSkillsOpen(false)} />
+        ) : (
+          <ContextPanel
+            workspacePath={workspacePath}
+            onSelectWorkspace={setWorkspacePath}
+            selectedFiles={selectedFiles}
+            onToggleFile={(path) => {
+              setSelectedFiles(prev =>
+                prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+              );
+            }}
+          />
+        )}
       </aside>
 
       {pendingPlan ? (

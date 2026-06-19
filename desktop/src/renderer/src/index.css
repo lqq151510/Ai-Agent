@@ -633,3 +633,250 @@ html, body, #root {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #666; }
+
+/* ==============================================================
+   Phase 1 — Thread Tabs (bottom terminal bar)
+   ============================================================== */
+
+.main-layout__chat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 32px;
+  background: var(--color-bg-secondary);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+.thread-tabs__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 100%;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.thread-tabs__toggle:hover { background: var(--color-bg-hover); color: var(--color-text); }
+.thread-tabs__toggle.active { color: var(--color-accent); }
+
+.thread-tabs__list {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.thread-tabs__list::-webkit-scrollbar { display: none; }
+
+.thread-tabs__empty {
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.thread-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-right: 1px solid var(--color-border);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.1s;
+}
+.thread-tab:hover { background: var(--color-bg-hover); color: var(--color-text); }
+.thread-tab--active {
+  background: var(--color-bg-active);
+  color: var(--color-text);
+  border-bottom: 2px solid var(--color-accent);
+}
+
+.thread-tab__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  flex-shrink: 0;
+}
+.thread-tab__status-dot[data-status="running"] { background: #22c55e; }
+.thread-tab__status-dot[data-status="blocked"] { background: #f59e0b; }
+.thread-tab__status-dot[data-status="error"] { background: var(--color-error); }
+.thread-tab__status-dot[data-status="done"] { background: #6366f1; }
+
+.thread-tab__name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-tab__branch {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-tab__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 3px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.thread-tab:hover .thread-tab__close { opacity: 1; }
+.thread-tab__close:hover { background: rgba(255,255,255,0.1); color: var(--color-error); }
+
+.thread-tabs__spacer { flex: 1; }
+
+.thread-tabs__meta {
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+/* ==============================================================
+   Phase 1 — Thread sidebar items
+   ============================================================== */
+
+.sidebar-section { margin-bottom: 8px; }
+
+.sidebar-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+}
+
+.sidebar-section__title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.sidebar-section__action {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  padding: 1px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.1s;
+}
+.sidebar-section__action:hover { background: var(--color-bg-hover); color: var(--color-text); }
+.sidebar-section__action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.sidebar-section__empty {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  transition: background 0.1s;
+}
+.sidebar-item:hover { background: var(--color-bg-hover); color: var(--color-text); }
+.sidebar-item--active { background: var(--color-bg-active); color: var(--color-text); }
+
+.sidebar-item__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  flex-shrink: 0;
+}
+.sidebar-item__dot[data-status="running"] { background: #22c55e; }
+.sidebar-item__dot[data-status="blocked"] { background: #f59e0b; }
+.sidebar-item__dot[data-status="error"] { background: var(--color-error); }
+
+.sidebar-item__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-item__branch {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  opacity: 0.5;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==============================================================
+   Phase 2 — Review toggle bar
+   ============================================================== */
+
+.review-toggle-bar {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+.review-toggle-bar__btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  background: var(--color-bg-hover);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.1s;
+  white-space: nowrap;
+}
+.review-toggle-bar__btn:hover { background: var(--color-bg-active); color: var(--color-text); }
+.review-toggle-bar__btn.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+.review-toggle-bar__btn:disabled { opacity: 0.4; cursor: not-allowed; }

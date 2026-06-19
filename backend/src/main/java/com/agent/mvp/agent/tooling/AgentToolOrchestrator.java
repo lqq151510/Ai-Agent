@@ -59,8 +59,20 @@ public class AgentToolOrchestrator {
                 new ToolSpec(
                         "analyzePom",
                         "Summarize pom.xml dependencies and artifact info.",
-                        schema(List.of(), "path", type("string")))));
-        
+                        schema(List.of(), "path", type("string"))),
+                new ToolSpec(
+                        "runSkill",
+                        "Execute a skill by name. Skills are reusable instruction bundles "
+                            + "stored in .agents/skills/<name>/SKILL.md or "
+                            + "~/.codex/skills/<name>/SKILL.md. Returns the skill instructions "
+                            + "which the model should follow.",
+                        schema(
+                                List.of("name"),
+                                "name",
+                                type("string"),
+                                "params",
+                                type("string")))));
+
         // Progressive Disclosure: Dynamic Skill Loading
         specs.addAll(scanDynamicSkills());
         return specs;
@@ -176,6 +188,11 @@ public class AgentToolOrchestrator {
                                     fallback(text(args, "path"), "."), integer(args, "depth", 3));
                     case "analyzePom" ->
                             codeToolService.analyzePom(fallback(text(args, "path"), "pom.xml"));
+                    case "runSkill" ->
+                            executeDynamicSkill(
+                                    text(args, "name"),
+                                    text(args, "params"),
+                                    argsJson(args));
                     default ->
                             executeDynamicSkill(name, argsJson(args));
                 };
@@ -205,24 +222,62 @@ public class AgentToolOrchestrator {
         return args == null ? "{}" : args.toString();
     }
 
-    private CodeToolService.ToolCallOutput executeDynamicSkill(String name, String argsJson) {
-        long start = System.currentTimeMillis();
-        java.io.File skillsDir = new java.io.File(".agents/skills");
-        if (!skillsDir.exists() || !skillsDir.isDirectory()) {
-            skillsDir = new java.io.File(".Codex/skills");
+    private java.io.File resolveSkillDir(String name) {
+        // Try multiple locations in priority order
+        String[] basePaths = {
+            ".agents/skills",
+            ".Codex/skills",
+            System.getProperty("user.home") + "/.codex/skills",
+        };
+        for (String basePath : basePaths) {
+            java.io.File dir = new java.io.File(basePath, name);
+            if (dir.isDirectory() && new java.io.File(dir, "SKILL.md").exists()) {
+                return dir;
+            }
         }
-        java.io.File skillDir = new java.io.File(skillsDir, name);
-        java.io.File skillMd = new java.io.File(skillDir, "SKILL.md");
+        return null;
+    }
 
-        if (skillMd.exists()) {
+    private CodeToolService.ToolCallOutput executeDynamicSkill(String name, String argsJson) {
+        return executeDynamicSkill(name, null, argsJson);
+    }
+
+    private CodeToolService.ToolCallOutput executeDynamicSkill(
+            String name, String params, String argsJson) {
+        long start = System.currentTimeMillis();
+        java.io.File skillDir = resolveSkillDir(name);
+
+        if (skillDir != null) {
             try {
+                java.io.File skillMd = new java.io.File(skillDir, "SKILL.md");
                 String content = java.nio.file.Files.readString(skillMd.toPath());
+                StringBuilder result = new StringBuilder();
+                result.append("SKILL.md loaded successfully.\n\n");
+                result.append(content).append("\n\n");
+
+                // Include params if provided
+                if (params != null && !params.isBlank()) {
+                    result.append("---\nSkill parameters: ").append(params).append("\n");
+                }
+
+                // Check for scripts directory
+                java.io.File scriptsDir = new java.io.File(skillDir, "scripts");
+                if (scriptsDir.isDirectory()) {
+                    result.append("Available scripts:\n");
+                    java.io.File[] scripts = scriptsDir.listFiles();
+                    if (scripts != null) {
+                        for (java.io.File script : scripts) {
+                            result.append("  - ").append(script.getName()).append("\n");
+                        }
+                    }
+                }
+
                 return new CodeToolService.ToolCallOutput(
                         name,
                         argsJson,
                         "SUCCESS",
                         System.currentTimeMillis() - start,
-                        "PROGRESSIVE DISCLOSURE (Read SKILL.md successfully):\n\n" + content);
+                        result.toString());
             } catch (Exception ex) {
                 return new CodeToolService.ToolCallOutput(
                         name,
@@ -238,7 +293,8 @@ public class AgentToolOrchestrator {
                 argsJson,
                 "ERROR",
                 System.currentTimeMillis() - start,
-                "Unknown tool or skill not found: " + name);
+                "Unknown tool or skill not found: " + name
+                    + ". Available skills can be discovered via the 'runSkill' tool.");
     }
 
     private String text(JsonNode node, String field) {

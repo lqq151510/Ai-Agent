@@ -3,12 +3,16 @@ import { BackendManager } from './backend-manager';
 import { CliManager } from './cli-manager';
 import { WindowManager } from './window-manager';
 import { TrayManager } from './tray-manager';
-import { PtyManager } from './pty-manager';
+import { PtyPool } from './pty-pool';
 import { IpcRegistry } from './ipc-registry';
 import { WorkspaceManager } from './workspace-manager';
 import { GitManager } from './git-manager';
 import { ChatManager } from './chat-manager';
 import { LocalServiceManager } from './local-service-manager';
+import { ThreadManager } from './thread-manager';
+import { ToolExecutionBridge } from './tool-execution-bridge';
+import { ApprovalEngine } from './approval-engine';
+import { SkillManager } from './skill-manager';
 import { findFreePort } from './utils/network';
 import { getDataDir, getJrePath, getBackendJarPath, getBackendStartupTimeoutMs } from './utils/env';
 
@@ -28,12 +32,16 @@ let backendManager: BackendManager;
 let cliManager: CliManager;
 let windowManager: WindowManager;
 let trayManager: TrayManager;
-let ptyManager: PtyManager;
+let ptyPool: PtyPool;
 let ipcRegistry: IpcRegistry;
 let workspaceManager: WorkspaceManager;
 let gitManager: GitManager;
 let chatManager: ChatManager;
 let localServiceManager: LocalServiceManager;
+let threadManager: ThreadManager;
+let toolBridge: ToolExecutionBridge;
+let approvalEngine: ApprovalEngine;
+let skillManager: SkillManager;
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -52,12 +60,12 @@ app.on('before-quit', async (event) => {
     if (cliManager) {
       cliManager.killAll();
     }
-    if (ptyManager) ptyManager.kill();
+    if (ptyPool) ptyPool.killAll();
     if (localServiceManager) localServiceManager.stop();
     app.exit(0);
   } else if (cliManager) {
     cliManager.killAll();
-    if (ptyManager) ptyManager.kill();
+    if (ptyPool) ptyPool.killAll();
     if (localServiceManager) localServiceManager.stop();
   }
 });
@@ -101,18 +109,35 @@ if (!gotTheLock) {
         startupTimeoutMs: getBackendStartupTimeoutMs(),
       });
       cliManager = new CliManager();
-      ptyManager = new PtyManager();
+      ptyPool = new PtyPool();
       windowManager = new WindowManager();
       workspaceManager = new WorkspaceManager();
       gitManager = new GitManager();
       chatManager = new ChatManager();
       localServiceManager = new LocalServiceManager();
+      threadManager = new ThreadManager(ptyPool, gitManager);
+      approvalEngine = new ApprovalEngine();
+      skillManager = new SkillManager();
+      toolBridge = new ToolExecutionBridge(
+        ptyPool,
+        approvalEngine,
+        () => localServiceManager.isReady() ? localServiceManager.getPort() : 8765,
+        () => activePort,
+        () => '', // auth token resolved per-request by IpcRegistry
+        () => 'auto-edit', // default approval mode
+      );
+
       trayManager = new TrayManager(windowManager, backendManager);
       ipcRegistry = new IpcRegistry(
-        backendManager, cliManager, ptyManager,
+        backendManager, cliManager, ptyPool,
         workspaceManager, gitManager, chatManager,
         localServiceManager,
         () => activePort,
+        threadManager,
+        toolBridge,
+        approvalEngine,
+        () => windowManager.mainWindow,
+        skillManager,
       );
 
       ipcRegistry.setupIpc();
@@ -124,6 +149,14 @@ if (!gotTheLock) {
         const win = windowManager.mainWindow;
         if (win && !win.isDestroyed()) {
           win.webContents.send('backend:status-changed', status);
+        }
+      });
+
+      // Push thread events to renderer when they change
+      threadManager.onThreadEvent((thread) => {
+        const win = windowManager.mainWindow;
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('thread:event', thread);
         }
       });
 

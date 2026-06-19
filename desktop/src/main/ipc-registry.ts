@@ -1,14 +1,18 @@
-import { app, ipcMain, shell } from 'electron';
+import { app, ipcMain, shell, BrowserWindow } from 'electron';
 import { randomBytes, randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { BackendManager } from './backend-manager';
 import { CliManager } from './cli-manager';
-import { PtyManager } from './pty-manager';
+import { PtyPool } from './pty-pool';
 import { WorkspaceManager } from './workspace-manager';
 import { GitManager } from './git-manager';
 import { ChatManager } from './chat-manager';
 import { LocalServiceManager } from './local-service-manager';
+import { ThreadManager } from './thread-manager';
+import { ToolExecutionBridge } from './tool-execution-bridge';
+import { ApprovalEngine } from './approval-engine';
+import { SkillManager } from './skill-manager';
 import { getDataDir, getCliEntryPath } from './utils/env';
 
 export class IpcRegistry {
@@ -17,12 +21,17 @@ export class IpcRegistry {
   constructor(
     private backendManager: BackendManager,
     private cliManager: CliManager,
-    private ptyManager: PtyManager,
+    private ptyPool: PtyPool,
     private workspaceManager: WorkspaceManager,
     private gitManager: GitManager,
     private chatManager: ChatManager,
     private localServiceManager: LocalServiceManager,
-    private getActivePort: () => number
+    private getActivePort: () => number,
+    private threadManager: ThreadManager,
+    private toolBridge: ToolExecutionBridge,
+    private approvalEngine: ApprovalEngine,
+    private mainWindowGetter: () => BrowserWindow | null,
+    private skillManager: SkillManager,
   ) {}
 
   public setupIpc() {
@@ -73,21 +82,31 @@ export class IpcRegistry {
     ipcMain.handle('chat:append-message', (_event, id, msg) => this.chatManager.appendMessage(id, msg));
     ipcMain.handle('chat:summarize-title', (_event, id, text) => this.chatManager.summarizeTitle(id, text));
 
-    // Terminal PTY Handlers
+    // Terminal PTY Handlers (single terminal for backward compat)
+    let legacyTerminalId: string | null = null;
     ipcMain.handle('terminal:spawn', (event, cwd?: string) => {
-      this.ptyManager.spawn(cwd);
-      this.ptyManager.onData((data) => {
+      const thread = this.threadManager.getActiveThread();
+      const threadId = thread?.id ?? '__legacy__';
+      const terminalCwd = cwd || thread?.worktreePath || thread?.projectPath || process.cwd();
+      const termId = this.ptyPool.spawn(threadId, terminalCwd, 'default');
+      legacyTerminalId = termId;
+
+      this.ptyPool.onData(termId, (data) => {
         event.sender.send('terminal:incomingData', data);
       });
-      return { ok: true };
+      return { ok: true, terminalId: termId };
     });
 
     ipcMain.on('terminal:keystroke', (_event, data: string) => {
-      this.ptyManager.write(data);
+      if (legacyTerminalId) {
+        this.ptyPool.write(legacyTerminalId, data);
+      }
     });
 
     ipcMain.on('terminal:resize', (_event, cols: number, rows: number) => {
-      this.ptyManager.resize(cols, rows);
+      if (legacyTerminalId) {
+        this.ptyPool.resize(legacyTerminalId, cols, rows);
+      }
     });
 
     // Local Service Handlers
@@ -206,6 +225,203 @@ export class IpcRegistry {
       });
 
       return { ok: true, requestId, sessionId: resolvedSessionId, isNewSession };
+    });
+
+    // ================================================================
+    // Thread Handlers (Phase 1 — multi-agent thread management)
+    // ================================================================
+
+    ipcMain.handle('thread:create', async (_event, opts: {
+      name: string;
+      projectPath: string;
+      mode?: 'local' | 'worktree';
+    }) => {
+      const thread = await this.threadManager.createThread({
+        name: opts.name,
+        projectPath: opts.projectPath,
+        mode: opts.mode,
+      });
+      return thread;
+    });
+
+    ipcMain.handle('thread:list', () => {
+      return this.threadManager.listThreadSummaries();
+    });
+
+    ipcMain.handle('thread:get', (_event, id: string) => {
+      return this.threadManager.getThread(id) ?? null;
+    });
+
+    ipcMain.handle('thread:switch', (_event, id: string) => {
+      return this.threadManager.switchThread(id);
+    });
+
+    ipcMain.handle('thread:remove', async (_event, id: string) => {
+      await this.threadManager.removeThread(id);
+      return { ok: true };
+    });
+
+    ipcMain.handle('thread:rename', (_event, id: string, name: string) => {
+      this.threadManager.renameThread(id, name);
+      return { ok: true };
+    });
+
+    ipcMain.handle('thread:set-status', (_event, id: string, status: import('./thread-manager').ThreadStatus) => {
+      this.threadManager.setThreadStatus(id, status);
+      return { ok: true };
+    });
+
+    // ================================================================
+    // Tool Approval Handlers (Phase 1 — agent tool execution bridge)
+    // ================================================================
+
+    ipcMain.handle('tool:approve', async (_event, payload: {
+      toolCallId: string;
+      toolName: string;
+      arguments: Record<string, unknown>;
+      threadId: string;
+    }) => {
+      const { toolCallId, toolName, arguments: args, threadId } = payload;
+      const result = await this.toolBridge.executeApproved(
+        { toolCallId, toolName, arguments: args },
+        threadId,
+      );
+      return result;
+    });
+
+    ipcMain.handle('tool:reject', async (_event, payload: {
+      toolCallId: string;
+    }) => {
+      const port = this.getActivePort();
+      const token = await this.ensureDesktopAccessToken();
+      await fetch(`http://127.0.0.1:${port}/api/v1/agent/chat/tool_result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          toolCallId: payload.toolCallId,
+          output: '[Tool execution rejected by user]',
+          status: 'rejected',
+        }),
+      });
+      return { ok: true };
+    });
+
+    // ================================================================
+    // Approval Engine Handlers
+    // ================================================================
+
+    ipcMain.handle('approval:get-policy', () => {
+      return this.approvalEngine.getPolicy();
+    });
+
+    ipcMain.handle('approval:set-mode', (_event, mode: import('./approval-engine').ApprovalMode) => {
+      // The mode is read from the bridge's currentMode callback at execution time;
+      // we store it in a shared location. For now, the mode is controlled via
+      // the thread's active context. We expose it for the UI to update.
+      return { ok: true };
+    });
+
+    // ================================================================
+    // Terminal Pool Handlers (thread-aware terminal switching)
+    // ================================================================
+
+    ipcMain.handle('terminal:spawn-for-thread', (event, payload: {
+      threadId: string;
+      cwd: string;
+    }) => {
+      const termId = this.ptyPool.spawn(payload.threadId, payload.cwd, payload.threadId);
+      this.ptyPool.onData(termId, (data) => {
+        event.sender.send('terminal:incomingData', data);
+      });
+      return { terminalId: termId };
+    });
+
+    ipcMain.handle('terminal:list', () => {
+      return this.ptyPool.list().map(t => ({ id: t.id, threadId: t.threadId, cwd: t.cwd, label: t.label }));
+    });
+
+    ipcMain.handle('terminal:write', (_event, payload: {
+      terminalId: string;
+      data: string;
+    }) => {
+      this.ptyPool.write(payload.terminalId, payload.data);
+      return { ok: true };
+    });
+
+    // ================================================================
+    // Review Panel Handlers (Phase 2 — diff review)
+    // ================================================================
+
+    ipcMain.handle('review:get-diff', async (_event, projectPath: string) => {
+      return this.gitManager.getStructuredDiff(projectPath);
+    });
+
+    ipcMain.handle('review:stage-file', async (_event, projectPath: string, file: string) => {
+      return this.gitManager.stageFile(projectPath, file);
+    });
+
+    ipcMain.handle('review:revert-file', async (_event, projectPath: string, file: string) => {
+      return this.gitManager.revertFile(projectPath, file);
+    });
+
+    ipcMain.handle('review:stage-hunk', async (_event, projectPath: string, file: string, hunkIndex: number) => {
+      return this.gitManager.stageHunk(projectPath, file, hunkIndex);
+    });
+
+    ipcMain.handle('review:revert-hunk', async (_event, projectPath: string, file: string, hunkIndex: number) => {
+      return this.gitManager.revertHunk(projectPath, file, hunkIndex);
+    });
+
+    ipcMain.handle('review:commit', async (_event, projectPath: string, message: string) => {
+      return this.gitManager.commit(projectPath, message);
+    });
+
+    ipcMain.handle('review:push', async (_event, projectPath: string) => {
+      return this.gitManager.push(projectPath);
+    });
+
+    ipcMain.handle('review:create-pr', async (_event, projectPath: string, options: { title: string; body?: string; base?: string }) => {
+      return this.gitManager.createPullRequest(projectPath, options);
+    });
+
+    // ================================================================
+    // Skill Handlers (Phase 2 Track B — Skills system)
+    // ================================================================
+
+    ipcMain.handle('skill:discover', () => {
+      this.skillManager.discoverSkills();
+      return { ok: true };
+    });
+
+    ipcMain.handle('skill:list', () => {
+      return this.skillManager.listSkills();
+    });
+
+    ipcMain.handle('skill:get', (_event, name: string) => {
+      const skill = this.skillManager.getSkill(name);
+      if (!skill) return null;
+      // Return without the full instructions body (send via skill:read)
+      const { instructions: _i, ...rest } = skill;
+      return rest;
+    });
+
+    ipcMain.handle('skill:read', (_event, name: string) => {
+      return this.skillManager.readSkill(name) ?? null;
+    });
+
+    ipcMain.handle('skill:install', (_event, sourcePath: string, targetName?: string) => {
+      const skill = this.skillManager.installSkill(sourcePath, targetName);
+      return skill ?? null;
+    });
+
+    ipcMain.handle('skill:refresh', () => {
+      this.skillManager.refresh();
+      return { ok: true };
+    });
+
+    ipcMain.handle('skill:set-project-paths', (_event, projectPath?: string, workspacePath?: string) => {
+      this.skillManager.setProjectScanPaths(projectPath, workspacePath);
+      return { ok: true };
     });
   }
 

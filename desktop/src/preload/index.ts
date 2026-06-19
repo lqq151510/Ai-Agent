@@ -89,5 +89,84 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('terminal:incomingData', listener);
       return () => ipcRenderer.removeListener('terminal:incomingData', listener);
     }
-  }
+  },
+
+  // ================================================================
+  // Thread API (Phase 1 — multi-agent thread management)
+  // ================================================================
+  thread: {
+    create: (opts: { name: string; projectPath: string; mode?: 'local' | 'worktree' }) =>
+      ipcRenderer.invoke('thread:create', opts),
+    list: () => ipcRenderer.invoke('thread:list'),
+    get: (id: string) => ipcRenderer.invoke('thread:get', id),
+    switch: (id: string) => ipcRenderer.invoke('thread:switch', id),
+    remove: (id: string) => ipcRenderer.invoke('thread:remove', id),
+    rename: (id: string, name: string) => ipcRenderer.invoke('thread:rename', id, name),
+    setStatus: (id: string, status: string) => ipcRenderer.invoke('thread:set-status', id, status),
+    onEvent: (callback: (thread: any) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
+      ipcRenderer.on('thread:event', listener);
+      return () => ipcRenderer.removeListener('thread:event', listener);
+    }
+  },
+
+  // ================================================================
+  // Tool Approval API (Phase 1 — agent tool execution bridge)
+  // ================================================================
+  tool: {
+    approve: (payload: { toolCallId: string; toolName: string; arguments: Record<string, unknown>; threadId: string }) =>
+      ipcRenderer.invoke('tool:approve', payload),
+    reject: (payload: { toolCallId: string }) =>
+      ipcRenderer.invoke('tool:reject', payload),
+  },
+
+  // ================================================================
+  // Approval Policy API
+  // ================================================================
+  approval: {
+    getPolicy: () => ipcRenderer.invoke('approval:get-policy'),
+    setMode: (mode: string) => ipcRenderer.invoke('approval:set-mode', mode),
+  },
+
+  // ================================================================
+  // Thread-aware Terminal Pool API
+  // ================================================================
+  terminalPool: {
+    spawnForThread: (payload: { threadId: string; cwd: string }) =>
+      ipcRenderer.invoke('terminal:spawn-for-thread', payload),
+    list: () => ipcRenderer.invoke('terminal:list'),
+    write: (payload: { terminalId: string; data: string }) =>
+      ipcRenderer.invoke('terminal:write', payload),
+  },
+
+  // ================================================================
+  // Review API (Phase 2 — diff review panel)
+  // ================================================================
+  review: {
+    getDiff: (projectPath: string) => ipcRenderer.invoke('review:get-diff', projectPath),
+    stageFile: (projectPath: string, file: string) => ipcRenderer.invoke('review:stage-file', projectPath, file),
+    revertFile: (projectPath: string, file: string) => ipcRenderer.invoke('review:revert-file', projectPath, file),
+    stageHunk: (projectPath: string, file: string, hunkIndex: number) =>
+      ipcRenderer.invoke('review:stage-hunk', projectPath, file, hunkIndex),
+    revertHunk: (projectPath: string, file: string, hunkIndex: number) =>
+      ipcRenderer.invoke('review:revert-hunk', projectPath, file, hunkIndex),
+    commit: (projectPath: string, message: string) => ipcRenderer.invoke('review:commit', projectPath, message),
+    push: (projectPath: string) => ipcRenderer.invoke('review:push', projectPath),
+    createPr: (projectPath: string, options: { title: string; body?: string; base?: string }) =>
+      ipcRenderer.invoke('review:create-pr', projectPath, options),
+  },
+
+  // ================================================================
+  // Skills API (Phase 2 Track B)
+  // ================================================================
+  skill: {
+    discover: () => ipcRenderer.invoke('skill:discover'),
+    list: () => ipcRenderer.invoke('skill:list'),
+    get: (name: string) => ipcRenderer.invoke('skill:get', name),
+    read: (name: string) => ipcRenderer.invoke('skill:read', name),
+    install: (sourcePath: string, targetName?: string) => ipcRenderer.invoke('skill:install', sourcePath, targetName),
+    refresh: () => ipcRenderer.invoke('skill:refresh'),
+    setProjectPaths: (projectPath?: string, workspacePath?: string) =>
+      ipcRenderer.invoke('skill:set-project-paths', projectPath, workspacePath),
+  },
 });
