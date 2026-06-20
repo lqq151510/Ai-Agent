@@ -123,7 +123,7 @@ public class ScaffoldTemplateRegistry {
     <artifactId>%s</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
     </properties>
     <dependencies>
         <dependency>

@@ -1,0 +1,175 @@
+<style>
+  .preview-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .preview-card {
+    border: 1px solid #d9e1ea;
+    border-radius: 18px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(18, 28, 45, 0.08);
+  }
+  .preview-stage {
+    padding: 14px;
+  }
+  .preview-shell {
+    height: 300px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    position: relative;
+    background:
+      radial-gradient(circle at top left, rgba(148, 163, 184, 0.12), transparent 34%),
+      linear-gradient(180deg, #f9fbfd 0%, #eef3f8 100%);
+  }
+  .preview-sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 34%;
+    padding: 12px;
+    border-right: 1px solid rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .preview-main {
+    position: absolute;
+    inset: 0 0 0 34%;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .preview-panel {
+    border-radius: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.9);
+  }
+  .preview-line {
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.16);
+  }
+  .preview-line--wide {
+    width: 74%;
+  }
+  .preview-line--mid {
+    width: 58%;
+  }
+  .preview-line--small {
+    width: 42%;
+  }
+  .preview-chat {
+    height: 54px;
+    border-radius: 12px;
+    background: rgba(59, 130, 246, 0.09);
+  }
+  .preview-input {
+    margin-top: auto;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.96);
+  }
+  .preview-card-body {
+    padding: 14px 16px 16px;
+    border-top: 1px solid #eef2f6;
+  }
+  .preview-card-body h3 {
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  .preview-card-body p {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #516074;
+  }
+  .preview-note {
+    margin-top: 10px;
+    font-size: 11px;
+    color: #6b7788;
+  }
+</style>
+
+<h2>左侧工作区透明度要到哪一档？</h2>
+<p class="subtitle">目标是白底为主，但左侧会话/工作区栏不要像一整块实心面板，和中间聊天区拉开一点空气感。</p>
+
+<div class="preview-grid">
+  <div class="card preview-card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="preview-stage">
+      <div class="preview-shell">
+        <div class="preview-sidebar" style="background: rgba(255,255,255,0.92);">
+          <div class="preview-line preview-line--wide"></div>
+          <div class="preview-line"></div>
+          <div class="preview-line preview-line--mid"></div>
+          <div class="preview-panel" style="height: 28px;"></div>
+          <div class="preview-panel" style="height: 44px;"></div>
+        </div>
+        <div class="preview-main">
+          <div class="preview-panel" style="height: 18px; width: 44%;"></div>
+          <div class="preview-chat"></div>
+          <div class="preview-chat" style="margin-left: auto; width: 78%; background: rgba(59,130,246,0.12);"></div>
+          <div class="preview-panel preview-input"></div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-card-body">
+      <h3>A. 轻微通透</h3>
+      <p>几乎还是白色侧栏，只给一点柔和的透明感。最稳，不影响工作区的完整感。</p>
+    </div>
+  </div>
+
+  <div class="card preview-card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="preview-stage">
+      <div class="preview-shell">
+        <div class="preview-sidebar" style="background: rgba(255,255,255,0.82);">
+          <div class="preview-line preview-line--wide"></div>
+          <div class="preview-line"></div>
+          <div class="preview-line preview-line--mid"></div>
+          <div class="preview-panel" style="height: 28px;"></div>
+          <div class="preview-panel" style="height: 44px;"></div>
+        </div>
+        <div class="preview-main">
+          <div class="preview-panel" style="height: 18px; width: 44%;"></div>
+          <div class="preview-chat"></div>
+          <div class="preview-chat" style="margin-left: auto; width: 78%; background: rgba(59,130,246,0.12);"></div>
+          <div class="preview-panel preview-input"></div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-card-body">
+      <h3>B. 推荐</h3>
+      <p>侧栏有明显一点的通透感，但边界仍然清楚。白色主视觉还在，空间感更强。</p>
+    </div>
+  </div>
+
+  <div class="card preview-card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="preview-stage">
+      <div class="preview-shell">
+        <div class="preview-sidebar" style="background: rgba(255,255,255,0.72);">
+          <div class="preview-line preview-line--wide"></div>
+          <div class="preview-line"></div>
+          <div class="preview-line preview-line--mid"></div>
+          <div class="preview-panel" style="height: 28px;"></div>
+          <div class="preview-panel" style="height: 44px;"></div>
+        </div>
+        <div class="preview-main">
+          <div class="preview-panel" style="height: 18px; width: 44%;"></div>
+          <div class="preview-chat"></div>
+          <div class="preview-chat" style="margin-left: auto; width: 78%; background: rgba(59,130,246,0.12);"></div>
+          <div class="preview-panel preview-input"></div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-card-body">
+      <h3>C. 更明显的玻璃感</h3>
+      <p>通透最强，视觉最轻，但侧栏会更弱一些。适合想要更强“层次感”的版本。</p>
+    </div>
+  </div>
+</div>
+
+<p class="preview-note">你直接回复 `A`、`B` 或 `C` 就行。若你不想再细分，我会按 `B` 这种“轻通透”去收口整个左侧工作区。</p>

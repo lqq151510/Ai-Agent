@@ -1,0 +1,40 @@
+
+The following files have been resolved:
+   org.springframework.boot:spring-boot-starter-web:jar:3.5.0:compile[36m -- module spring.boot.starter.web[0;1m [auto][m
+   org.springframework.boot:spring-boot-starter:jar:3.5.0:compile[36m -- module spring.boot.starter[0;1m [auto][m
+   org.springframework.boot:spring-boot:jar:3.5.0:compile[36m -- module spring.boot[0;1m [auto][m
+   org.springframework.boot:spring-boot-autoconfigure:jar:3.5.0:compile[36m -- module spring.boot.autoconfigure[0;1m [auto][m
+   org.springframework.boot:spring-boot-starter-logging:jar:3.5.0:compile[36m -- module spring.boot.starter.logging[0;1m [auto][m
+   ch.qos.logback:logback-classic:jar:1.5.18:compile[36m -- module ch.qos.logback.classic[m
+   ch.qos.logback:logback-core:jar:1.5.18:compile[36m -- module ch.qos.logback.core[m
+   org.slf4j:slf4j-api:jar:2.0.17:compile[36m -- module org.slf4j[m
+   org.apache.logging.log4j:log4j-to-slf4j:jar:2.24.3:compile[36m -- module org.apache.logging.log4j.to.slf4j[m
+   org.apache.logging.log4j:log4j-api:jar:2.24.3:compile[36m -- module org.apache.logging.log4j[m
+   org.slf4j:jul-to-slf4j:jar:2.0.17:compile[36m -- module jul.to.slf4j[m
+   jakarta.annotation:jakarta.annotation-api:jar:2.1.1:compile[36m -- module jakarta.annotation[m
+   org.springframework:spring-core:jar:6.2.7:compile[36m -- module spring.core[0;1m [auto][m
+   org.springframework:spring-jcl:jar:6.2.7:compile[36m -- module spring.jcl[0;1m [auto][m
+   org.yaml:snakeyaml:jar:2.4:compile[36m -- module org.yaml.snakeyaml[m
+   org.springframework.boot:spring-boot-starter-json:jar:3.5.0:compile[36m -- module spring.boot.starter.json[0;1m [auto][m
+   com.fasterxml.jackson.core:jackson-databind:jar:2.19.0:compile[36m -- module com.fasterxml.jackson.databind[m
+   com.fasterxml.jackson.core:jackson-annotations:jar:2.19.0:compile[36m -- module com.fasterxml.jackson.annotation[m
+   com.fasterxml.jackson.core:jackson-core:jar:2.19.0:compile[36m -- module com.fasterxml.jackson.core[m
+   com.fasterxml.jackson.datatype:jackson-datatype-jdk8:jar:2.19.0:compile[36m -- module com.fasterxml.jackson.datatype.jdk8[m
+   com.fasterxml.jackson.datatype:jackson-datatype-jsr310:jar:2.19.0:compile[36m -- module com.fasterxml.jackson.datatype.jsr310[m
+   com.fasterxml.jackson.module:jackson-module-parameter-names:jar:2.19.0:compile[36m -- module com.fasterxml.jackson.module.paramnames[m
+   org.springframework.boot:spring-boot-starter-tomcat:jar:3.5.0:compile[36m -- module spring.boot.starter.tomcat[0;1m [auto][m
+   org.apache.tomcat.embed:tomcat-embed-core:jar:10.1.55:compile[36m -- module org.apache.tomcat.embed.core[m
+   org.apache.tomcat.embed:tomcat-embed-el:jar:10.1.55:compile[36m -- module org.apache.tomcat.embed.el[m
+   org.apache.tomcat.embed:tomcat-embed-websocket:jar:10.1.55:compile[36m -- module org.apache.tomcat.embed.websocket[m
+   org.springframework:spring-web:jar:6.2.7:compile[36m -- module spring.web[0;1m [auto][m
+   org.springframework:spring-beans:jar:6.2.7:compile[36m -- module spring.beans[0;1m [auto][m
+   io.micrometer:micrometer-observation:jar:1.15.0:compile[36m -- module micrometer.observation[0;1m [auto][m
+   io.micrometer:micrometer-commons:jar:1.15.0:compile[36m -- module micrometer.commons[0;1m [auto][m
+   org.springframework:spring-webmvc:jar:6.2.7:compile[36m -- module spring.webmvc[0;1m [auto][m
+   org.springframework:spring-context:jar:6.2.7:compile[36m -- module spring.context[0;1m [auto][m
+   org.springframework:spring-expression:jar:6.2.7:compile[36m -- module spring.expression[0;1m [auto][m
+   org.springframework.boot:spring-boot-starter-aop:jar:3.5.0:compile[36m -- module spring.boot.starter.aop[0;1m [auto][m
+   org.springframework:spring-aop:jar:6.2.7:compile[36m -- module spring.aop[0;1m [auto][m
+   org.aspectj:aspectjweaver:jar:1.9.24:compile[36m -- module org.aspectj.weaver[0;1m [auto][m
+   org.projectlombok:lombok:jar:1.18.38:compile (optional)[36m -- module lombok[m
+

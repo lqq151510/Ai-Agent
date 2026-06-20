@@ -1,0 +1,188 @@
+<style>
+  .theme-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .theme-card {
+    border: 1px solid #d7dce2;
+    border-radius: 18px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 18px 40px rgba(23, 32, 44, 0.08);
+  }
+  .theme-preview {
+    min-height: 300px;
+    padding: 14px;
+  }
+  .theme-shell {
+    height: 272px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    display: grid;
+    grid-template-columns: 68px 1fr 86px;
+  }
+  .theme-sidebar,
+  .theme-context {
+    padding: 10px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .theme-main {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .theme-strip {
+    height: 10px;
+    border-radius: 999px;
+  }
+  .theme-window {
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+  }
+  .theme-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .theme-bubble {
+    height: 42px;
+    border-radius: 12px;
+  }
+  .theme-input {
+    height: 40px;
+    border-radius: 12px;
+  }
+  .theme-card-body {
+    padding: 14px 16px 16px;
+    border-top: 1px solid #edf1f5;
+  }
+  .theme-card-body h3 {
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  .theme-card-body p {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #516074;
+  }
+  .theme-note {
+    margin-top: 10px;
+    font-size: 11px;
+    color: #6b7788;
+  }
+</style>
+
+<h2>整个客户端改成白色为主，你更想要哪种气质？</h2>
+<p class="subtitle">先定视觉方向，再统一左侧会话栏、中间 Chat、右侧工具栏、底部 Terminal 和 Review/Skills/Computer Use 面板。</p>
+
+<div class="theme-grid">
+  <div class="card theme-card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="theme-preview">
+      <div class="theme-shell" style="background:#ffffff;">
+        <div class="theme-sidebar" style="background:#fbfcfe;border-right:1px solid #eef2f6;">
+          <div class="theme-strip" style="background:#dfe6ee;width:72%;"></div>
+          <div class="theme-strip" style="background:#edf2f7;"></div>
+          <div class="theme-strip" style="background:#eef3f8;"></div>
+          <div class="theme-strip" style="background:#ecf1f7;width:84%;"></div>
+          <div class="theme-strip" style="background:#d8ebff;height:24px;"></div>
+        </div>
+        <div class="theme-main" style="background:#ffffff;">
+          <div class="theme-window" style="background:#ffffff;border:1px solid #edf2f7;">
+            <div class="theme-strip" style="background:#f0f4f8;width:40%;height:14px;"></div>
+            <div class="theme-bubble" style="background:#f3f7fb;"></div>
+            <div class="theme-bubble" style="background:#eef4ff;width:76%;align-self:flex-end;"></div>
+            <div class="theme-bubble" style="background:#f7f9fc;width:82%;"></div>
+          </div>
+          <div class="theme-input" style="background:#fbfdff;border:1px solid #e8eef5;"></div>
+        </div>
+        <div class="theme-context" style="background:#fcfdff;border-left:1px solid #eef2f6;">
+          <div class="theme-strip" style="background:#edf2f7;height:54px;"></div>
+          <div class="theme-strip" style="background:#f2f6fa;height:72px;"></div>
+          <div class="theme-strip" style="background:#eef3f8;height:42px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="theme-card-body">
+      <h3>A. 极简冷白</h3>
+      <p>整体接近干净的文档工作台，层次靠浅灰分隔，视觉最轻，最像专注型 IDE。</p>
+    </div>
+  </div>
+
+  <div class="card theme-card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="theme-preview">
+      <div class="theme-shell" style="background:#f7f4ee;">
+        <div class="theme-sidebar" style="background:#f3eee6;border-right:1px solid #e7ddd0;">
+          <div class="theme-strip" style="background:#d7c8b3;width:68%;"></div>
+          <div class="theme-strip" style="background:#ebe1d4;"></div>
+          <div class="theme-strip" style="background:#e6dccf;"></div>
+          <div class="theme-strip" style="background:#eadfce;width:84%;"></div>
+          <div class="theme-strip" style="background:#dfe6dd;height:24px;"></div>
+        </div>
+        <div class="theme-main" style="background:#fbf9f5;">
+          <div class="theme-window" style="background:#fffdf9;border:1px solid #eadfce;">
+            <div class="theme-strip" style="background:#ece4d7;width:42%;height:14px;"></div>
+            <div class="theme-bubble" style="background:#f5efe5;"></div>
+            <div class="theme-bubble" style="background:#ede6f5;width:76%;align-self:flex-end;"></div>
+            <div class="theme-bubble" style="background:#f8f2ea;width:80%;"></div>
+          </div>
+          <div class="theme-input" style="background:#fffdf9;border:1px solid #e4d9c8;"></div>
+        </div>
+        <div class="theme-context" style="background:#f6f2eb;border-left:1px solid #e7ddd0;">
+          <div class="theme-strip" style="background:#ebe2d5;height:54px;"></div>
+          <div class="theme-strip" style="background:#f0e9df;height:72px;"></div>
+          <div class="theme-strip" style="background:#e8dfd2;height:42px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="theme-card-body">
+      <h3>B. 柔和暖白</h3>
+      <p>主色仍是白，但带一点米灰和暖调，阅读更柔和，长时间使用不那么生硬。</p>
+    </div>
+  </div>
+
+  <div class="card theme-card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="theme-preview">
+      <div class="theme-shell" style="background:#f5f7fa;">
+        <div class="theme-sidebar" style="background:#eef2f6;border-right:1px solid #dde4ec;">
+          <div class="theme-strip" style="background:#bec9d6;width:70%;"></div>
+          <div class="theme-strip" style="background:#d7e0e9;"></div>
+          <div class="theme-strip" style="background:#d3dde8;"></div>
+          <div class="theme-strip" style="background:#d9e2ec;width:84%;"></div>
+          <div class="theme-strip" style="background:#d9e7ff;height:24px;"></div>
+        </div>
+        <div class="theme-main" style="background:#ffffff;">
+          <div class="theme-window" style="background:#ffffff;border:1px solid #e2e8f0;">
+            <div class="theme-strip" style="background:#eef2f6;width:40%;height:14px;"></div>
+            <div class="theme-row">
+              <div class="theme-bubble" style="background:#f2f5f9;"></div>
+              <div class="theme-bubble" style="background:#edf4ff;"></div>
+            </div>
+            <div class="theme-bubble" style="background:#f7f9fb;"></div>
+            <div class="theme-bubble" style="background:#f0f5ff;width:78%;align-self:flex-end;"></div>
+          </div>
+          <div class="theme-input" style="background:#f9fbfd;border:1px solid #e2e8f0;"></div>
+        </div>
+        <div class="theme-context" style="background:#f4f7fb;border-left:1px solid #dde4ec;">
+          <div class="theme-strip" style="background:#e2e8ef;height:54px;"></div>
+          <div class="theme-strip" style="background:#e8edf3;height:72px;"></div>
+          <div class="theme-strip" style="background:#e0e6ee;height:42px;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="theme-card-body">
+      <h3>C. 白底分层更强</h3>
+      <p>主界面保持白色，但侧栏、底栏和工具面板用更明显的浅灰区分，结构最清楚。</p>
+    </div>
+  </div>
+</div>
+
+<p class="theme-note">终端里直接回复 `A`、`B`、`C` 即可；也可以点卡片再补一句你想保留或避免的感觉。</p>
