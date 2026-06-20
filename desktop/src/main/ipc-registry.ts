@@ -177,8 +177,12 @@ export class IpcRegistry {
       workspacePath?: string;
       selectedFiles?: string[];
       sessionId?: string;
+      provider?: string;
+      model?: string;
+      customBaseUrl?: string;
+      customApiKey?: string;
     }) => {
-      const { message, workspacePath, selectedFiles = [], sessionId } = payload;
+      const { message, workspacePath, selectedFiles = [], sessionId, provider, model, customBaseUrl, customApiKey } = payload;
       const requestId = randomUUID();
       const isNewSession = !sessionId;
       const resolvedSessionId = sessionId ?? (await this.createBackendSession()).id;
@@ -244,11 +248,56 @@ export class IpcRegistry {
         message,
         systemContext,
         sender: event.sender,
+        provider,
+        model,
+        customBaseUrl,
+        customApiKey,
       }).catch(err => {
         console.error('[chat] stream failed', err);
       });
 
       return { ok: true, requestId, sessionId: resolvedSessionId, isNewSession };
+    });
+
+    ipcMain.handle('chat:test-connection', async (_event, payload: {
+      provider: string;
+      customBaseUrl: string;
+      customApiKey: string;
+      model: string;
+    }) => {
+      const { customBaseUrl, customApiKey, model } = payload;
+      const start = Date.now();
+      try {
+        const body = {
+          model: model,
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 5,
+        };
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (customApiKey && customApiKey.trim() !== '') {
+          headers['Authorization'] = `Bearer ${customApiKey}`;
+        }
+
+        const response = await fetch(`${customBaseUrl}/chat/completions`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!response.ok) {
+          const text = await response.text().catch(() => '');
+          return { ok: false, error: `HTTP ${response.status}: ${text || 'Unknown error'}` };
+        }
+
+        const delay = Date.now() - start;
+        return { ok: true, delay };
+      } catch (err: any) {
+        return { ok: false, error: err.message || String(err) };
+      }
     });
 
     // ================================================================
@@ -514,8 +563,12 @@ export class IpcRegistry {
     message: string;
     systemContext?: string;
     sender: Electron.WebContents;
+    provider?: string;
+    model?: string;
+    customBaseUrl?: string;
+    customApiKey?: string;
   }) {
-    const { requestId, sessionId, message, systemContext, sender } = input;
+    const { requestId, sessionId, message, systemContext, sender, provider, model, customBaseUrl, customApiKey } = input;
     let assistantReply = '';
 
     try {
@@ -525,6 +578,10 @@ export class IpcRegistry {
           sessionId,
           message,
           systemContext,
+          provider,
+          model,
+          customBaseUrl,
+          customApiKey,
         }),
       });
 

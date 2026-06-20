@@ -85,13 +85,20 @@ export function MainLayout() {
     }
   }, []);
 
+  const refreshSessions = useCallback(async () => {
+    const data = await window.electronAPI?.invoke('chat:get-sessions');
+    if (Array.isArray(data)) {
+      setSessions(data);
+    }
+  }, []);
+
   const handleSelectWorkspaceNode = useCallback(async (wpPath: string) => {
     if (window.electronAPI?.workspace?.setActive) {
       await window.electronAPI.workspace.setActive(wpPath);
       setWorkspacePath(wpPath);
       void refreshSessions();
     }
-  }, []);
+  }, [refreshSessions]);
 
   // ---- Codex parameter states & double-bindings ----
   const [activeRightTab, setActiveRightTab] = useState<'files' | 'gitdiff' | 'params' | 'review' | 'skills' | 'computer'>('files');
@@ -208,12 +215,7 @@ export function MainLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const refreshSessions = useCallback(async () => {
-    const data = await window.electronAPI?.invoke('chat:get-sessions');
-    if (Array.isArray(data)) {
-      setSessions(data);
-    }
-  }, []);
+
 
   const refreshThreads = useCallback(async () => {
     const data = await window.electronAPI?.thread?.list();
@@ -222,7 +224,7 @@ export function MainLayout() {
     }
   }, []);
 
-  const handleToolStreamEvent = useCallback(async (event: any) => {
+  const handleToolStreamEvent = useCallback(async (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     const type = String(event.type || '');
     const data = event.data || {};
     const description = event.message || data.message || data.toolName || 'tool';
@@ -301,7 +303,7 @@ export function MainLayout() {
 
   // Listen for thread events pushed from main process
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.thread?.onEvent?.((_thread: any) => {
+    const unsubscribe = window.electronAPI?.thread?.onEvent?.(() => {
       void refreshThreads();
     });
     return () => {
@@ -316,7 +318,7 @@ export function MainLayout() {
   // ---- Stream event handling (same as original) ----
 
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.chat?.onStreamEvent?.((event: any) => {
+    const unsubscribe = window.electronAPI?.chat?.onStreamEvent?.((event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       const eventType = String(event.type || '');
       const currentStream = streamStateRef.current;
       if (eventType === 'started' && !currentStream && pendingAssistantMessageIdRef.current) {
@@ -388,7 +390,7 @@ export function MainLayout() {
   }, [handleToolStreamEvent, refreshSessions]);
 
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.agent?.onTaskEvent?.((event: any) => {
+    const unsubscribe = window.electronAPI?.agent?.onTaskEvent?.((event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       setTaskStreamState(current => {
         if (!current || current.taskId !== event.taskId) {
           return current;
@@ -530,7 +532,7 @@ export function MainLayout() {
       }
     }
     void refreshSessions();
-  }, []);
+  }, [refreshSessions]);
 
   const handleCloseThread = useCallback(async (id: string) => {
     await window.electronAPI?.thread?.remove(id);
@@ -564,11 +566,24 @@ export function MainLayout() {
     pendingAssistantMessageIdRef.current = assistantMsg.id;
 
     try {
+      const provider = localStorage.getItem('codex_active_provider') || 'deepseek';
+      const rawApiKey = localStorage.getItem(`codex_key_${provider}`) || '';
+      const rawBaseUrl = localStorage.getItem(`codex_url_${provider}`) || '';
+      const rawModel = localStorage.getItem(`codex_model_${provider}`) || '';
+
+      const customApiKey = rawApiKey.trim() ? rawApiKey.trim() : undefined;
+      const customBaseUrl = rawBaseUrl.trim() ? rawBaseUrl.trim() : undefined;
+      const customModel = rawModel.trim() ? rawModel.trim() : undefined;
+
       const result = await window.electronAPI?.chat?.streamWithContext({
         message: text,
         workspacePath: workspacePath ?? undefined,
         selectedFiles,
         sessionId: activeSessionId ?? undefined,
+        provider: provider.toUpperCase(),
+        model: customModel,
+        customBaseUrl,
+        customApiKey,
       });
       if (!result?.requestId || !result?.sessionId) {
         throw new Error('stream request did not return identifiers');
@@ -594,7 +609,7 @@ export function MainLayout() {
       );
       setStreamState(null);
     }
-  }, [activeSessionId, workspacePath, selectedFiles, streamState, taskStreamState, refreshSessions]);
+  }, [activeSessionId, workspacePath, selectedFiles, streamState, taskStreamState]);
 
   const handleSubmitTask = useCallback(async (text: string) => {
     if (!text.trim() || streamState || taskStreamState) return;

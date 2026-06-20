@@ -42,6 +42,7 @@ export function ContextPanel({
   // Load file tree when workspace changes
   useEffect(() => {
     if (!workspacePath || !serviceReady) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingTree(true);
     fetch(`${LOCAL_SERVICE_URL}/workspace/tree?path=${encodeURIComponent(workspacePath)}&depth=2`)
       .then(r => r.json())

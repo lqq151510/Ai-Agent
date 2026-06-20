@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 增加非 root 用户
-RUN adduser --disabled-password --no-create-home appuser
+RUN adduser --disabled-password --no-create-home --gecos "" appuser
 
 # 安装系统依赖（部分解析库需要）
 RUN apt-get update && apt-get install -y --no-install-recommends \

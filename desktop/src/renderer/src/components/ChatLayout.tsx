@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -13,7 +14,30 @@ declare global {
 export const ChatLayout = ({ onOpenSettings }: { onOpenSettings: () => void }) => {
   const [currentView, setCurrentView] = useState<'chat' | 'plugins' | 'automation'>('chat');
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([
+    {
+      id: '1',
+      role: 'user',
+      content: '帮我安装 react-router-dom 并配置路由。',
+      timestamp: '10:00 AM'
+    },
+    {
+      id: '2',
+      role: 'assistant',
+      type: 'memory_retrieval',
+      content: '检索到 3 条历史经验和 2 个相关代码块...',
+      timestamp: '10:00 AM'
+    },
+    {
+      id: '3',
+      role: 'assistant',
+      type: 'sandbox_approval',
+      command: 'npm install react-router-dom',
+      reason: '需要执行终端命令来安装你请求的依赖。',
+      timestamp: '10:01 AM',
+      status: 'pending' // pending, approved, rejected
+    }
+  ]);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   
   const [showContextDropdown, setShowContextDropdown] = useState(false);
@@ -62,33 +86,6 @@ export const ChatLayout = ({ onOpenSettings }: { onOpenSettings: () => void }) =
   // Advanced Architecture UI States
   const [showSubAgentsPanel, setShowSubAgentsPanel] = useState(true);
   
-  // Initialize mock messages for demonstration
-  useEffect(() => {
-    setMessages([
-      {
-        id: '1',
-        role: 'user',
-        content: '帮我安装 react-router-dom 并配置路由。',
-        timestamp: '10:00 AM'
-      },
-      {
-        id: '2',
-        role: 'assistant',
-        type: 'memory_retrieval',
-        content: '检索到 3 条历史经验和 2 个相关代码块...',
-        timestamp: '10:00 AM'
-      },
-      {
-        id: '3',
-        role: 'assistant',
-        type: 'sandbox_approval',
-        command: 'npm install react-router-dom',
-        reason: '需要执行终端命令来安装你请求的依赖。',
-        timestamp: '10:01 AM',
-        status: 'pending' // pending, approved, rejected
-      }
-    ]);
-  }, []);
   useEffect(() => {
     const loadInitialData = async () => {
       if (window.electronAPI) {
@@ -157,6 +154,7 @@ export const ChatLayout = ({ onOpenSettings }: { onOpenSettings: () => void }) =
 
   // Reset width when changing tabs
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRightPanelWidth(null);
   }, [activeRightTab]);
 

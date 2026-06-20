@@ -6,7 +6,7 @@ type ComputerUseResult = {
   ok: boolean;
   action: string;
   message?: string;
-  data?: Record<string, any>;
+  data?: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   error?: string;
 };
 
@@ -51,6 +51,7 @@ export function ComputerUsePanel({ onClose }: ComputerUsePanelProps) {
   }, [run]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshPermissions();
   }, [refreshPermissions]);
 

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Settings, User, Sun, Sliders, Palette, Keyboard, Activity, Link, LayoutGrid, Globe, MousePointer2, GitBranch, TerminalSquare, Archive, ArrowLeft, Search, Plus, RefreshCw, Folder, Check, Trash2, AlertCircle, MoreHorizontal } from 'lucide-react';
 
-const SidebarItem = ({ icon: Icon, label, active = false, onClick }: { icon: any, label: string, active?: boolean, onClick: () => void }) => (
+const SidebarItem = ({ icon: Icon, label, active = false, onClick }: { icon: React.ElementType, label: string, active?: boolean, onClick: () => void }) => (
   <div onClick={onClick} className={`flex items-center gap-3 px-3 py-1.5 rounded-lg cursor-pointer text-[13px] ${active ? 'bg-[#e8e8e8] text-black font-semibold' : 'text-[#555] hover:bg-[#ebebeb]'}`}>
     <Icon size={15} strokeWidth={2.2} className={active ? "text-black" : "text-[#666]"} />
     <span>{label}</span>
@@ -15,11 +15,13 @@ const SidebarSection = ({ title }: { title: string }) => (
 );
 
 export const SettingsLayout = ({ onBack, initialTab = '常规' }: { onBack: () => void; initialTab?: string }) => {
+  const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
   const [activeTab, setActiveTab] = useState(initialTab);
 
-  useEffect(() => {
+  if (initialTab !== prevInitialTab) {
+    setPrevInitialTab(initialTab);
     setActiveTab(initialTab);
-  }, [initialTab]);
+  }
 
   const renderContent = () => {
     switch (activeTab) {
@@ -565,19 +567,20 @@ const GeneralTab = () => {
   );
 };
 
+const INITIAL_ACTIVITY_DATA = Array.from({ length: 7 * 24 }, (_, i) => {
+  const col = Math.floor(i / 7);
+  if (col >= 21) {
+    // Last 3 columns representing June (highly active in the screenshot)
+    const rand = Math.random();
+    return rand > 0.6 ? 'bg-[#007aff]' : rand > 0.25 ? 'bg-[#54a0ff]' : 'bg-[#c7dfff]';
+  } else {
+    // Past months mostly empty with sparse activity
+    return Math.random() > 0.96 ? 'bg-[#c7dfff]' : 'bg-[#ebedf0]';
+  }
+});
+
 const ProfileTab = () => {
-  // Activity calendar grid mock (7 rows, 24 cols representing the timeline)
-  const activityData = Array.from({ length: 7 * 24 }, (_, i) => {
-    const col = Math.floor(i / 7);
-    if (col >= 21) {
-      // Last 3 columns representing June (highly active in the screenshot)
-      const rand = Math.random();
-      return rand > 0.6 ? 'bg-[#007aff]' : rand > 0.25 ? 'bg-[#54a0ff]' : 'bg-[#c7dfff]';
-    } else {
-      // Past months mostly empty with sparse activity
-      return Math.random() > 0.96 ? 'bg-[#c7dfff]' : 'bg-[#ebedf0]';
-    }
-  });
+  const activityData = INITIAL_ACTIVITY_DATA;
 
   return (
     <div className="pb-12 text-[#1f2328] select-none">
@@ -747,6 +750,72 @@ const ProfileTab = () => {
   );
 };
 
+const isLight = (hexColor: string) => {
+  const c = hexColor.substring(1);
+  const rgb = parseInt(c, 16);
+  const r = (rgb >> 16) & 0xff;
+  const g = (rgb >> 8) & 0xff;
+  const b = (rgb >> 0) & 0xff;
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luma > 180;
+};
+
+const ColorPill = ({ color, label, onChange }: { color: string; label: string; onChange: (val: string) => void }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempColor, setTempColor] = useState(color);
+
+  return (
+    <div className="flex justify-between items-center border-b border-[#eee] py-3.5">
+      <span className="text-[13px] font-semibold text-black">{label}</span>
+      {isEditing ? (
+        <div className="flex items-center gap-1.5">
+          <input 
+            type="text" 
+            value={tempColor}
+            onChange={e => setTempColor(e.target.value)}
+            className="bg-[#f5f5f5] border border-[#e5e5e5] rounded px-2 py-1 text-[12px] font-mono w-24 outline-none focus:border-[#007aff]"
+          />
+          <button 
+            onClick={() => {
+              if (tempColor.match(/^#[0-9A-Fa-f]{6}$/)) {
+                onChange(tempColor.toUpperCase());
+                setIsEditing(false);
+              } else {
+                alert('请输入合法的 HEX 颜色，例如 #FFFFFF');
+              }
+            }}
+            className="bg-[#007aff] text-white px-2.5 py-1 rounded text-[11px] font-semibold"
+          >
+            确定
+          </button>
+          <button 
+            onClick={() => {
+              setTempColor(color);
+              setIsEditing(false);
+            }}
+            className="bg-[#f5f5f5] border border-[#e5e5e5] px-2.5 py-1 rounded text-[11px] text-black font-semibold"
+          >
+            取消
+          </button>
+        </div>
+      ) : (
+        <div 
+          onClick={() => setIsEditing(true)}
+          style={{ 
+            backgroundColor: color, 
+            color: isLight(color) ? '#1a1c1f' : '#ffffff',
+            border: color.toUpperCase() === '#FFFFFF' ? '1px solid #ddd' : 'none'
+          }}
+          className="px-3 py-1 rounded-full text-[12px] font-mono font-bold flex items-center gap-2 cursor-pointer shadow-sm select-none"
+        >
+          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: isLight(color) ? '#bbb' : '#fff', border: '1px solid rgba(0,0,0,0.1)' }} />
+          <span>{color.toUpperCase()}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AppearanceTab = () => {
   const [theme, setTheme] = useState('system'); // system, light, dark
   const [lightThemeSelect, setLightThemeSelect] = useState('Codex');
@@ -775,72 +844,6 @@ const AppearanceTab = () => {
   const [fontSmooth, setFontSmooth] = useState(true);
 
   const [dockIcon, setDockIcon] = useState('default'); // default, light, dark
-
-  const isLight = (hexColor: string) => {
-    const c = hexColor.substring(1);
-    const rgb = parseInt(c, 16);
-    const r = (rgb >> 16) & 0xff;
-    const g = (rgb >> 8) & 0xff;
-    const b = (rgb >> 0) & 0xff;
-    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    return luma > 180;
-  };
-
-  const ColorPill = ({ color, label, onChange }: { color: string; label: string; onChange: (val: string) => void }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [tempColor, setTempColor] = useState(color);
-
-    return (
-      <div className="flex justify-between items-center border-b border-[#eee] py-3.5">
-        <span className="text-[13px] font-semibold text-black">{label}</span>
-        {isEditing ? (
-          <div className="flex items-center gap-1.5">
-            <input 
-              type="text" 
-              value={tempColor}
-              onChange={e => setTempColor(e.target.value)}
-              className="bg-[#f5f5f5] border border-[#e5e5e5] rounded px-2 py-1 text-[12px] font-mono w-24 outline-none focus:border-[#007aff]"
-            />
-            <button 
-              onClick={() => {
-                if (tempColor.match(/^#[0-9A-Fa-f]{6}$/)) {
-                  onChange(tempColor.toUpperCase());
-                  setIsEditing(false);
-                } else {
-                  alert('请输入合法的 HEX 颜色，例如 #FFFFFF');
-                }
-              }}
-              className="bg-[#007aff] text-white px-2.5 py-1 rounded text-[11px] font-semibold"
-            >
-              确定
-            </button>
-            <button 
-              onClick={() => {
-                setTempColor(color);
-                setIsEditing(false);
-              }}
-              className="bg-[#f5f5f5] border border-[#e5e5e5] px-2.5 py-1 rounded text-[11px] text-black font-semibold"
-            >
-              取消
-            </button>
-          </div>
-        ) : (
-          <div 
-            onClick={() => setIsEditing(true)}
-            style={{ 
-              backgroundColor: color, 
-              color: isLight(color) ? '#1a1c1f' : '#ffffff',
-              border: color.toUpperCase() === '#FFFFFF' ? '1px solid #ddd' : 'none'
-            }}
-            className="px-3 py-1 rounded-full text-[12px] font-mono font-bold flex items-center gap-2 cursor-pointer shadow-sm select-none"
-          >
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: isLight(color) ? '#bbb' : '#fff', border: '1px solid rgba(0,0,0,0.1)' }} />
-            <span>{color.toUpperCase()}</span>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="space-y-8 pr-2 pb-12 select-none text-[#1f2328]">
@@ -1981,18 +1984,38 @@ const ConnectionsTab = () => {
     localStorage.setItem(`codex_key_${activeTab}`, current.apiKey);
     localStorage.setItem(`codex_url_${activeTab}`, current.baseUrl);
     localStorage.setItem(`codex_model_${activeTab}`, current.model);
+    localStorage.setItem('codex_active_provider', activeTab); // 激活当前模型
 
     setSaveStatus('保存成功！');
     setTimeout(() => setSaveStatus(null), 1500);
   };
 
-  const handleTest = () => {
+  const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    setTimeout(() => {
+    try {
+      const current = configs[activeTab];
+      const api = window.electronAPI;
+      if (!api || !api.chat || !api.chat.testConnection) {
+        throw new Error('electronAPI.chat.testConnection is not available');
+      }
+      const res = await api.chat.testConnection({
+        provider: activeTab.toUpperCase(),
+        customBaseUrl: current.baseUrl,
+        customApiKey: current.apiKey,
+        model: current.model
+      });
+      if (res.ok) {
+        setTestResult(`连接测试成功，延迟 ${res.delay}ms！`);
+      } else {
+        setTestResult(`连接测试失败: ${res.error}`);
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setTestResult(`连接测试异常: ${errMsg}`);
+    } finally {
       setTesting(false);
-      setTestResult('连接测试成功，延迟 85ms！');
-    }, 1200);
+    }
   };
 
   const updateVal = (field: 'apiKey' | 'baseUrl' | 'model', val: string) => {
