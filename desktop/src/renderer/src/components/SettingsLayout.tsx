@@ -31,12 +31,20 @@ export const SettingsLayout = ({ onBack, initialTab = '常规' }: { onBack: () =
         return <AppearanceTab />;
       case '配置':
         return <ConfigTab />;
-      case 'MCP 服务器':
-        return <MCPServersTab />;
-      case '钩子':
-        return <HooksTab />;
       case '个性化':
         return <PersonalizationTab />;
+      case 'MCP 服务器':
+        return <MCPServersTab />;
+      case '浏览器':
+        return <BrowserTab />;
+      case '钩子':
+        return <HooksTab />;
+      case '连接':
+        return <ConnectionsTab />;
+      case '工作树':
+        return <WorktreeTab />;
+      case '已归档对话':
+        return <ArchivedConversationsTab />;
       default:
         return <PlaceholderTab name={activeTab} />;
     }

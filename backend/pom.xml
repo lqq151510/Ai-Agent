@@ -15,7 +15,10 @@
     <name>ai-agent-backend</name>
 
     <properties>
-        <java.version>25</java.version>
+        <java.version>21</java.version>
+        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.proc>full</maven.compiler.proc>
+        <lombok.version>1.18.42</lombok.version>
         <jjwt.version>0.12.6</jjwt.version>
         <flyway.version>10.22.0</flyway.version>
         <tomcat.version>10.1.55</tomcat.version>
@@ -24,6 +27,7 @@
         <protobuf.version>3.25.5</protobuf.version>
         <postgresql.version>42.7.11</postgresql.version>
         <assertj.version>3.27.7</assertj.version>
+        <spring-kafka.version>3.3.16</spring-kafka.version>
     </properties>
 
     <dependencyManagement>
@@ -84,6 +88,26 @@
                 <version>12.0.32</version>
             </dependency>
             <dependency>
+                <groupId>org.eclipse.jetty.http2</groupId>
+                <artifactId>http2-common</artifactId>
+                <version>9.4.56.v20240826</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty.http2</groupId>
+                <artifactId>http2-hpack</artifactId>
+                <version>9.4.56.v20240826</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-servlet</artifactId>
+                <version>9.4.56.v20240826</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-webapp</artifactId>
+                <version>9.4.56.v20240826</version>
+            </dependency>
+            <dependency>
                 <groupId>com.github.jknack</groupId>
                 <artifactId>handlebars</artifactId>
                 <version>4.5.2</version>
@@ -105,7 +129,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.36</version>
+            <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
 

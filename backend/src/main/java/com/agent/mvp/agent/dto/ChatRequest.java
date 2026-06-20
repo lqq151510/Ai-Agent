@@ -26,4 +26,16 @@ public record ChatRequest(
         @Size(max = 50000, message = "systemContext must be <= 50000 chars") String systemContext,
         String customBaseUrl,
         String customApiKey,
-        List<ToolSpec> clientTools) {}
+        List<ToolSpec> clientTools) {
+    public ChatRequest(
+            UUID sessionId,
+            String message,
+            ModelProviderType provider,
+            String model,
+            Integer maxContextTokens,
+            String systemContext,
+            String customBaseUrl,
+            String customApiKey) {
+        this(sessionId, message, provider, model, maxContextTokens, systemContext, customBaseUrl, customApiKey, null);
+    }
+}
