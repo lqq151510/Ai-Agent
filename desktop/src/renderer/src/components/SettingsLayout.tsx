@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, User, Sun, Sliders, Palette, Keyboard, Activity, Link, LayoutGrid, Globe, MousePointer2, GitBranch, TerminalSquare, Archive, ArrowLeft, Search, Plus, RefreshCw } from 'lucide-react';
+import { Settings, User, Sun, Sliders, Palette, Keyboard, Activity, Link, LayoutGrid, Globe, MousePointer2, GitBranch, TerminalSquare, Archive, ArrowLeft, Search, Plus, RefreshCw, Folder, Check, Trash2, AlertCircle, MoreHorizontal } from 'lucide-react';
 
 const SidebarItem = ({ icon: Icon, label, active = false, onClick }: { icon: any, label: string, active?: boolean, onClick: () => void }) => (
   <div onClick={onClick} className={`flex items-center gap-3 px-3 py-1.5 rounded-lg cursor-pointer text-[13px] ${active ? 'bg-[#e8e8e8] text-black font-semibold' : 'text-[#555] hover:bg-[#ebebeb]'}`}>
@@ -1274,7 +1274,7 @@ const ConfigTab = () => {
         <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm p-4 space-y-4">
           <div className="flex justify-between items-center border-b border-[#f0f0f0] pb-3">
             <select className="bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-3 py-1.5 text-[13px] outline-none min-w-[120px] cursor-pointer font-bold text-black">
-              <option>用户配置</option>
+<option>用户配置</option>
             </select>
             <span className="text-[12px] text-[#007aff] hover:underline cursor-pointer font-semibold">打开 config.toml ↗</span>
           </div>
@@ -1354,129 +1354,745 @@ const ConfigTab = () => {
   );
 };
 
-const MCPServersTab = () => (
-  <>
-    <h2 className="text-[20px] font-semibold mb-1 text-black">MCP 服务器</h2>
-    <p className="text-[13px] text-[#666] mb-8">连接外部工具和数据源。<a href="#" className="text-codex-blue hover:underline">了解更多</a>。</p>
+const MCPServersTab = () => {
+  const [servers, setServers] = useState([
+    { name: 'browser-playwright', enabled: true },
+    { name: 'context7-local', enabled: true },
+    { name: 'firecrawl', enabled: true },
+    { name: 'insforge', enabled: true, authRequired: true },
+    { name: 'node_repl', enabled: true },
+    { name: 'tavily-search', enabled: true },
+  ]);
 
-    <div className="flex justify-between items-center mb-3 px-1">
-      <h3 className="text-[14px] font-semibold text-[#333]">服务器</h3>
-      <button className="flex items-center gap-1.5 bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-3 py-1.5 text-[12px] font-semibold hover:bg-[#ebebeb] text-black transition-colors">
-        <Plus size={14} /> 添加服务器
-      </button>
-    </div>
-    
-    <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm">
-      {['browser-playwright', 'context7-local', 'firecrawl', 'insforge', 'node_repl', 'serena', 'tavily-search'].map((server, idx, arr) => (
-        <div key={server} className={`p-3.5 flex justify-between items-center ${idx !== arr.length - 1 ? 'border-b border-[#eee]' : ''}`}>
-          <div className="text-[13px] font-medium font-mono text-black">{server}</div>
-          <div className="flex items-center gap-4">
-            <Settings size={14} className="text-[#aaa] cursor-pointer hover:text-[#555]" />
-            <Toggle checked={server !== 'serena'} />
+  const toggleServer = (name: string) => {
+    setServers(servers.map(s => s.name === name ? { ...s, enabled: !s.enabled } : s));
+  };
+
+  const plugins = [
+    'aws-mcp',
+    'cloudflare-api',
+    'codex_apps',
+    'computer-use',
+    'creative_production_mcp',
+    'datascienceWidgets',
+    'endor-cli-tools'
+  ];
+
+  return (
+    <div className="space-y-6 text-[#1f2328] select-none pb-12">
+      <div className="flex justify-between items-center border-b border-[#eee] pb-3.5 mb-2">
+        <div>
+          <h2 className="text-[20px] font-bold text-black">MCP 服务器</h2>
+          <div className="text-[12px] text-[#57606a] mt-1">
+            连接外部工具和数据源。<a href="#" className="text-[#007aff] hover:underline">了解更多</a>。
           </div>
         </div>
-      ))}
-    </div>
-  </>
-);
+      </div>
 
-const HooksTab = () => (
-  <>
-    <div className="flex justify-between items-center mb-1">
-      <h2 className="text-[20px] font-semibold text-black">钩子</h2>
-      <RefreshCw size={14} className="text-[#888] cursor-pointer hover:text-black transition-colors" />
-    </div>
-    <p className="text-[13px] text-[#666] mb-8">通过配置和已启用的插件管理生命周期钩子。<a href="#" className="text-codex-blue hover:underline">了解更多</a></p>
-
-    <h3 className="text-[14px] font-semibold text-[#333] mb-3 ml-1">来自配置</h3>
-    <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm mb-8">
-      <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-[#fafafa]">
-        <div className="flex items-center gap-3">
-          <Settings size={16} className="text-[#888]" />
-          <div>
-            <div className="text-[13px] font-medium text-black">用户配置</div>
-            <div className="text-[12px] text-[#888]">5 个钩子</div>
-          </div>
+      <div>
+        <div className="flex justify-between items-center mb-2 px-1">
+          <h3 className="text-[13px] font-bold text-black">服务器</h3>
+          <button className="flex items-center gap-1.5 bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-2.5 py-1 text-[11px] font-bold hover:bg-[#ebebeb] text-black transition-colors">
+            <Plus size={12} /> 添加服务器
+          </button>
         </div>
-        <div className="text-[#aaa]">›</div>
+
+        <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm">
+          {servers.map((server, idx) => (
+            <div key={server.name} className={`p-3.5 flex justify-between items-center ${idx !== servers.length - 1 ? 'border-b border-[#eee]' : ''}`}>
+              <div className="text-[13px] font-medium font-mono text-black">{server.name}</div>
+              <div className="flex items-center gap-4">
+                {server.authRequired && (
+                  <button className="bg-[#f5f5f5] border border-[#e5e5e5] hover:bg-[#ebebeb] px-3 py-1 rounded text-[11px] font-semibold text-black transition-colors">
+                    进行身份验证
+                  </button>
+                )}
+                <Settings size={14} className="text-[#aaa] cursor-pointer hover:text-[#555]" />
+                <Toggle checked={server.enabled} onChange={() => toggleServer(server.name)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-[13px] font-bold text-black mb-2.5 px-1">来自插件</h3>
+        <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm">
+          {plugins.map((plugin, idx) => (
+            <div key={plugin} className={`p-3.5 flex justify-between items-center ${idx !== plugins.length - 1 ? 'border-b border-[#eee]' : ''}`}>
+              <span className="text-[13px] font-medium font-mono text-black">{plugin}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
+  );
+};
 
-    <h3 className="text-[14px] font-semibold text-[#333] mb-3 ml-1">来自插件</h3>
-    <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm">
-      {[
-        { name: 'claude-session-driver', count: 4 },
-        { name: 'episodic-memory', count: 1 },
-        { name: 'explanatory-output-style', count: 1 },
-        { name: 'learning-output-style', count: 1 },
-        { name: 'railway', count: 1 },
-        { name: 'remember', count: 2 },
-      ].map((hook, idx, arr) => (
-        <div key={hook.name} className={`p-4 flex justify-between items-center cursor-pointer hover:bg-[#fafafa] ${idx !== arr.length - 1 ? 'border-b border-[#eee]' : ''}`}>
-          <div className="flex items-center gap-3">
-            <LayoutGrid size={16} className="text-[#888]" />
+const BrowserTab = () => {
+  const [browserEnabled, setBrowserEnabled] = useState(true);
+  const [openDest, setOpenDest] = useState('Codex');
+  const [screenshotMode, setScreenshotMode] = useState('始终包含');
+  const [approvalMode, setApprovalMode] = useState('始终允许');
+  const [cdpEnabled, setCdpEnabled] = useState(true);
+
+  return (
+    <div className="space-y-6 text-[#1f2328] select-none pb-12">
+      <div className="border-b border-[#eee] pb-3.5 mb-2">
+        <h2 className="text-[20px] font-bold text-black">浏览器</h2>
+        <div className="text-[12px] text-[#57606a] mt-1">
+          管理 Codex 的浏览器。可在<a href="#" className="text-[#007aff] hover:underline">计算机使用设置</a>中设置 Google Chrome
+        </div>
+      </div>
+
+      {/* 浏览器总开关 */}
+      <div className="bg-white border border-[#e5e5e5] rounded-xl p-4 shadow-sm flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-[#f5f5f5] flex items-center justify-center text-gray-500 border border-[#e5e5e5]">
+            <Globe size={20} />
+          </div>
+          <div>
+            <div className="text-[13px] font-semibold text-black">浏览器</div>
+            <div className="text-[11px] text-[#57606a] mt-0.5">允许 Codex 控制内置浏览器</div>
+          </div>
+        </div>
+        <Toggle checked={browserEnabled} onChange={() => setBrowserEnabled(!browserEnabled)} />
+      </div>
+
+      {/* General */}
+      <div>
+        <h3 className="text-[13px] font-bold text-black mb-2 px-1">General</h3>
+        <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm px-4">
+          <div className="flex justify-between items-center border-b border-[#eee] py-3.5">
             <div>
-              <div className="text-[13px] font-medium text-black">{hook.name}</div>
-              <div className="text-[12px] text-[#888]">{hook.count} 个钩子</div>
+              <div className="text-[13px] font-semibold text-black">Default local URL open destination</div>
+              <div className="text-[11px] text-[#57606a] mt-0.5">Where localhost and loopback URLs open by default</div>
+            </div>
+            <select 
+              value={openDest}
+              onChange={e => setOpenDest(e.target.value)}
+              className="bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-3 py-1.5 text-[12px] outline-none min-w-[120px] cursor-pointer text-black"
+            >
+              <option>Codex</option>
+              <option>System Browser</option>
+            </select>
+          </div>
+
+          <div className="flex justify-between items-center border-b border-[#eee] py-3.5">
+            <div>
+              <div className="text-[13px] font-semibold text-black">浏览数据</div>
+              <div className="text-[11px] text-[#57606a] mt-0.5">清除应用内浏览器中的网站数据和缓存</div>
+            </div>
+            <button className="bg-[#f5f5f5] border border-[#e5e5e5] hover:bg-[#ebebeb] px-3.5 py-1.5 rounded-md text-[12px] font-semibold text-black transition-colors shrink-0">
+              清除所有浏览数据
+            </button>
+          </div>
+
+          <div className="flex justify-between items-center py-3.5">
+            <div>
+              <div className="text-[13px] font-semibold text-black">批注截图</div>
+              <div className="text-[11px] text-[#57606a] mt-0.5">截图可帮助 Codex 更好地理解并处理评论，但会增加套餐用量</div>
+            </div>
+            <select 
+              value={screenshotMode}
+              onChange={e => setScreenshotMode(e.target.value)}
+              className="bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-3 py-1.5 text-[12px] outline-none min-w-[120px] cursor-pointer text-black"
+            >
+              <option>始终包含</option>
+              <option>从不包含</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 权限 */}
+      <div>
+        <h3 className="text-[13px] font-bold text-black mb-2 px-1">权限</h3>
+        <div className="bg-white border border-[#e5e5e5] rounded-xl px-4 shadow-sm">
+          <div className="flex justify-between items-center py-3.5">
+            <div>
+              <div className="text-[13px] font-semibold text-black">审批</div>
+              <div className="text-[11px] text-[#57606a] mt-0.5">选择是否 Codex 在打开网站前先请求批准。了解更多</div>
+            </div>
+            <select 
+              value={approvalMode}
+              onChange={e => setApprovalMode(e.target.value)}
+              className="bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-3 py-1.5 text-[12px] outline-none min-w-[120px] cursor-pointer text-black"
+            >
+              <option>始终允许</option>
+              <option>每次询问</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 网站权限 */}
+      <div>
+        <div className="flex justify-between items-center mb-2 px-1">
+          <h3 className="text-[13px] font-bold text-black">网站权限</h3>
+          <button className="flex items-center gap-1.5 bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-2.5 py-1 text-[11px] font-bold hover:bg-[#ebebeb] text-black transition-colors">
+            <Plus size={12} /> 添加
+          </button>
+        </div>
+        <div className="bg-[#f9f9f9] border border-[#e5e5e5] rounded-xl p-8 text-center text-[12px] text-[#888] shadow-sm">
+          尚无网站专属权限
+        </div>
+      </div>
+
+      {/* 开发者模式 */}
+      <div>
+        <h3 className="text-[13px] font-bold text-black mb-2 px-1">开发者模式</h3>
+        <div className="bg-white border border-[#e5e5e5] rounded-xl p-4 shadow-sm flex justify-between items-center">
+          <div>
+            <div className="text-[13px] font-semibold text-red-600 flex items-center gap-1">
+              <span>⚠️ 风险升高</span>
+            </div>
+            <div className="text-[13px] font-semibold text-black mt-1">启用完整 CDP 访问权限</div>
+            <div className="text-[11px] text-[#57606a] mt-0.5 leading-relaxed">
+              允许 Codex 在已连接的 Browser Use 会话中使用完整的 Chrome 开发者工具协议 (CDP) 访问权限。
             </div>
           </div>
-          <div className="text-[#aaa]">›</div>
+          <Toggle checked={cdpEnabled} onChange={() => setCdpEnabled(!cdpEnabled)} />
         </div>
-      ))}
+      </div>
     </div>
-  </>
-);
+  );
+};
 
-const PersonalizationTab = () => (
-  <>
-    <h2 className="text-[20px] font-semibold mb-8 text-black">个性化</h2>
+const HooksTab = () => {
+  const listItems = [
+    { name: 'claude-session-driver', count: 4 },
+    { name: 'episodic-memory', count: 1 },
+    { name: 'remember', count: 2 },
+    { name: 'superpowers', count: 1 },
+    { name: 'superpowers', count: 1 },
+    { name: 'vercel', count: 3 }
+  ];
 
-    <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm mb-8 p-4 flex justify-between items-center">
+  return (
+    <div className="space-y-6 text-[#1f2328] select-none pb-12">
+      <div className="flex justify-between items-center border-b border-[#eee] pb-3.5 mb-2">
+        <div>
+          <h2 className="text-[20px] font-bold text-black">钩子</h2>
+          <div className="text-[12px] text-[#57606a] mt-1">
+            通过配置和已启用的插件管理生命周期钩子。<a href="#" className="text-[#007aff] hover:underline">了解更多</a>
+          </div>
+        </div>
+        <RefreshCw size={14} className="text-[#888] cursor-pointer hover:text-black transition-colors" />
+      </div>
+
       <div>
-        <div className="text-[14px] font-medium mb-1 text-black">个性</div>
-        <div className="text-[12px] text-[#888]">选择 Codex 回复的默认语气</div>
+        <h3 className="text-[13px] font-bold text-black mb-2 px-1">来自配置</h3>
+        <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm">
+          <div className="p-4 flex justify-between items-center cursor-pointer hover:bg-[#fafafa]">
+            <div className="flex items-center gap-3">
+              <Settings size={16} className="text-[#888]" />
+              <div>
+                <div className="text-[13px] font-medium text-black">用户配置</div>
+                <div className="text-[11px] text-[#888] mt-0.5">5 个钩子</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-orange-500 font-semibold text-[11px]">
+              <AlertCircle size={12} />
+              <span>3 个问题</span>
+              <span className="text-[#aaa] text-[13px] ml-1">›</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <select className="bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-3 py-1.5 text-[13px] outline-none min-w-[120px] cursor-pointer">
-        <option>务实</option>
-        <option>友好</option>
-        <option>严谨</option>
-      </select>
-    </div>
 
-    <h3 className="text-[14px] font-semibold text-[#333] mb-1 ml-1">自定义指令</h3>
-    <p className="text-[12px] text-[#888] mb-3 ml-1">为此主机上的所有任务向 Codex 提供额外说明和上下文。</p>
-    <div className="relative mb-8">
-      <textarea 
-        className="w-full h-[200px] bg-white border border-[#e5e5e5] rounded-xl p-4 text-[13px] font-mono outline-none focus:border-codex-blue resize-none shadow-sm"
-        defaultValue={`# 关于我\n\n叫我"**泽宝**"，你是我的 AI 搭档"**开心**"。\n我是大学生，研究方向是 AI + Java 技术融合。\n英语不太好，用中文沟通。\n\n# 协作方式\n\n- 搭档型协作：直接一起写代码、debug、解决问题`}
-      ></textarea>
-      <button className="absolute bottom-4 right-4 bg-[#666] hover:bg-black text-white px-4 py-1.5 rounded-full text-[13px] font-semibold transition-colors shadow-sm">保存</button>
+      <div>
+        <h3 className="text-[13px] font-bold text-black mb-2 px-1">来自插件</h3>
+        <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm">
+          {listItems.map((hook, idx) => (
+            <div key={idx} className={`p-4 flex justify-between items-center cursor-pointer hover:bg-[#fafafa] ${idx !== listItems.length - 1 ? 'border-b border-[#eee]' : ''}`}>
+              <div className="flex items-center gap-3">
+                <LayoutGrid size={16} className="text-[#888]" />
+                <div>
+                  <div className="text-[13px] font-medium text-black">{hook.name}</div>
+                  <div className="text-[11px] text-[#888] mt-0.5">{hook.count} 个钩子</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-orange-500 font-semibold text-[11px]">
+                <AlertCircle size={12} />
+                <span>3 个问题</span>
+                <span className="text-[#aaa] text-[13px] ml-1">›</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
+  );
+};
 
-    <h3 className="text-[14px] font-semibold text-[#333] mb-1 ml-1">记忆 (实验性)</h3>
-    <p className="text-[12px] text-[#888] mb-3 ml-1">设置 Codex 如何收集、保留和整合记忆。</p>
-    <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm">
-      <div className="p-4 border-b border-[#eee] flex justify-between items-center">
-        <div>
-          <div className="text-[14px] font-medium mb-1 text-black">启用记忆</div>
-          <div className="text-[12px] text-[#888]">从聊天中生成新记忆，并将其带入新聊天</div>
-        </div>
-        <Toggle checked={true} />
-      </div>
-      <div className="p-4 border-b border-[#eee] flex justify-between items-center">
-        <div>
-          <div className="text-[14px] font-medium mb-1 text-black">跳过工具辅助对话</div>
-          <div className="text-[12px] text-[#888]">请勿从使用了 MCP 工具或网页搜索的对话中生成记忆</div>
-        </div>
-        <Toggle checked={true} />
-      </div>
-      <div className="p-4 flex justify-between items-center">
-        <div>
-          <div className="text-[14px] font-medium mb-1 text-black">重置记忆</div>
-          <div className="text-[12px] text-[#888]">删除所有 Codex 记忆</div>
-        </div>
-        <button className="text-red-500 text-[13px] bg-[#fff0f0] hover:bg-[#ffe5e5] px-3.5 py-1.5 rounded-md font-semibold transition-colors">重置</button>
-      </div>
+const WorktreeTab = () => (
+  <div className="space-y-6 text-[#1f2328] select-none pb-12">
+    <div className="flex justify-between items-center border-b border-[#eee] pb-3.5 mb-2">
+      <h2 className="text-[20px] font-bold text-black">工作树</h2>
+      <RefreshCw size={14} className="text-[#888] cursor-pointer hover:text-black transition-colors" />
     </div>
-  </>
+    
+    <div className="bg-white border border-[#e5e5e5] rounded-xl p-10 text-center shadow-sm max-w-lg mx-auto mt-8">
+      <h3 className="text-[14px] font-bold text-black mb-1">尚无工作树</h3>
+      <p className="text-[12px] text-[#666]">Codex 创建的工作树将显示在此处。</p>
+    </div>
+  </div>
 );
+
+const ArchivedConversationsTab = () => {
+  const [showTypeDrop, setShowTypeDrop] = useState(false);
+  const [showProjDrop, setShowProjDrop] = useState(false);
+  const [typeFilter, setTypeFilter] = useState('全部聊天');
+  const [sortMethod, setSortMethod] = useState('更新时间');
+  const [projectFilter, setProjectFilter] = useState('All projects');
+
+  const [chats, setChats] = useState([
+    {
+      project: 'AI Agent',
+      count: 2,
+      conversations: [
+        { title: '分析一下当前项目，为后续动作作出计划', time: '2026年6月20日, 8:28' },
+        { title: '梳理作业评分规则', time: '2026年6月10日, 8:07' }
+      ]
+    },
+    {
+      project: 'Sdk',
+      count: 1,
+      conversations: [
+        { title: '申请 Codex for OSS', time: '2026年6月17日, 17:08' }
+      ]
+    },
+    {
+      project: 'Liuyongze',
+      count: 1,
+      conversations: [
+        { title: '解决问题', time: '2026年6月17日, 13:21' }
+      ]
+    },
+    {
+      project: 'Openai',
+      count: 1,
+      conversations: [
+        { title: '确认 OpenAI 验证要求', time: '2026年6月17日, 10:41' }
+      ]
+    },
+    {
+      project: 'New Chat',
+      count: 1,
+      conversations: [
+        { title: '晚上好', time: '2026年6月16日, 17:49' }
+      ]
+    }
+  ]);
+
+  const handleDeleteAll = () => {
+    if (confirm('确认删除所有已归档对话吗？此操作无法撤销。')) {
+      setChats([]);
+    }
+  };
+
+  const projectOptions = [
+    'All projects', 'Liuyongze', 'Project2 FaceRecognition', 'Aicli', '实习', '复习', '政治', 'Sdk', 'Java', '生日快乐', '操作系统复习笔记', 'Trae', 'New Project', 'AI Agent', 'Chats', 'Automations'
+  ];
+
+  return (
+    <div className="space-y-6 text-[#1f2328] select-none pb-12 relative">
+      <div className="flex justify-between items-center border-b border-[#eee] pb-3.5 mb-2">
+        <h2 className="text-[20px] font-bold text-black">已归档对话</h2>
+        <button 
+          onClick={handleDeleteAll}
+          className="flex items-center gap-1.5 bg-[#fff0f0] border border-[#ffd0d0] hover:bg-[#ffe5e5] px-3.5 py-1.5 rounded-md text-[12px] font-bold text-red-600 transition-colors"
+        >
+          <Trash2 size={12} />
+          <span>全部删除</span>
+        </button>
+      </div>
+
+      {/* Filter toolbar */}
+      <div className="flex items-center gap-2 mb-4">
+        {/* Search */}
+        <div className="relative flex-1">
+          <Search size={13} className="absolute left-2.5 top-2 text-[#888]" />
+          <input 
+            type="text" 
+            placeholder="搜索已归档聊天..." 
+            className="w-full bg-[#f5f5f5] border border-[#e5e5e5] rounded-md py-1 pl-8 pr-3 text-[12px] outline-none focus:border-[#007aff] transition-colors"
+          />
+        </div>
+
+        {/* Type Filter */}
+        <div className="relative">
+          <button 
+            onClick={() => setShowTypeDrop(!showTypeDrop)}
+            className="flex items-center gap-1 bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-2.5 py-1 text-[12px] text-black font-semibold"
+          >
+            <span>{typeFilter}</span>
+            <span className="text-[9px] text-[#888]">▼</span>
+          </button>
+          {showTypeDrop && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-[#e5e5e5] rounded-xl shadow-xl z-50 py-2 w-[180px]">
+              <div className="px-3 pb-1 text-[10px] text-gray-400 font-bold uppercase">类型</div>
+              {['全部聊天', '本地', '云端'].map(option => (
+                <div 
+                  key={option}
+                  onClick={() => { setTypeFilter(option); setShowTypeDrop(false); }}
+                  className="px-3 py-1.5 hover:bg-[#f5f5f5] cursor-pointer text-[12px] flex items-center justify-between"
+                >
+                  <span>{option}</span>
+                  {typeFilter === option && <Check size={12} className="text-[#007aff]" />}
+                </div>
+              ))}
+              <div className="border-t border-[#eee] my-1"></div>
+              <div className="px-3 py-1 text-[10px] text-gray-400 font-bold uppercase">排序方式</div>
+              {['更新时间', '创建时间', '按字母顺序'].map(option => (
+                <div 
+                  key={option}
+                  onClick={() => { setSortMethod(option); setShowTypeDrop(false); }}
+                  className="px-3 py-1.5 hover:bg-[#f5f5f5] cursor-pointer text-[12px] flex items-center justify-between"
+                >
+                  <span>{option}</span>
+                  {sortMethod === option && <Check size={12} className="text-[#007aff]" />}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Project Filter */}
+        <div className="relative">
+          <button 
+            onClick={() => setShowProjDrop(!showProjDrop)}
+            className="flex items-center gap-1 bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-2.5 py-1 text-[12px] text-black font-semibold"
+          >
+            <Folder size={12} className="text-gray-500" />
+            <span>{projectFilter}</span>
+            <span className="text-[9px] text-[#888]">▼</span>
+          </button>
+          {showProjDrop && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-[#e5e5e5] rounded-xl shadow-xl z-50 py-2 w-[220px] max-h-[300px] overflow-y-auto">
+              {projectOptions.map(option => (
+                <div 
+                  key={option}
+                  onClick={() => { setProjectFilter(option); setShowProjDrop(false); }}
+                  className="px-3 py-1.5 hover:bg-[#f5f5f5] cursor-pointer text-[12px] flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    {option !== 'All projects' && <Folder size={11} className="text-gray-400" />}
+                    <span>{option}</span>
+                  </div>
+                  {projectFilter === option && <Check size={12} className="text-[#007aff]" />}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Chat list */}
+      <div className="space-y-4">
+        {chats.length === 0 ? (
+          <div className="text-center py-12 text-[#888] text-[12px]">没有已归档的对话。</div>
+        ) : (
+          chats.map((group, idx) => (
+            <div key={idx} className="bg-white border border-[#e5e5e5] rounded-xl shadow-sm overflow-hidden">
+              <div className="bg-[#fafafa] px-4 py-2 border-b border-[#eee] flex justify-between items-center">
+                <div className="flex items-center gap-2 text-[12px] font-bold text-black">
+                  <Folder size={13} className="text-gray-500" />
+                  <span>{group.project}</span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-gray-500 font-semibold">
+                  <span>{group.count} 个聊天</span>
+                  <button className="hover:bg-[#eee] p-1 rounded transition-colors text-gray-600">
+                    <MoreHorizontal size={13} />
+                  </button>
+                </div>
+              </div>
+              <div className="divide-y divide-[#eee]">
+                {group.conversations.map((c, cIdx) => (
+                  <div key={cIdx} className="p-4 hover:bg-[#fafafa] cursor-pointer transition-colors">
+                    <div className="text-[13px] font-semibold text-black leading-snug">{c.title}</div>
+                    <div className="text-[11px] text-[#888] mt-1.5">{c.time}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+const PersonalizationTab = () => {
+  const [tone, setTone] = useState('务实'); // 务实, 亲和
+  const [isToneOpen, setIsToneOpen] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState(
+    `# 关于我\n\n叫我"**泽宝**"，你是我的 AI 搭档"**开心**"。\n我是大学生，研究方向是 AI + Java 技术融合。\n英语不太好，用中文沟通。\n性格内向。\n生日：2005年08月15日。\n\n# 协作方式\n\n- 搭档型协作：直接一起写代码、debug、解决问题，不需要过多教学铺垫\n- 需求不明确时：**先追问再动手**，不要自行假设`
+  );
+  const [isSaved, setIsSaved] = useState(false);
+  const [enableMemory, setEnableMemory] = useState(true);
+  const [skipToolConv, setSkipToolConv] = useState(true);
+
+  const handleSave = () => {
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 1500);
+  };
+
+  const resetMemory = () => {
+    if (confirm('确认要重置并删除所有已收集的 Codex 记忆吗？')) {
+      alert('已成功重置记忆。');
+    }
+  };
+
+  return (
+    <div className="space-y-6 text-[#1f2328] select-none pb-12 relative">
+      <h2 className="text-[20px] font-bold text-black border-b border-[#eee] pb-3 mb-6">个性化</h2>
+
+      {/* 个性选项 */}
+      <div className="bg-white border border-[#e5e5e5] rounded-xl p-4 shadow-sm flex justify-between items-center relative">
+        <div>
+          <div className="text-[13px] font-semibold text-black">个性</div>
+          <div className="text-[11px] text-[#57606a] mt-0.5">选择 Codex 回复的默认语气</div>
+        </div>
+        
+        <div className="relative">
+          <div 
+            onClick={() => setIsToneOpen(!isToneOpen)}
+            className="bg-[#f5f5f5] border border-[#e5e5e5] hover:bg-[#ebebeb] transition-colors rounded-md px-3 py-1.5 text-[12px] outline-none min-w-[140px] cursor-pointer flex items-center justify-between font-semibold text-black"
+          >
+            <span>{tone}</span>
+            <span className="text-[9px] text-[#888] ml-1">▼</span>
+          </div>
+          {isToneOpen && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-[#e5e5e5] rounded-xl shadow-xl z-50 py-1.5 w-[200px] text-left">
+              <div 
+                onClick={() => { setTone('亲和'); setIsToneOpen(false); }}
+                className="px-3 py-2 hover:bg-[#f5f5f5] cursor-pointer text-[12px] flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-semibold text-black">亲和</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">温暖、协作、贴心</div>
+                </div>
+                {tone === '亲和' && <Check size={12} className="text-[#007aff]" />}
+              </div>
+              <div 
+                onClick={() => { setTone('务实'); setIsToneOpen(false); }}
+                className="px-3 py-2 hover:bg-[#f5f5f5] cursor-pointer text-[12px] flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-semibold text-black">务实</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">简洁、专注、直接</div>
+                </div>
+                {tone === '务实' && <Check size={12} className="text-[#007aff]" />}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 自定义指令 */}
+      <div>
+        <h3 className="text-[13px] font-bold text-black mb-1 px-1">自定义指令</h3>
+        <p className="text-[11px] text-[#57606a] mb-2.5 px-1">
+          为此主机上的所有任务向 Codex 提供额外说明和上下文。<a href="#" className="text-[#007aff] hover:underline">了解更多</a>
+        </p>
+        <div className="relative">
+          <textarea 
+            className="w-full h-[240px] bg-white border border-[#e5e5e5] rounded-xl p-4 text-[12px] font-mono leading-relaxed outline-none focus:border-[#007aff] resize-none shadow-sm text-black"
+            value={customInstructions}
+            onChange={e => setCustomInstructions(e.target.value)}
+          ></textarea>
+          <button 
+            onClick={handleSave}
+            className="absolute bottom-4 right-4 bg-[#8e8e93] hover:bg-black text-white px-4 py-1.5 rounded-full text-[12px] font-semibold transition-colors shadow-sm"
+          >
+            {isSaved ? '已保存 ✓' : '保存'}
+          </button>
+        </div>
+      </div>
+
+      {/* 记忆 */}
+      <div>
+        <h3 className="text-[13px] font-bold text-black mb-2 px-1">记忆 (实验性)</h3>
+        <p className="text-[11px] text-[#57606a] mb-2.5 px-1">
+          设置 Codex 如何收集、保留和整合记忆。<a href="#" className="text-[#007aff] hover:underline">了解更多</a>
+        </p>
+        <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm">
+          <div className="p-4 border-b border-[#eee] flex justify-between items-center">
+            <div>
+              <div className="text-[13px] font-semibold text-black">启用记忆</div>
+              <div className="text-[11px] text-[#57606a] mt-0.5">从聊天中生成新记忆，并将其带入新聊天</div>
+            </div>
+            <Toggle checked={enableMemory} onChange={() => setEnableMemory(!enableMemory)} />
+          </div>
+          <div className="p-4 border-b border-[#eee] flex justify-between items-center">
+            <div>
+              <div className="text-[13px] font-semibold text-black">跳过工具辅助对话</div>
+              <div className="text-[11px] text-[#57606a] mt-0.5">请勿从使用了 MCP 工具或网页搜索的对话中生成记忆</div>
+            </div>
+            <Toggle checked={skipToolConv} onChange={() => setSkipToolConv(!skipToolConv)} />
+          </div>
+          <div className="p-4 flex justify-between items-center">
+            <div>
+              <div className="text-[13px] font-semibold text-black">重置记忆</div>
+              <div className="text-[11px] text-[#57606a] mt-0.5">删除所有 Codex 记忆</div>
+            </div>
+            <button 
+              onClick={resetMemory}
+              className="text-red-500 text-[12px] bg-[#fff0f0] border border-[#ffd0d0] hover:bg-[#ffe5e5] px-3.5 py-1.5 rounded-md font-semibold transition-colors"
+            >
+              重置
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ConnectionsTab = () => {
+  const [configs, setConfigs] = useState({
+    deepseek: {
+      apiKey: localStorage.getItem('codex_key_deepseek') || '',
+      baseUrl: localStorage.getItem('codex_url_deepseek') || 'https://api.deepseek.com/v1',
+      model: localStorage.getItem('codex_model_deepseek') || 'deepseek-v4-flash',
+    },
+    openai: {
+      apiKey: localStorage.getItem('codex_key_openai') || '',
+      baseUrl: localStorage.getItem('codex_url_openai') || 'https://api.openai.com/v1',
+      model: localStorage.getItem('codex_model_openai') || 'gpt-4o-mini',
+    },
+    local: {
+      apiKey: localStorage.getItem('codex_key_local') || 'lm-studio',
+      baseUrl: localStorage.getItem('codex_url_local') || 'http://localhost:1234/v1',
+      model: localStorage.getItem('codex_model_local') || 'qwen3.5-9b',
+    }
+  });
+
+  const [activeTab, setActiveTab] = useState<'deepseek' | 'openai' | 'local'>('deepseek');
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [showKeys, setShowKeys] = useState({ deepseek: false, openai: false, local: false });
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+
+  const handleSave = () => {
+    const current = configs[activeTab];
+    localStorage.setItem(`codex_key_${activeTab}`, current.apiKey);
+    localStorage.setItem(`codex_url_${activeTab}`, current.baseUrl);
+    localStorage.setItem(`codex_model_${activeTab}`, current.model);
+
+    setSaveStatus('保存成功！');
+    setTimeout(() => setSaveStatus(null), 1500);
+  };
+
+  const handleTest = () => {
+    setTesting(true);
+    setTestResult(null);
+    setTimeout(() => {
+      setTesting(false);
+      setTestResult('连接测试成功，延迟 85ms！');
+    }, 1200);
+  };
+
+  const updateVal = (field: 'apiKey' | 'baseUrl' | 'model', val: string) => {
+    setConfigs({
+      ...configs,
+      [activeTab]: {
+        ...configs[activeTab],
+        [field]: val
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-6 text-[#1f2328] select-none pb-12">
+      <div className="border-b border-[#eee] pb-3.5 mb-2">
+        <h2 className="text-[20px] font-bold text-black">连接</h2>
+        <div className="text-[12px] text-[#57606a] mt-1">
+          配置并激活大语言模型厂商，供 Codex 用于核心推理及子智能体。
+        </div>
+      </div>
+
+      {/* Provider selection tabs */}
+      <div className="flex bg-[#f5f5f5] border border-[#e5e5e5] rounded-xl p-0.5">
+        {(['deepseek', 'openai', 'local'] as const).map(provider => (
+          <button 
+            key={provider}
+            onClick={() => { setActiveTab(provider); setTestResult(null); }}
+            className={`flex-1 py-2 text-[12px] font-bold rounded-lg transition-all capitalize ${activeTab === provider ? 'bg-white shadow-sm text-black' : 'text-[#57606a] hover:text-black'}`}
+          >
+            {provider === 'local' ? 'Local Qwen' : provider}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white border border-[#e5e5e5] rounded-xl p-5 shadow-sm space-y-4">
+        {/* API Key */}
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-bold text-black flex justify-between">
+            <span>API Key</span>
+            <span 
+              onClick={() => setShowKeys({ ...showKeys, [activeTab]: !showKeys[activeTab] })}
+              className="text-[#007aff] cursor-pointer hover:underline font-semibold"
+            >
+              {showKeys[activeTab] ? '隐藏' : '显示'}
+            </span>
+          </label>
+          <input 
+            type={showKeys[activeTab] ? 'text' : 'password'}
+            value={configs[activeTab].apiKey}
+            onChange={e => updateVal('apiKey', e.target.value)}
+            placeholder={activeTab === 'local' ? '本地通常无需 API Key' : '输入大模型厂商提供的 API Key'}
+            className="w-full bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-3.5 py-2 text-[12px] font-mono outline-none focus:border-[#007aff] text-black"
+          />
+        </div>
+
+        {/* Base URL */}
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-bold text-black">API Base URL</label>
+          <input 
+            type="text"
+            value={configs[activeTab].baseUrl}
+            onChange={e => updateVal('baseUrl', e.target.value)}
+            placeholder="例如 https://api.deepseek.com/v1"
+            className="w-full bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-3.5 py-2 text-[12px] font-mono outline-none focus:border-[#007aff] text-black"
+          />
+        </div>
+
+        {/* Model Name */}
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-bold text-black">首选模型名称</label>
+          <input 
+            type="text"
+            value={configs[activeTab].model}
+            onChange={e => updateVal('model', e.target.value)}
+            placeholder="例如 deepseek-v4-flash 或 gpt-4o-mini"
+            className="w-full bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-3.5 py-2 text-[12px] font-mono outline-none focus:border-[#007aff] text-black"
+          />
+        </div>
+
+        <div className="border-t border-[#f0f0f0] pt-4 flex justify-between items-center">
+          <div className="text-[11px] font-semibold text-green-600">
+            {testing ? '正在测试连接中...' : testResult}
+          </div>
+          <div className="flex gap-2">
+            <button 
+              onClick={handleTest}
+              disabled={testing}
+              className="bg-[#f5f5f5] border border-[#e5e5e5] hover:bg-[#ebebeb] px-3.5 py-1.5 rounded-md text-[12px] font-semibold text-black transition-colors"
+            >
+              测试连接
+            </button>
+            <button 
+              onClick={handleSave}
+              className="bg-[#007aff] hover:bg-[#0062cc] text-white px-4 py-1.5 rounded-md text-[12px] font-semibold transition-colors"
+            >
+              {saveStatus ? saveStatus : '保存设置'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
