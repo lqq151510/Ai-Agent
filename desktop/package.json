@@ -5,9 +5,10 @@
   "description": "AI Agent Desktop Client for Mac, Windows and Linux",
   "author": "AI Agent Team",
   "license": "UNLICENSED",
-  "main": "dist/main/index.js",
+  "main": "dist/main/main/index.js",
   "scripts": {
     "dev:renderer": "cd src/renderer && npm run dev",
+    "dev": "npm run build:main && electron .",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "cd src/renderer && npm run build && cp -R dist/. ../../dist/renderer/",
     "build": "npm run build:main && npm run build:renderer",

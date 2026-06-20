@@ -125,7 +125,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ================================================================
   approval: {
     getPolicy: () => ipcRenderer.invoke('approval:get-policy'),
+    getMode: () => ipcRenderer.invoke('approval:get-mode'),
     setMode: (mode: string) => ipcRenderer.invoke('approval:set-mode', mode),
+  },
+
+  computer: {
+    permissions: () => ipcRenderer.invoke('computer:permissions'),
+    screenshot: () => ipcRenderer.invoke('computer:screenshot'),
+    click: (params: { x: number; y: number; button?: 'left' | 'right' }) =>
+      ipcRenderer.invoke('computer:click', params),
+    type: (params: { text: string }) => ipcRenderer.invoke('computer:type', params),
+    key: (params: { key: string; modifiers?: string[] }) => ipcRenderer.invoke('computer:key', params),
+    scroll: (params: { dx?: number; dy?: number }) => ipcRenderer.invoke('computer:scroll', params),
   },
 
   // ================================================================

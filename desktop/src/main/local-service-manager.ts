@@ -90,24 +90,24 @@ export class LocalServiceManager {
   }
 
   private resolveEntryPath(): string {
-    // Production: packed inside app.asar resources
-    const prodPath = path.join(process.resourcesPath ?? '', 'local-service', 'dist', 'index.js');
+    // Production: copied with backend-jre extraResources.
+    const prodPath = path.join(process.resourcesPath ?? '', 'backend-jre', 'local-service', 'dist', 'index.js');
     if (fs.existsSync(prodPath)) {
       return prodPath;
     }
 
     // Development: find local-service from project root
-    const devTsPath = path.join(app.getAppPath(), '..', '..', 'local-service', 'src', 'index.ts');
-    if (fs.existsSync(devTsPath)) {
-      return devTsPath;
-    }
-
-    const devJsPath = path.join(app.getAppPath(), '..', '..', 'local-service', 'dist', 'index.js');
+    const devJsPath = path.join(app.getAppPath(), '..', 'local-service', 'dist', 'index.js');
     if (fs.existsSync(devJsPath)) {
       return devJsPath;
     }
 
-    throw new Error(`[local-service] Cannot find entry point. Tried:\n  ${prodPath}\n  ${devTsPath}\n  ${devJsPath}`);
+    const devTsPath = path.join(app.getAppPath(), '..', 'local-service', 'src', 'index.ts');
+    if (fs.existsSync(devTsPath)) {
+      return devTsPath;
+    }
+
+    throw new Error(`[local-service] Cannot find entry point. Tried:\n  ${prodPath}\n  ${devJsPath}\n  ${devTsPath}`);
   }
 
   private needsLoader(entryPath: string): boolean {

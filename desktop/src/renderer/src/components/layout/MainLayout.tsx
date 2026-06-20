@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { SessionList } from './SessionList';
 import { ChatArea } from './ChatArea';
 import { ContextPanel } from './ContextPanel';
@@ -6,6 +6,7 @@ import { PlanApprovalDialog } from './PlanApprovalDialog';
 import { ThreadTabs } from './ThreadTabs';
 import { ReviewPanel } from '../review/ReviewPanel';
 import { SkillsPanel } from '../skills/SkillsPanel';
+import { ComputerUsePanel } from '../computer-use/ComputerUsePanel';
 
 // --------------- Types ---------------
 
@@ -56,6 +57,7 @@ export function MainLayout() {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
+  const [computerOpen, setComputerOpen] = useState(false);
   const [streamState, setStreamState] = useState<StreamState>(null);
   const [taskStreamState, setTaskStreamState] = useState<TaskStreamState>(null);
   const [pendingPlan, setPendingPlan] = useState<{ taskId: string; content: string } | null>(null);
@@ -64,6 +66,8 @@ export function MainLayout() {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [creatingThread, setCreatingThread] = useState(false);
+  const streamStateRef = useRef<StreamState>(null);
+  const pendingAssistantMessageIdRef = useRef<string | null>(null);
 
   // ---- Init ----
 
@@ -97,6 +101,83 @@ export function MainLayout() {
     }
   }, []);
 
+  const handleToolStreamEvent = useCallback(async (event: any) => {
+    const type = String(event.type || '');
+    const data = event.data || {};
+    const description = event.message || data.message || data.toolName || 'tool';
+
+    if (type === 'tool:awaiting-approval') {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `tool-approval-${Date.now()}`,
+          role: 'system',
+          content: `工具请求审批: ${description}`,
+          time: new Date().toLocaleTimeString(),
+        },
+      ]);
+
+      const toolCall = data.toolCall || {};
+      const approved = window.confirm(`允许执行工具？\n${description}`);
+      if (approved) {
+        const result = await window.electronAPI?.tool?.approve({
+          toolCallId: data.toolCallId,
+          toolName: data.toolName,
+          arguments: toolCall.arguments || {},
+          threadId: data.threadId,
+        });
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `tool-approved-${Date.now()}`,
+            role: result?.status === 'error' ? 'error' : 'system',
+            content: result?.status === 'error'
+              ? `工具执行失败: ${result.output || 'unknown error'}`
+              : `工具已执行: ${data.toolName}`,
+            time: new Date().toLocaleTimeString(),
+          },
+        ]);
+      } else {
+        await window.electronAPI?.tool?.reject({ toolCallId: data.toolCallId });
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `tool-rejected-${Date.now()}`,
+            role: 'system',
+            content: `已拒绝工具: ${data.toolName}`,
+            time: new Date().toLocaleTimeString(),
+          },
+        ]);
+      }
+      return;
+    }
+
+    if (type === 'tool:done') {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `tool-done-${Date.now()}`,
+          role: 'system',
+          content: `工具已完成: ${data.toolName}`,
+          time: new Date().toLocaleTimeString(),
+        },
+      ]);
+      return;
+    }
+
+    if (type === 'tool:error') {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `tool-error-${Date.now()}`,
+          role: 'error',
+          content: `工具失败: ${description}`,
+          time: new Date().toLocaleTimeString(),
+        },
+      ]);
+    }
+  }, []);
+
   // Listen for thread events pushed from main process
   useEffect(() => {
     const unsubscribe = window.electronAPI?.thread?.onEvent?.((_thread: any) => {
@@ -107,10 +188,31 @@ export function MainLayout() {
     };
   }, [refreshThreads]);
 
+  useEffect(() => {
+    streamStateRef.current = streamState;
+  }, [streamState]);
+
   // ---- Stream event handling (same as original) ----
 
   useEffect(() => {
     const unsubscribe = window.electronAPI?.chat?.onStreamEvent?.((event: any) => {
+      const eventType = String(event.type || '');
+      const currentStream = streamStateRef.current;
+      if (eventType === 'started' && !currentStream && pendingAssistantMessageIdRef.current) {
+        setActiveSessionId(event.sessionId);
+        setStreamState({
+          requestId: event.requestId,
+          sessionId: event.sessionId,
+          assistantMessageId: pendingAssistantMessageIdRef.current,
+        });
+        return;
+      }
+
+      if (eventType.startsWith('tool:') && currentStream?.requestId === event.requestId) {
+        void handleToolStreamEvent(event);
+        return;
+      }
+
       setStreamState(current => {
         if (!current || current.requestId !== event.requestId) {
           return current;
@@ -129,6 +231,7 @@ export function MainLayout() {
 
         if (event.type === 'done') {
           const reply = typeof event.reply === 'string' ? event.reply : '';
+          pendingAssistantMessageIdRef.current = null;
           setMessages(prev =>
             prev.map(message =>
               message.id === current.assistantMessageId
@@ -141,6 +244,7 @@ export function MainLayout() {
         }
 
         if (event.type === 'error') {
+          pendingAssistantMessageIdRef.current = null;
           setMessages(prev =>
             prev.map(message =>
               message.id === current.assistantMessageId
@@ -160,7 +264,7 @@ export function MainLayout() {
         unsubscribe();
       }
     };
-  }, [refreshSessions]);
+  }, [handleToolStreamEvent, refreshSessions]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI?.agent?.onTaskEvent?.((event: any) => {
@@ -336,6 +440,7 @@ export function MainLayout() {
       time: now,
     };
     setMessages(prev => [...prev, userMsg, assistantMsg]);
+    pendingAssistantMessageIdRef.current = assistantMsg.id;
 
     try {
       const result = await window.electronAPI?.chat?.streamWithContext({
@@ -354,6 +459,7 @@ export function MainLayout() {
         assistantMessageId: assistantMsg.id,
       });
     } catch (err) {
+      pendingAssistantMessageIdRef.current = null;
       setMessages(prev =>
         prev.map(message =>
           message.id === assistantMsg.id
@@ -500,7 +606,7 @@ export function MainLayout() {
       <div className="review-toggle-bar">
         <button
           className={`review-toggle-bar__btn${reviewOpen ? ' active' : ''}`}
-          onClick={() => { setReviewOpen(v => !v); setSkillsOpen(false); }}
+          onClick={() => { setReviewOpen(v => !v); setSkillsOpen(false); setComputerOpen(false); }}
           title="切换审查面板"
           disabled={!workspacePath}
         >
@@ -508,10 +614,17 @@ export function MainLayout() {
         </button>
         <button
           className={`review-toggle-bar__btn${skillsOpen ? ' active' : ''}`}
-          onClick={() => { setSkillsOpen(v => !v); setReviewOpen(false); }}
+          onClick={() => { setSkillsOpen(v => !v); setReviewOpen(false); setComputerOpen(false); }}
           title="切换技能面板"
         >
           {skillsOpen ? '✕ 技能' : '技能'}
+        </button>
+        <button
+          className={`review-toggle-bar__btn${computerOpen ? ' active' : ''}`}
+          onClick={() => { setComputerOpen(v => !v); setReviewOpen(false); setSkillsOpen(false); }}
+          title="切换 Computer Use 面板"
+        >
+          {computerOpen ? '✕ 电脑' : '电脑'}
         </button>
       </div>
 
@@ -524,6 +637,8 @@ export function MainLayout() {
           />
         ) : skillsOpen ? (
           <SkillsPanel onClose={() => setSkillsOpen(false)} />
+        ) : computerOpen ? (
+          <ComputerUsePanel onClose={() => setComputerOpen(false)} />
         ) : (
           <ContextPanel
             workspacePath={workspacePath}

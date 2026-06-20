@@ -10,9 +10,10 @@ import { GitManager } from './git-manager';
 import { ChatManager } from './chat-manager';
 import { LocalServiceManager } from './local-service-manager';
 import { ThreadManager } from './thread-manager';
-import { ToolExecutionBridge } from './tool-execution-bridge';
-import { ApprovalEngine } from './approval-engine';
+import { ToolExecutionBridge, type BackendToolCall, type ToolExecutionEvent } from './tool-execution-bridge';
+import { ApprovalEngine, type ApprovalMode } from './approval-engine';
 import { SkillManager } from './skill-manager';
+import { ComputerUseManager } from './computer-use-manager';
 import { getDataDir, getCliEntryPath } from './utils/env';
 
 export class IpcRegistry {
@@ -32,6 +33,9 @@ export class IpcRegistry {
     private approvalEngine: ApprovalEngine,
     private mainWindowGetter: () => BrowserWindow | null,
     private skillManager: SkillManager,
+    private computerUseManager: ComputerUseManager,
+    private setApprovalMode: (mode: ApprovalMode) => void,
+    private getApprovalMode: () => ApprovalMode,
   ) {}
 
   public setupIpc() {
@@ -116,6 +120,26 @@ export class IpcRegistry {
 
     ipcMain.handle('local-service:is-ready', () => {
       return this.localServiceManager.isReady();
+    });
+
+    // Computer Use Handlers
+    ipcMain.handle('computer:permissions', () => {
+      return this.computerUseManager.permissions();
+    });
+    ipcMain.handle('computer:screenshot', () => {
+      return this.computerUseManager.screenshot();
+    });
+    ipcMain.handle('computer:click', (_event, params) => {
+      return this.computerUseManager.click(params ?? {});
+    });
+    ipcMain.handle('computer:type', (_event, params) => {
+      return this.computerUseManager.typeText(params ?? {});
+    });
+    ipcMain.handle('computer:key', (_event, params) => {
+      return this.computerUseManager.keypress(params ?? {});
+    });
+    ipcMain.handle('computer:scroll', (_event, params) => {
+      return this.computerUseManager.scroll(params ?? {});
     });
 
     ipcMain.handle('agent:submit-task', async (event, payload: { prompt: string }) => {
@@ -314,10 +338,15 @@ export class IpcRegistry {
       return this.approvalEngine.getPolicy();
     });
 
-    ipcMain.handle('approval:set-mode', (_event, mode: import('./approval-engine').ApprovalMode) => {
-      // The mode is read from the bridge's currentMode callback at execution time;
-      // we store it in a shared location. For now, the mode is controlled via
-      // the thread's active context. We expose it for the UI to update.
+    ipcMain.handle('approval:get-mode', () => {
+      return this.getApprovalMode();
+    });
+
+    ipcMain.handle('approval:set-mode', (_event, mode: ApprovalMode) => {
+      if (!['suggest', 'auto-edit', 'full-auto'].includes(mode)) {
+        return { ok: false, error: `Unsupported approval mode: ${mode}` };
+      }
+      this.setApprovalMode(mode);
       return { ok: true };
     });
 
@@ -510,7 +539,13 @@ export class IpcRegistry {
           return;
         }
 
-        if (eventName === 'meta' || eventName === 'client_tool_call' || eventName === 'heartbeat') {
+        if (eventName === 'client_tool_call') {
+          sender.send('chat:stream-event', { requestId, sessionId, type: eventName, data });
+          void this.handleClientToolCall(data, requestId, sessionId, sender);
+          return;
+        }
+
+        if (eventName === 'meta' || eventName === 'heartbeat') {
           sender.send('chat:stream-event', { requestId, sessionId, type: eventName, data });
           return;
         }
@@ -578,6 +613,10 @@ export class IpcRegistry {
       throw new Error(await this.toErrorMessage(response));
     }
     return response;
+  }
+
+  public async getDesktopAccessToken(): Promise<string> {
+    return this.ensureDesktopAccessToken();
   }
 
   private async ensureDesktopAccessToken(): Promise<string> {
@@ -699,6 +738,82 @@ export class IpcRegistry {
     } catch {
       return null;
     }
+  }
+
+  private async handleClientToolCall(
+    data: string,
+    requestId: string,
+    sessionId: string,
+    sender: Electron.WebContents,
+  ): Promise<void> {
+    const toolCall = this.toBackendToolCall(data);
+    if (!toolCall) {
+      sender.send('chat:stream-event', {
+        requestId,
+        sessionId,
+        type: 'tool:error',
+        message: 'Unable to parse client tool call',
+      });
+      return;
+    }
+
+    const thread = this.threadManager.getActiveThread();
+    const threadId = thread?.id ?? '__legacy__';
+    this.ensureToolTerminal(threadId);
+
+    await this.toolBridge.execute(toolCall, threadId, (event) => {
+      this.forwardToolEvent(event, requestId, sessionId, sender);
+    });
+  }
+
+  private ensureToolTerminal(threadId: string): void {
+    if (this.ptyPool.findByThreadId(threadId)) {
+      return;
+    }
+    const thread = this.threadManager.getActiveThread();
+    const activeWorkspace = this.workspaceManager.getActiveWorkspace();
+    const cwd = thread?.worktreePath || thread?.projectPath || activeWorkspace || process.cwd();
+    this.ptyPool.spawn(threadId, cwd, thread?.name || 'tool');
+  }
+
+  private forwardToolEvent(
+    event: ToolExecutionEvent,
+    requestId: string,
+    sessionId: string,
+    sender: Electron.WebContents,
+  ): void {
+    sender.send('chat:stream-event', {
+      requestId,
+      sessionId,
+      type: event.type,
+      data: event,
+      message: event.message,
+    });
+  }
+
+  private toBackendToolCall(data: string): BackendToolCall | null {
+    const parsed = this.tryParseJson(data);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    const toolCallId = String(parsed.toolCallId ?? parsed.id ?? '');
+    const toolName = String(parsed.toolName ?? parsed.name ?? '');
+    if (!toolCallId || !toolName) {
+      return null;
+    }
+
+    let args: Record<string, unknown> = {};
+    if (parsed.arguments && typeof parsed.arguments === 'object') {
+      args = parsed.arguments as Record<string, unknown>;
+    } else if (typeof parsed.argumentsJson === 'string' && parsed.argumentsJson.trim()) {
+      const parsedArgs = this.tryParseJson(parsed.argumentsJson);
+      if (parsedArgs && typeof parsedArgs === 'object') {
+        args = parsedArgs as Record<string, unknown>;
+      }
+    }
+
+    return { toolCallId, toolName, arguments: args };
   }
 
   private async toErrorMessage(response: Response): Promise<string> {

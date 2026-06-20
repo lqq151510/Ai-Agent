@@ -28,6 +28,17 @@ cp package.json "$OUTPUT_DIR/ts-cli/package.json"
 cp -R node_modules "$OUTPUT_DIR/ts-cli/node_modules"
 echo "TS CLI copied to: $OUTPUT_DIR/ts-cli/dist/index.js"
 
+echo "=== Building Local Service bundle ==="
+cd "$PROJECT_ROOT/local-service"
+npm ci
+npm run build
+rm -rf "$OUTPUT_DIR/local-service"
+mkdir -p "$OUTPUT_DIR/local-service"
+cp -R dist "$OUTPUT_DIR/local-service/dist"
+cp package.json "$OUTPUT_DIR/local-service/package.json"
+cp -R node_modules "$OUTPUT_DIR/local-service/node_modules"
+echo "Local Service copied to: $OUTPUT_DIR/local-service/dist/index.js"
+
 echo "=== Building JRE ==="
 bash "$SCRIPT_DIR/build-jre.sh"
 

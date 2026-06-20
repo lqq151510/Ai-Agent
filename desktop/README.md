@@ -1,6 +1,6 @@
 # AI Agent Desktop
 
-AI Agent 桌面客户端，基于 Electron 构建，集成后端 Java 服务与 Web 前端。
+AI Agent 桌面客户端，基于 Electron 构建，集成后端 Java 服务、React Renderer、TS CLI、本地服务、Review/Skills/Computer Use 面板。
 
 ## 架构概览
 
@@ -33,7 +33,7 @@ desktop/
 
 | 依赖 | 版本要求 | 说明 |
 | --- | --- | --- |
-| Node.js | 18+（推荐 20 LTS） | 构建 Electron + Web 前端 |
+| Node.js | 18+（推荐 20 LTS） | 构建 Electron + React Renderer |
 | npm | 随 Node.js | 包管理 |
 | JDK | 21 | 编译后端 + jlink 生成 JRE |
 | Maven | 3.8+ | 后端构建 |
@@ -56,18 +56,18 @@ npm install
 cd ../backend
 mvn spring-boot:run
 
-# 3. 启动 Web 前端开发服务器（独立终端）
-cd ../web
+# 3. 启动 Renderer 开发服务器（独立终端）
+cd ../desktop/src/renderer
 npm install
 npm run dev
 
-# 4. 启动 Electron（连接本地后端 + Web 开发服务器）
-cd ../desktop
+# 4. 启动 Electron（连接本地后端 + Renderer 开发服务器）
+cd ../..
 npm run dev
 ```
 
 > 开发模式下，Electron 默认连接 `http://localhost:18080` 后端。
-> 如需修改，设置环境变量 `DESKTOP_VITE_API_BASE`。
+> Renderer 默认加载 `http://localhost:5173`；如需修改，设置 `DESKTOP_RENDERER_URL`。
 
 ## 打包命令
 
@@ -86,7 +86,7 @@ cd desktop
 ./scripts/build-all.sh --linux
 ```
 
-脚本会自动完成：依赖检查 → 后端 JAR → JRE → Web 前端 → tsc 编译 → electron-builder 打包。
+脚本会自动完成：依赖检查 → 后端 JAR → JRE → TS CLI → Local Service → Renderer → tsc 编译 → electron-builder 打包。
 
 ### 分步构建
 
@@ -96,10 +96,10 @@ cd desktop
 # 仅编译 TypeScript（不打包）
 npm run build:main
 
-# 仅构建 Web 前端
-npm run build:web
+# 仅构建 Renderer
+npm run build:renderer
 
-# 完整构建（tsc + web）
+# 完整构建（main + renderer）
 npm run build
 
 # 仅打包当前平台
@@ -117,8 +117,8 @@ npm run dist:linux
 # 跳过后端构建（已有 backend-jre/）
 ./scripts/build-all.sh --mac --skip-backend
 
-# 跳过 Web 前端构建（已有 dist/renderer/）
-./scripts/build-all.sh --mac --skip-web
+# 跳过 Renderer 构建（已有 dist/renderer/）
+./scripts/build-all.sh --mac --skip-renderer
 ```
 
 ## macOS 公证配置
@@ -246,13 +246,13 @@ npm config set registry https://registry.npmmirror.com
 /Applications/AI\ Agent.app/Contents/MacOS/AI\ Agent
 ```
 
-### 7. Web 前端构建失败
+### 7. Renderer 构建失败
 
-**原因**：`web/` 目录未安装依赖。
+**原因**：`desktop/src/renderer/` 目录未安装依赖。
 
 **解决**：
 ```bash
-cd web && npm install
+cd desktop/src/renderer && npm install
 ```
 
 ### 8. electron-builder 报错 `cannot find icon`

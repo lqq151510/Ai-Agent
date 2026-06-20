@@ -3,11 +3,11 @@
 # AI Agent Desktop - 全量构建脚本
 # ----------------------------------------------------------------------------
 # 用法：
-#   ./scripts/build-all.sh [--mac|--win|--linux] [--skip-backend] [--skip-web|--skip-renderer]
+#   ./scripts/build-all.sh [--mac|--win|--linux] [--skip-backend] [--skip-renderer]
 #
 # 功能：
 #   1. 检查构建依赖（node / java / maven / jlink）
-#   2. 构建后端 JAR（backend，desktop profile）
+#   2. 构建后端 JAR（backend，desktop profile）、TS CLI、Local Service
 #   3. 使用 jlink 生成最小化 JRE
 #   4. 构建 Desktop Renderer 并复制到 desktop/dist/renderer
 #   5. 编译 Electron 主进程（tsc）
@@ -40,7 +40,7 @@ SKIP_INSTALL="${DESKTOP_SKIP_NPM_INSTALL:-false}"
 WEB_API_BASE="${DESKTOP_VITE_API_BASE:-http://localhost:18080}"
 BUILDER_ARGS="${DESKTOP_ELECTRON_BUILDER_ARGS:-}"
 SKIP_BACKEND="false"
-SKIP_WEB="false"
+SKIP_RENDERER="false"
 TARGET_PLATFORM=""
 
 # 颜色输出（如终端不支持会降级）
@@ -81,8 +81,8 @@ while [[ $# -gt 0 ]]; do
             SKIP_BACKEND="true"
             shift
             ;;
-        --skip-web|--skip-renderer)
-            SKIP_WEB="true"
+        --skip-renderer|--skip-web)
+            SKIP_RENDERER="true"
             shift
             ;;
         --help|-h)
@@ -160,7 +160,7 @@ fi
 if [[ "$SKIP_BACKEND" == "true" ]]; then
     log_warn "跳过后端构建 (--skip-backend)"
 else
-    log_step "[2/6] 构建后端 JAR + JRE + TS CLI"
+    log_step "[2/6] 构建后端 JAR + JRE + TS CLI + Local Service"
     bash "$SCRIPT_DIR/build-backend.sh"
     log_ok "后端构建完成"
 fi
@@ -168,8 +168,8 @@ fi
 # ----------------------------------------------------------------------------
 # 构建 Desktop Renderer
 # ----------------------------------------------------------------------------
-if [[ "$SKIP_WEB" == "true" ]]; then
-    log_warn "跳过 Desktop Renderer 构建 (--skip-web/--skip-renderer)"
+if [[ "$SKIP_RENDERER" == "true" ]]; then
+    log_warn "跳过 Desktop Renderer 构建 (--skip-renderer)"
 else
     log_step "[3/6] 构建 Desktop Renderer"
 

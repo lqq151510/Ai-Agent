@@ -2,8 +2,9 @@
 
 This repo delivers a runnable Beta stack:
 - `backend`: Spring Boot API (JWT auth, sessions, SSE chat, system readiness/models API)
+- `desktop`: Electron + React desktop client, including threads, review, skills, terminal, and Computer Use entrypoints
 - `ts-cli`: TypeScript + React (Ink) terminal client
-- `docker-compose`: one-command single-host deployment with PostgreSQL + Redis
+- `docker-compose`: single-host backend stack with PostgreSQL, Redis, Kafka, Milvus, Python parsing service, and monitoring
 
 ## AI + Java Dev Coach MVP
 
@@ -72,13 +73,15 @@ Smoke test validates:
 ## Docker Services
 
 `docker-compose.yml` starts:
-- `web` (nginx static + `/api` reverse proxy)
-- `backend` (Spring Boot)
+- `backend` (Spring Boot API)
+- `python-service` (FastAPI document parsing/evaluation support)
 - `postgres`
 - `redis`
+- `kafka`
+- Milvus dependencies from `milvus-dc.yml`
+- Prometheus/Grafana monitoring
 
 Default URLs:
-- Web: `http://localhost:8088`
 - Backend: `http://localhost:8080`
 - Readiness: `http://localhost:8080/api/v1/system/health/ready`
 
@@ -90,12 +93,21 @@ cd backend
 mvn spring-boot:run
 ```
 
-### Web
+### Desktop Renderer
 ```bash
-cd web
+cd desktop/src/renderer
 npm install
 npm run dev
 ```
+
+### Desktop App
+```bash
+cd desktop
+npm install
+npm run dev
+```
+
+In development, Electron loads `DESKTOP_RENDERER_URL` or `http://localhost:5173` by default. Packaged builds load `desktop/dist/renderer/index.html`.
 
 ### TS CLI
 ```bash
@@ -175,6 +187,11 @@ SMOKE_RENDER_PDF=true ./scripts/smoke.sh dev
 - `GET /api/v1/system/release-report?windowHours=24&sessionId=<optional>`
 - `GET /api/v1/system/release-report/export?windowHours=24&sessionId=<optional>&format=json|markdown`
 
+### Desktop Computer Use
+- Desktop exposes macOS-only `computer_use` tool actions through approval-gated IPC:
+  `permissions`, `screenshot`, `click`, `type`, `keypress`, and `scroll`.
+- macOS users must grant Screen Recording and Accessibility permissions before screenshot/input actions work.
+
 ## Config Layering
 
 Templates:
@@ -204,10 +221,9 @@ Key runtime knobs:
 - Error payloads include `requestId` for traceability.
 - Structured logging includes `requestId/userId/sessionId`.
 - TS CLI state is stored under `~/.ai-agent-cli/state.json` with restrictive permissions on POSIX systems.
-- Web sidebar includes tool stats filters (`1h/24h/7d`, current-session/global) with one-click refresh.
-- Web sidebar supports exporting tool stats as JSON/Markdown.
-- Web sidebar supports exporting release reports as JSON/Markdown.
-- Web chat errors expose next-step action buttons (re-login, retry, switch fallback model).
+- Desktop/CLI surfaces include tool stats filters (`1h/24h/7d`, current-session/global) with one-click refresh/export paths.
+- Desktop/CLI surfaces support exporting tool stats and release reports as JSON/Markdown.
+- Chat errors expose next-step action buttons (re-login, retry, switch fallback model) where the active client supports them.
 - Rate-limit chat failures trigger a short countdown auto-retry.
 - TS CLI `stream-chat` prints stream status (`connecting`, `meta`, `done`) and collects a sanitized repo context.
 - TS CLI includes an Ink REPL with slash commands such as `/login`, `/sessions`, `/new`, `/stats`, and `/report`.

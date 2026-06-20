@@ -31,6 +31,27 @@ public class AgentToolOrchestrator {
                                 "cwd",
                                 type("string"))),
                 new ToolSpec(
+                        "computer_use",
+                        "Control the user's macOS desktop through the approved desktop client."
+                            + " Use only after the user asks for computer/app control. Supported"
+                            + " actions: permissions, screenshot, click, type, keypress, scroll.",
+                        schema(
+                                List.of("action"),
+                                "action",
+                                Map.of(
+                                        "type",
+                                        "string",
+                                        "enum",
+                                        List.of(
+                                                "permissions",
+                                                "screenshot",
+                                                "click",
+                                                "type",
+                                                "keypress",
+                                                "scroll")),
+                                "params",
+                                Map.of("type", "object", "additionalProperties", true))),
+                new ToolSpec(
                         "searchCode",
                         "Search source code by regex-like pattern.",
                         schema(
@@ -137,7 +158,7 @@ public class AgentToolOrchestrator {
         JsonNode args = parseArgs(call.argumentsJson());
         String name = call.name() == null ? "" : call.name();
 
-        if ("execute_cli_command".equals(name)) {
+        if ("execute_cli_command".equals(name) || "computer_use".equals(name)) {
             long start = System.currentTimeMillis();
             try {
                 return clientToolInvoker

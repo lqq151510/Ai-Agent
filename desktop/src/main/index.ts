@@ -11,8 +11,9 @@ import { ChatManager } from './chat-manager';
 import { LocalServiceManager } from './local-service-manager';
 import { ThreadManager } from './thread-manager';
 import { ToolExecutionBridge } from './tool-execution-bridge';
-import { ApprovalEngine } from './approval-engine';
+import { ApprovalEngine, type ApprovalMode } from './approval-engine';
 import { SkillManager } from './skill-manager';
+import { ComputerUseManager } from './computer-use-manager';
 import { findFreePort } from './utils/network';
 import { getDataDir, getJrePath, getBackendJarPath, getBackendStartupTimeoutMs } from './utils/env';
 
@@ -42,6 +43,8 @@ let threadManager: ThreadManager;
 let toolBridge: ToolExecutionBridge;
 let approvalEngine: ApprovalEngine;
 let skillManager: SkillManager;
+let computerUseManager: ComputerUseManager;
+let approvalMode: ApprovalMode = 'auto-edit';
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -118,13 +121,15 @@ if (!gotTheLock) {
       threadManager = new ThreadManager(ptyPool, gitManager);
       approvalEngine = new ApprovalEngine();
       skillManager = new SkillManager();
+      computerUseManager = new ComputerUseManager();
       toolBridge = new ToolExecutionBridge(
         ptyPool,
         approvalEngine,
         () => localServiceManager.isReady() ? localServiceManager.getPort() : 8765,
         () => activePort,
-        () => '', // auth token resolved per-request by IpcRegistry
-        () => 'auto-edit', // default approval mode
+        () => ipcRegistry.getDesktopAccessToken(),
+        () => approvalMode,
+        computerUseManager,
       );
 
       trayManager = new TrayManager(windowManager, backendManager);
@@ -138,6 +143,9 @@ if (!gotTheLock) {
         approvalEngine,
         () => windowManager.mainWindow,
         skillManager,
+        computerUseManager,
+        (mode) => { approvalMode = mode; },
+        () => approvalMode,
       );
 
       ipcRegistry.setupIpc();

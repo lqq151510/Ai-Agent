@@ -151,16 +151,7 @@ args: {
 
 ### A5: 所需权限
 
-macOS 需要在 `entitlements.mac.plist` 加：
-
-```xml
-<key>com.apple.security.device.camera</key>
-<true/>
-<key>com.apple.security.device.microphone</key>
-<true/>
-```
-
-用户需要在系统设置中授予：
+Computer Use 不需要相机/麦克风 entitlement。用户需要在系统设置中授予：
 - 屏幕录制权限（Screen Recording）
 - 辅助功能权限（Accessibility）
 

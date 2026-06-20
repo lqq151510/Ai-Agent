@@ -2,7 +2,14 @@ import { app } from 'electron';
 import * as path from 'path';
 
 export function getResourcePath(): string {
-  return process.resourcesPath || path.join(__dirname, '..', '..');
+  const configured = process.env.DESKTOP_RESOURCE_ROOT;
+  if (configured && configured.trim()) {
+    return configured;
+  }
+  if (app.isPackaged) {
+    return process.resourcesPath;
+  }
+  return path.resolve(__dirname, '..', '..', '..', '..');
 }
 
 export function getJrePath(): string {

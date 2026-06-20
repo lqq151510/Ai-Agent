@@ -101,6 +101,9 @@ export class ToolExecutionBridge {
         output: '[Tool execution denied by policy]',
         status: 'rejected',
       };
+      await this.submitResult(result).catch(err => {
+        console.error('[tool-bridge] failed to submit rejected result:', err);
+      });
       onEvent?.({ type: 'tool:error', toolCallId, toolName, threadId, message: 'Denied by policy', result });
       return result;
     }
@@ -218,52 +221,57 @@ export class ToolExecutionBridge {
 
   private async execCli(args: Record<string, unknown>, threadId: string): Promise<string> {
     const command = String(args.command || args.cmd || args.script || '');
-    const description = String(args.description || '');
     const timeoutMs = Number(args.timeout) || DEFAULT_TOOL_TIMEOUT_MS;
 
     if (!command) throw new Error('No command provided');
 
-    // Find the thread's terminal
     const terminal = this.ptyPool.findByThreadId(threadId);
-    if (!terminal) throw new Error(`No terminal found for thread ${threadId}`);
 
     // For read-only commands, collect output directly
     if (this.isReadOnlyCommand(command)) {
-      return this.collectOutput(command, terminal.cwd, timeoutMs);
+      return this.collectOutput(command, terminal?.cwd ?? process.cwd(), timeoutMs);
     }
 
+    if (!terminal) throw new Error(`No terminal found for thread ${threadId}`);
+
     // Write command to the PTY
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<string>((resolve) => {
       const outputBuffer: string[] = [];
       const startMarker = `__TOOL_START_${Date.now()}__`;
       const endMarker = `__TOOL_END_${Date.now()}__`;
+      let settled = false;
+      let timer: NodeJS.Timeout | undefined;
+      const finish = (output: string) => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        if (timer) clearTimeout(timer);
+        resolve(output);
+      };
 
-      const disposable = this.ptyPool.onData(terminal.id, (data: string) => {
+      const unsubscribe = this.ptyPool.onData(terminal.id, (data: string) => {
         outputBuffer.push(data);
 
         if (data.includes(endMarker)) {
-          // Unregister listener
-          this.ptyPool.onData(terminal.id, () => {});
-
           // Extract output between markers
           const fullOutput = outputBuffer.join('');
           const match = fullOutput.match(new RegExp(`${startMarker}([\\s\\S]*)${endMarker}`));
           const result = match
             ? match[1].trim()
             : fullOutput.replace(new RegExp(`${startMarker}|${endMarker}`, 'g'), '').trim();
-          resolve(result || '(command completed with no output)');
+          finish(result || '(command completed with no output)');
         }
       });
 
-      // Write the command with markers
-      terminal.process.write(`echo "${startMarker}" && ${command} && echo "${endMarker}" || echo "${endMarker}"\n`);
-
       // Safety timeout
-      setTimeout(() => {
+      timer = setTimeout(() => {
         const fullOutput = outputBuffer.join('');
         const result = fullOutput.replace(new RegExp(`${startMarker}|${endMarker}`, 'g'), '').trim();
-        resolve(result || `(command timed out after ${timeoutMs}ms)`);
+        finish(result || `(command timed out after ${timeoutMs}ms)`);
       }, timeoutMs);
+
+      // Write the command with markers
+      terminal.process.write(`echo "${startMarker}" && ${command} && echo "${endMarker}" || echo "${endMarker}"\n`);
     });
   }
 
@@ -286,10 +294,9 @@ export class ToolExecutionBridge {
     const content = String(args.content || '');
     if (!filePath) throw new Error('No file path provided');
 
-    // Escape content for shell (use heredoc to avoid escaping issues)
-    const escaped = content.replace(/\\/g, '\\\\').replace(/'/g, "'\\''");
+    const escapedPath = filePath.replace(/'/g, "'\\''");
     return this.execCli({
-      command: `cat > '${filePath}' << 'ENDOFFILE'\n${content}\nENDOFFILE`,
+      command: `cat > '${escapedPath}' << 'ENDOFFILE'\n${content}\nENDOFFILE`,
     }, threadId);
   }
 

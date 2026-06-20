@@ -24,7 +24,7 @@ export type PtyInstance = {
  */
 export class PtyPool {
   private instances = new Map<string, PtyInstance>();
-  private dataCallbacks = new Map<string, PtyDataCallback>();
+  private dataCallbacks = new Map<string, Set<PtyDataCallback>>();
 
   constructor() {}
 
@@ -69,8 +69,11 @@ export class PtyPool {
     this.instances.set(terminalId, instance);
 
     shellProcess.onData((data: string) => {
-      const cb = this.dataCallbacks.get(terminalId);
-      if (cb) cb(data);
+      const callbacks = this.dataCallbacks.get(terminalId);
+      if (!callbacks) return;
+      for (const cb of callbacks) {
+        cb(data);
+      }
     });
 
     shellProcess.onExit(() => {
@@ -134,10 +137,18 @@ export class PtyPool {
   }
 
   /**
-   * Register a data callback for a terminal. Each terminal has at most one.
+   * Register a data callback for a terminal.
    */
-  public onData(terminalId: string, callback: PtyDataCallback): void {
-    this.dataCallbacks.set(terminalId, callback);
+  public onData(terminalId: string, callback: PtyDataCallback): () => void {
+    const callbacks = this.dataCallbacks.get(terminalId) ?? new Set<PtyDataCallback>();
+    callbacks.add(callback);
+    this.dataCallbacks.set(terminalId, callbacks);
+    return () => {
+      callbacks.delete(callback);
+      if (callbacks.size === 0) {
+        this.dataCallbacks.delete(terminalId);
+      }
+    };
   }
 
   // ---- Queries ----
