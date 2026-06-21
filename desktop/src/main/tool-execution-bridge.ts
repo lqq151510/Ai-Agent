@@ -373,7 +373,11 @@ export class ToolExecutionBridge {
       }
       return 'shell:read'; // project-local file reads are safe-read ops
     }
-    if (toolName === 'computer_use') return 'computer';
+    if (toolName === 'computer_use') {
+      const action = String(args.action || '');
+      if (action === 'screenshot') return 'computer:screenshot';
+      return 'computer';
+    }
     return 'shell:command';
   }
 
@@ -397,6 +401,8 @@ export class ToolExecutionBridge {
         return `搜索代码: ${args.query || ''}`;
       case 'listRepoTree':
         return `浏览目录: ${args.path || '.'}`;
+      case 'computer_use':
+        return `电脑操作: ${args.action || 'unknown'}${args.action === 'click' ? ` (${args.x}, ${args.y})` : ''}${args.action === 'type' ? ` text="${String(args.text || '').slice(0, 40)}"` : ''}${args.action === 'keypress' ? ` key="${args.key}"` : ''}`;
       default:
         return `${toolName}: ${JSON.stringify(args)}`;
     }

@@ -147,6 +147,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     type: (params: { text: string }) => ipcRenderer.invoke('computer:type', params),
     key: (params: { key: string; modifiers?: string[] }) => ipcRenderer.invoke('computer:key', params),
     scroll: (params: { dx?: number; dy?: number }) => ipcRenderer.invoke('computer:scroll', params),
+    openSettings: (pane?: 'accessibility' | 'screenRecording') =>
+      ipcRenderer.invoke('computer:open-settings', pane),
   },
 
   // ================================================================

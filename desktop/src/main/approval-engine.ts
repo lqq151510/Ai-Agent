@@ -6,6 +6,7 @@ export type ResourceType =
   | 'file:write'
   | 'file:read-external'
   | 'computer'
+  | 'computer:screenshot'
   | 'network'
   | 'shell:command'
   | 'shell:install'
@@ -57,7 +58,8 @@ const BUILTIN_RULES: ApprovalRule[] = [
 
   // Network: always requires approval in auto-edit
   { resource: 'network', level: 'request', comment: 'Network access' },
-  { resource: 'computer', level: 'request', comment: 'Computer Use actions' },
+  { resource: 'computer:screenshot', level: 'allow', comment: 'Screenshots auto-approved when Computer Use is enabled' },
+  { resource: 'computer', level: 'request', comment: 'Computer Use actions (click, type, key, scroll)' },
 
   // Reads outside workspace: deny by default
   { resource: 'file:read-external', pattern: '~/.ssh/*', level: 'deny', comment: 'SSH keys' },

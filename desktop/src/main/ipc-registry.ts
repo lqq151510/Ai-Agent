@@ -141,6 +141,9 @@ export class IpcRegistry {
     ipcMain.handle('computer:scroll', (_event, params) => {
       return this.computerUseManager.scroll(params ?? {});
     });
+    ipcMain.handle('computer:open-settings', (_event, pane?: string) => {
+      return this.computerUseManager.openSettings(pane as 'accessibility' | 'screenRecording' | undefined);
+    });
 
     ipcMain.handle('agent:submit-task', async (event, payload: { prompt: string }) => {
       const taskId = await this.submitAgentTask(payload.prompt);

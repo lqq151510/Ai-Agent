@@ -7,6 +7,7 @@ import { ReviewPanel } from '../review/ReviewPanel';
 import { SkillsPanel } from '../skills/SkillsPanel';
 import { ComputerUsePanel } from '../computer-use/ComputerUsePanel';
 import { MessageSquarePlus, Search, Blocks, Activity, Settings } from 'lucide-react';
+import { SettingsLayout } from '../SettingsLayout';
 
 // --------------- Types ---------------
 
@@ -59,7 +60,44 @@ const formatRelativeTime = (timestamp: number) => {
 
 export function MainLayout() {
   // ---- Existing state ----
+  const [showSettings, setShowSettings] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+
+  const handleSettingsClose = useCallback(() => {
+    setShowSettings(false);
+    const activeProvider = localStorage.getItem('codex_active_provider') || 'deepseek';
+    if (activeProvider === 'local') {
+      setSelectedModel('Qwen-3.5-Local');
+    } else if (activeProvider === 'openai') {
+      setSelectedModel('GPT-4o');
+    } else {
+      setSelectedModel('DeepSeek-V4');
+    }
+  }, []);
+
+  const handleModelChange = useCallback((newModel: string) => {
+    setSelectedModel(newModel);
+    let provider = 'deepseek';
+    if (newModel === 'Qwen-3.5-Local') {
+      provider = 'local';
+    } else if (newModel === 'GPT-4o') {
+      provider = 'openai';
+    } else if (newModel === 'DeepSeek-V4') {
+      provider = 'deepseek';
+    }
+    localStorage.setItem('codex_active_provider', provider);
+  }, []);
+
+  useEffect(() => {
+    const activeProvider = localStorage.getItem('codex_active_provider') || 'deepseek';
+    if (activeProvider === 'local') {
+      setSelectedModel('Qwen-3.5-Local');
+    } else if (activeProvider === 'openai') {
+      setSelectedModel('GPT-4o');
+    } else {
+      setSelectedModel('DeepSeek-V4');
+    }
+  }, []);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
@@ -104,7 +142,12 @@ export function MainLayout() {
   const [activeRightTab, setActiveRightTab] = useState<'files' | 'gitdiff' | 'params' | 'review' | 'skills' | 'computer'>('files');
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('DeepSeek-V4');
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const activeProvider = localStorage.getItem('codex_active_provider') || 'deepseek';
+    if (activeProvider === 'local') return 'Qwen-3.5-Local';
+    if (activeProvider === 'openai') return 'GPT-4o';
+    return 'DeepSeek-V4';
+  });
   const [reasoningLevel, setReasoningLevel] = useState('Low');
   const [approvalMode, setApprovalMode] = useState('request'); // request, auto, full
   const [temperature, setTemperature] = useState(0.5);
@@ -769,7 +812,7 @@ export function MainLayout() {
 
         {/* Footer Settings */}
         <div className="codex-sidebar__footer">
-          <div className="codex-sidebar__setting-btn" onClick={() => setActiveRightTab('params')}>
+          <div className="codex-sidebar__setting-btn" onClick={() => setShowSettings(true)}>
             <Settings size={15} style={{ marginRight: '4px' }} />
             <span>设置</span>
           </div>
@@ -788,7 +831,7 @@ export function MainLayout() {
           selectedFiles={selectedFiles}
           taskRunning={Boolean(taskStreamState)}
           selectedModel={selectedModel}
-          setSelectedModel={setSelectedModel}
+          setSelectedModel={handleModelChange}
           reasoningLevel={reasoningLevel}
           setReasoningLevel={setReasoningLevel}
           approvalMode={approvalMode}
@@ -983,6 +1026,12 @@ export function MainLayout() {
           onReject={() => void handleApprovePlan(false)}
         />
       ) : null}
+
+      {showSettings && (
+        <div className="settings-overlay">
+          <SettingsLayout onBack={handleSettingsClose} />
+        </div>
+      )}
     </div>
   );
 }
