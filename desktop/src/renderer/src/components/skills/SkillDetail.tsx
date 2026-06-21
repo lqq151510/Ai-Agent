@@ -5,16 +5,28 @@ type SkillDetailProps = {
   onClose: () => void;
 };
 
+interface SkillTool {
+  name: string;
+  description: string;
+}
+
+interface SkillInfo {
+  name: string;
+  description: string;
+  source: string;
+  version?: string;
+  author?: string;
+  tags?: string[];
+  triggers?: string[];
+  tools?: SkillTool[];
+  hasScripts?: boolean;
+}
+
 export function SkillDetail({ name, onClose }: SkillDetailProps) {
-  const [skill, setSkill] = useState<any>(null);
+  const [skill, setSkill] = useState<SkillInfo | null>(null);
   const [instructions, setInstructions] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showInstructions, setShowInstructions] = useState(false);
-
-  useEffect(() => {
-    loadSkill();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name]);
 
   const loadSkill = async () => {
     setLoading(true);
@@ -29,6 +41,12 @@ export function SkillDetail({ name, onClose }: SkillDetailProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadSkill();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name]);
 
   if (loading) return <div className="skill-detail__loading">加载中...</div>;
   if (!skill) return <div className="skill-detail__error">技能 "{name}" 未找到</div>;
@@ -57,7 +75,7 @@ export function SkillDetail({ name, onClose }: SkillDetailProps) {
           </div>
         )}
 
-        {skill.tags?.length > 0 && (
+        {skill.tags && skill.tags.length > 0 && (
           <div className="skill-detail__tags">
             {skill.tags.map((tag: string) => (
               <span key={tag} className="skill-detail__tag">{tag}</span>
@@ -65,7 +83,7 @@ export function SkillDetail({ name, onClose }: SkillDetailProps) {
           </div>
         )}
 
-        {skill.triggers?.length > 0 && (
+        {skill.triggers && skill.triggers.length > 0 && (
           <div className="skill-detail__triggers">
             <span className="skill-detail__label">触发词:</span>
             {skill.triggers.map((t: string) => (
@@ -74,10 +92,10 @@ export function SkillDetail({ name, onClose }: SkillDetailProps) {
           </div>
         )}
 
-        {skill.tools?.length > 0 && (
+        {skill.tools && skill.tools.length > 0 && (
           <div className="skill-detail__tools-section">
             <span className="skill-detail__label">注册的工具 ({skill.tools.length})</span>
-            {skill.tools.map((tool: any) => (
+            {skill.tools.map((tool: SkillTool) => (
               <div key={tool.name} className="skill-detail__tool">
                 <code className="skill-detail__tool-name">{tool.name}</code>
                 <span className="skill-detail__tool-desc">{tool.description}</span>

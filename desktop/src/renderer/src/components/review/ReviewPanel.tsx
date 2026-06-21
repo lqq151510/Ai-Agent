@@ -39,22 +39,11 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [diffs, setDiffs] = useState<StructuredDiff[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!!projectPath);
+  const [error, setError] = useState<string | null>(projectPath ? null : '未选择工作区');
   const [commitMsg, setCommitMsg] = useState('');
   const [showCommitDialog, setShowCommitDialog] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
-
-  // Load diffs on mount
-  useEffect(() => {
-    if (!projectPath) {
-      setLoading(false);
-      setError('未选择工作区');
-      return;
-    }
-    loadDiffs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectPath]);
 
   const loadDiffs = useCallback(async () => {
     setLoading(true);
@@ -71,16 +60,24 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
       }));
       setFiles(fileList);
 
-      // Auto-select first file
-      if (fileList.length > 0 && !selectedFile) {
-        setSelectedFile(fileList[0].file);
+      // Auto-select first file using functional update to avoid dependency on selectedFile
+      if (fileList.length > 0) {
+        setSelectedFile(prev => prev || fileList[0].file);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取 diff 失败');
     } finally {
       setLoading(false);
     }
-  }, [projectPath, selectedFile]);
+  }, [projectPath]);
+
+  // Load diffs on mount
+  useEffect(() => {
+    if (projectPath) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      loadDiffs();
+    }
+  }, [projectPath, loadDiffs]);
 
   // Get diff for selected file
   const selectedDiff = diffs.find(d => d.file === selectedFile) || null;

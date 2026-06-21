@@ -26,10 +26,6 @@ export function SkillsPanel({ onClose }: SkillsPanelProps) {
   const [detailName, setDetailName] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'global' | 'project'>('all');
 
-  useEffect(() => {
-    loadSkills();
-  }, []);
-
   const loadSkills = useCallback(async () => {
     setLoading(true);
     try {
@@ -42,6 +38,11 @@ export function SkillsPanel({ onClose }: SkillsPanelProps) {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadSkills();
+  }, [loadSkills]);
 
   // Filter by search + tab
   const filtered = skills.filter(s => {

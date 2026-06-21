@@ -63,17 +63,74 @@ export class ComputerUseManager {
       accessibility = 'unknown';
     }
 
+    // Probe Screen Recording by attempting a quick silent capture
+    let screenRecording: 'granted' | 'denied' | 'unknown' = 'unknown';
+    try {
+      const probePath = path.join(os.tmpdir(), `ai-agent-screen-probe-${Date.now()}.png`);
+      await execFileAsync('/usr/sbin/screencapture', ['-x', probePath], {
+        timeout: 3_000,
+        maxBuffer: 256,
+      });
+      // If we got here, capture succeeded → permission granted
+      screenRecording = 'granted';
+      try { fs.unlinkSync(probePath); } catch { /* ignore */ }
+    } catch (error) {
+      const msg = this.errorMessage(error);
+      if (msg.toLowerCase().includes('not allowed') || msg.toLowerCase().includes('denied')) {
+        screenRecording = 'denied';
+      } else {
+        screenRecording = 'unknown';
+      }
+    }
+
     return {
       ok: true,
       action: 'permissions',
       data: {
         platform: 'darwin',
-        screenRecording: 'unknown',
+        screenRecording,
         accessibility,
         required: ['Screen Recording', 'Accessibility'],
       },
-      message: 'macOS only exposes final Screen Recording status when capture is attempted.',
+      message: this.describePermissions(accessibility, screenRecording),
     };
+  }
+
+  /**
+   * Open macOS System Settings to the specified privacy pane.
+   */
+  public async openSettings(pane?: 'accessibility' | 'screenRecording'): Promise<ComputerUseResult> {
+    if (process.platform !== 'darwin') {
+      return {
+        ok: false,
+        action: 'openSettings',
+        error: 'Only supported on macOS.',
+      };
+    }
+
+    const urls: Record<string, string> = {
+      accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+      screenRecording: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+    };
+
+    const url = pane ? urls[pane] : 'x-apple.systempreferences:com.apple.preference.security';
+
+    try {
+      await execFileAsync('/usr/bin/open', [url], { timeout: 5_000 });
+      return {
+        ok: true,
+        action: 'openSettings',
+        message: pane
+          ? `已打开「${pane === 'accessibility' ? '辅助功能' : '屏幕录制'}」权限设置`
+          : '已打开系统设置「隐私与安全性」',
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        action: 'openSettings',
+        error: this.errorMessage(error),
+      };
+    }
   }
 
   public async screenshot(): Promise<ComputerUseResult> {
@@ -360,5 +417,16 @@ event?.post(tap: .cghidEventTap)
   private errorMessage(error: unknown): string {
     if (error instanceof Error) return error.message;
     return String(error);
+  }
+
+  private describePermissions(
+    accessibility: string,
+    screenRecording: string,
+  ): string {
+    const missing: string[] = [];
+    if (accessibility === 'denied' || accessibility === 'unknown') missing.push('辅助功能 (Accessibility)');
+    if (screenRecording === 'denied' || screenRecording === 'unknown') missing.push('屏幕录制 (Screen Recording)');
+    if (missing.length === 0) return '所有必要权限已授予';
+    return `缺失权限: ${missing.join('、')}。请在「系统设置 → 隐私与安全性」中授予。`;
   }
 }

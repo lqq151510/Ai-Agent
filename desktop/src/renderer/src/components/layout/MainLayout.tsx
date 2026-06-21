@@ -7,6 +7,7 @@ import { ReviewPanel } from '../review/ReviewPanel';
 import { SkillsPanel } from '../skills/SkillsPanel';
 import { ComputerUsePanel } from '../computer-use/ComputerUsePanel';
 import { MessageSquarePlus, Search, Blocks, Activity, Settings } from 'lucide-react';
+import { SettingsLayout } from '../SettingsLayout';
 
 // --------------- Types ---------------
 
@@ -59,7 +60,44 @@ const formatRelativeTime = (timestamp: number) => {
 
 export function MainLayout() {
   // ---- Existing state ----
+  const [showSettings, setShowSettings] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+
+  const handleSettingsClose = useCallback(() => {
+    setShowSettings(false);
+    const activeProvider = localStorage.getItem('codex_active_provider') || 'deepseek';
+    if (activeProvider === 'local') {
+      setSelectedModel('Qwen-3.5-Local');
+    } else if (activeProvider === 'openai') {
+      setSelectedModel('GPT-4o');
+    } else {
+      setSelectedModel('DeepSeek-V4');
+    }
+  }, []);
+
+  const handleModelChange = useCallback((newModel: string) => {
+    setSelectedModel(newModel);
+    let provider = 'deepseek';
+    if (newModel === 'Qwen-3.5-Local') {
+      provider = 'local';
+    } else if (newModel === 'GPT-4o') {
+      provider = 'openai';
+    } else if (newModel === 'DeepSeek-V4') {
+      provider = 'deepseek';
+    }
+    localStorage.setItem('codex_active_provider', provider);
+  }, []);
+
+  useEffect(() => {
+    const activeProvider = localStorage.getItem('codex_active_provider') || 'deepseek';
+    if (activeProvider === 'local') {
+      setSelectedModel('Qwen-3.5-Local');
+    } else if (activeProvider === 'openai') {
+      setSelectedModel('GPT-4o');
+    } else {
+      setSelectedModel('DeepSeek-V4');
+    }
+  }, []);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
@@ -85,19 +123,31 @@ export function MainLayout() {
     }
   }, []);
 
+  const refreshSessions = useCallback(async () => {
+    const data = await window.electronAPI?.invoke('chat:get-sessions');
+    if (Array.isArray(data)) {
+      setSessions(data);
+    }
+  }, []);
+
   const handleSelectWorkspaceNode = useCallback(async (wpPath: string) => {
     if (window.electronAPI?.workspace?.setActive) {
       await window.electronAPI.workspace.setActive(wpPath);
       setWorkspacePath(wpPath);
       void refreshSessions();
     }
-  }, []);
+  }, [refreshSessions]);
 
   // ---- Codex parameter states & double-bindings ----
   const [activeRightTab, setActiveRightTab] = useState<'files' | 'gitdiff' | 'params' | 'review' | 'skills' | 'computer'>('files');
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('DeepSeek-V4');
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const activeProvider = localStorage.getItem('codex_active_provider') || 'deepseek';
+    if (activeProvider === 'local') return 'Qwen-3.5-Local';
+    if (activeProvider === 'openai') return 'GPT-4o';
+    return 'DeepSeek-V4';
+  });
   const [reasoningLevel, setReasoningLevel] = useState('Low');
   const [approvalMode, setApprovalMode] = useState('request'); // request, auto, full
   const [temperature, setTemperature] = useState(0.5);
@@ -208,12 +258,7 @@ export function MainLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const refreshSessions = useCallback(async () => {
-    const data = await window.electronAPI?.invoke('chat:get-sessions');
-    if (Array.isArray(data)) {
-      setSessions(data);
-    }
-  }, []);
+
 
   const refreshThreads = useCallback(async () => {
     const data = await window.electronAPI?.thread?.list();
@@ -222,7 +267,7 @@ export function MainLayout() {
     }
   }, []);
 
-  const handleToolStreamEvent = useCallback(async (event: any) => {
+  const handleToolStreamEvent = useCallback(async (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     const type = String(event.type || '');
     const data = event.data || {};
     const description = event.message || data.message || data.toolName || 'tool';
@@ -301,7 +346,7 @@ export function MainLayout() {
 
   // Listen for thread events pushed from main process
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.thread?.onEvent?.((_thread: any) => {
+    const unsubscribe = window.electronAPI?.thread?.onEvent?.(() => {
       void refreshThreads();
     });
     return () => {
@@ -316,7 +361,7 @@ export function MainLayout() {
   // ---- Stream event handling (same as original) ----
 
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.chat?.onStreamEvent?.((event: any) => {
+    const unsubscribe = window.electronAPI?.chat?.onStreamEvent?.((event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       const eventType = String(event.type || '');
       const currentStream = streamStateRef.current;
       if (eventType === 'started' && !currentStream && pendingAssistantMessageIdRef.current) {
@@ -388,7 +433,7 @@ export function MainLayout() {
   }, [handleToolStreamEvent, refreshSessions]);
 
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.agent?.onTaskEvent?.((event: any) => {
+    const unsubscribe = window.electronAPI?.agent?.onTaskEvent?.((event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       setTaskStreamState(current => {
         if (!current || current.taskId !== event.taskId) {
           return current;
@@ -530,7 +575,7 @@ export function MainLayout() {
       }
     }
     void refreshSessions();
-  }, []);
+  }, [refreshSessions]);
 
   const handleCloseThread = useCallback(async (id: string) => {
     await window.electronAPI?.thread?.remove(id);
@@ -564,11 +609,24 @@ export function MainLayout() {
     pendingAssistantMessageIdRef.current = assistantMsg.id;
 
     try {
+      const provider = localStorage.getItem('codex_active_provider') || 'deepseek';
+      const rawApiKey = localStorage.getItem(`codex_key_${provider}`) || '';
+      const rawBaseUrl = localStorage.getItem(`codex_url_${provider}`) || '';
+      const rawModel = localStorage.getItem(`codex_model_${provider}`) || '';
+
+      const customApiKey = rawApiKey.trim() ? rawApiKey.trim() : undefined;
+      const customBaseUrl = rawBaseUrl.trim() ? rawBaseUrl.trim() : undefined;
+      const customModel = rawModel.trim() ? rawModel.trim() : undefined;
+
       const result = await window.electronAPI?.chat?.streamWithContext({
         message: text,
         workspacePath: workspacePath ?? undefined,
         selectedFiles,
         sessionId: activeSessionId ?? undefined,
+        provider: provider.toUpperCase(),
+        model: customModel,
+        customBaseUrl,
+        customApiKey,
       });
       if (!result?.requestId || !result?.sessionId) {
         throw new Error('stream request did not return identifiers');
@@ -594,7 +652,7 @@ export function MainLayout() {
       );
       setStreamState(null);
     }
-  }, [activeSessionId, workspacePath, selectedFiles, streamState, taskStreamState, refreshSessions]);
+  }, [activeSessionId, workspacePath, selectedFiles, streamState, taskStreamState]);
 
   const handleSubmitTask = useCallback(async (text: string) => {
     if (!text.trim() || streamState || taskStreamState) return;
@@ -754,7 +812,7 @@ export function MainLayout() {
 
         {/* Footer Settings */}
         <div className="codex-sidebar__footer">
-          <div className="codex-sidebar__setting-btn" onClick={() => setActiveRightTab('params')}>
+          <div className="codex-sidebar__setting-btn" onClick={() => setShowSettings(true)}>
             <Settings size={15} style={{ marginRight: '4px' }} />
             <span>设置</span>
           </div>
@@ -773,7 +831,7 @@ export function MainLayout() {
           selectedFiles={selectedFiles}
           taskRunning={Boolean(taskStreamState)}
           selectedModel={selectedModel}
-          setSelectedModel={setSelectedModel}
+          setSelectedModel={handleModelChange}
           reasoningLevel={reasoningLevel}
           setReasoningLevel={setReasoningLevel}
           approvalMode={approvalMode}
@@ -968,6 +1026,12 @@ export function MainLayout() {
           onReject={() => void handleApprovePlan(false)}
         />
       ) : null}
+
+      {showSettings && (
+        <div className="settings-overlay">
+          <SettingsLayout onBack={handleSettingsClose} />
+        </div>
+      )}
     </div>
   );
 }

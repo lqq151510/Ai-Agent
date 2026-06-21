@@ -55,7 +55,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       workspacePath?: string;
       selectedFiles?: string[];
       sessionId?: string;
+      provider?: string;
+      model?: string;
+      customBaseUrl?: string;
+      customApiKey?: string;
     }) => ipcRenderer.invoke('chat:send-with-context', payload),
+    testConnection: (payload: {
+      provider: string;
+      customBaseUrl: string;
+      customApiKey: string;
+      model: string;
+    }) => ipcRenderer.invoke('chat:test-connection', payload),
     onStreamEvent: (callback: (event: any) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
       ipcRenderer.on('chat:stream-event', listener);
@@ -137,6 +147,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     type: (params: { text: string }) => ipcRenderer.invoke('computer:type', params),
     key: (params: { key: string; modifiers?: string[] }) => ipcRenderer.invoke('computer:key', params),
     scroll: (params: { dx?: number; dy?: number }) => ipcRenderer.invoke('computer:scroll', params),
+    openSettings: (pane?: 'accessibility' | 'screenRecording') =>
+      ipcRenderer.invoke('computer:open-settings', pane),
   },
 
   // ================================================================
