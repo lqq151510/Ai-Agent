@@ -32,6 +32,8 @@ public class ApiExceptionHandler {
                     case "FORBIDDEN" -> HttpStatus.FORBIDDEN;
                     case "NOT_FOUND" -> HttpStatus.NOT_FOUND;
                     case "BAD_REQUEST" -> HttpStatus.BAD_REQUEST;
+                    case "CONFLICT" -> HttpStatus.CONFLICT;
+                    case "BAD_GATEWAY" -> HttpStatus.BAD_GATEWAY;
                     case "TOO_MANY_REQUESTS" -> HttpStatus.TOO_MANY_REQUESTS;
                     default -> HttpStatus.INTERNAL_SERVER_ERROR;
                 };
