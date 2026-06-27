@@ -9,6 +9,10 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     openDataDir: () => electron_1.ipcRenderer.invoke('app:open-data-dir'),
     cliExecute: (args) => electron_1.ipcRenderer.invoke('cli:execute', args),
     cliInput: (input) => electron_1.ipcRenderer.send('cli:input', input),
+    knowledge: {
+        request: (payload) => electron_1.ipcRenderer.invoke('knowledge:request', payload),
+        importLocalFile: (payload) => electron_1.ipcRenderer.invoke('knowledge:import-local-file', payload),
+    },
     onBackendStatusChanged: (callback) => {
         electron_1.ipcRenderer.on('backend:status-changed', (_event, status) => callback(status));
     },

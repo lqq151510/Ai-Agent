@@ -24,7 +24,6 @@ public class SystemController {
         return diagnosticsService.listModels();
     }
 
-    @PreAuthorize("isAuthenticated()")
     @GetMapping("/health/ready")
     public ReadinessResponse ready() {
         return diagnosticsService.readiness();

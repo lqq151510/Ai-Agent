@@ -14,15 +14,22 @@ public interface KnowledgeItemTagRepository {
 
     @Insert(
             "INSERT INTO knowledge_item_tags(knowledge_item_id, tag_id) "
-                    + "VALUES(#{knowledgeItemId}, #{tagId})")
+                    + "VALUES(#{knowledgeItemId,typeHandler=com.agent.mvp.config.UuidTypeHandler}, "
+                    + "#{tagId,typeHandler=com.agent.mvp.config.UuidTypeHandler})")
     int insert(KnowledgeItemTag relation);
 
-    @Delete("DELETE FROM knowledge_item_tags WHERE knowledge_item_id = #{knowledgeItemId}")
+    @Delete(
+            "DELETE FROM knowledge_item_tags WHERE knowledge_item_id = "
+                    + "#{knowledgeItemId,typeHandler=com.agent.mvp.config.UuidTypeHandler}")
     int deleteByKnowledgeItemId(@Param("knowledgeItemId") UUID knowledgeItemId);
 
-    @Select("SELECT tag_id FROM knowledge_item_tags WHERE knowledge_item_id = #{knowledgeItemId}")
+    @Select(
+            "SELECT tag_id FROM knowledge_item_tags WHERE knowledge_item_id = "
+                    + "#{knowledgeItemId,typeHandler=com.agent.mvp.config.UuidTypeHandler}")
     List<UUID> findTagIdsByKnowledgeItemId(@Param("knowledgeItemId") UUID knowledgeItemId);
 
-    @Select("SELECT knowledge_item_id FROM knowledge_item_tags WHERE tag_id = #{tagId}")
+    @Select(
+            "SELECT knowledge_item_id FROM knowledge_item_tags WHERE tag_id = "
+                    + "#{tagId,typeHandler=com.agent.mvp.config.UuidTypeHandler}")
     List<UUID> findKnowledgeItemIdsByTagId(@Param("tagId") UUID tagId);
 }

@@ -2,8 +2,14 @@ package com.agent.mvp.agent.service;
 
 import com.agent.mvp.agent.dto.ParsedDocument;
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Map;
+import java.util.Set;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +34,8 @@ import org.springframework.web.client.RestTemplate;
 @Service
 public class MarkItDownService {
     private static final Logger log = LoggerFactory.getLogger(MarkItDownService.class);
+    private static final Set<String> LOCAL_TEXT_FORMATS =
+            Set.of("md", "markdown", "txt", "html", "htm");
 
     @Value("${markitdown.url:http://localhost:8000/parse}")
     private String markItDownUrl;
@@ -76,7 +84,15 @@ public class MarkItDownService {
             log.warn("调用 python-service 异常，降级到本地 RestTemplate 直连: {}", e.getMessage());
         }
 
-        // 降级：原有 RestTemplate 逻辑
+        try {
+            return parseLocally(file).markdown();
+        } catch (UnsupportedOperationException e) {
+            log.warn("本地解析不支持 {}，尝试 RestTemplate 兼容路径", file.getName());
+        } catch (Exception e) {
+            log.warn("本地解析失败，尝试 RestTemplate 兼容路径: {}", e.getMessage());
+        }
+
+        // 最后降级：原有 RestTemplate 逻辑
         return convertViaRestTemplate(file);
     }
 
@@ -104,7 +120,14 @@ public class MarkItDownService {
             log.warn("调用 python-service 异常，降级到本地 RestTemplate 直连: {}", e.getMessage());
         }
 
-        // 降级
+        try {
+            return parseLocally(file);
+        } catch (UnsupportedOperationException e) {
+            log.warn("本地解析不支持 {}，尝试 RestTemplate 兼容路径", file.getName());
+        } catch (Exception e) {
+            log.warn("本地解析失败，尝试 RestTemplate 兼容路径: {}", e.getMessage());
+        }
+
         String markdown = convertViaRestTemplate(file);
         return ParsedDocument.ofLocal(file.getName(), markdown);
     }
@@ -117,6 +140,24 @@ public class MarkItDownService {
         } catch (java.io.IOException e) {
             throw new PythonParseClient.PythonServiceUnavailableException(
                     "读取文件失败: " + file.getName(), e);
+        }
+    }
+
+    private ParsedDocument parseLocally(File file) throws IOException {
+        String format = ParsedDocument.inferSourceFormat(file.getName());
+        if (LOCAL_TEXT_FORMATS.contains(format)) {
+            return ParsedDocument.ofLocal(
+                    file.getName(), Files.readString(file.toPath(), StandardCharsets.UTF_8));
+        }
+        if ("pdf".equals(format)) {
+            return ParsedDocument.ofLocal(file.getName(), extractPdfText(file));
+        }
+        throw new UnsupportedOperationException("Unsupported local document format: " + format);
+    }
+
+    private String extractPdfText(File file) throws IOException {
+        try (PDDocument document = Loader.loadPDF(file)) {
+            return new PDFTextStripper().getText(document);
         }
     }
 

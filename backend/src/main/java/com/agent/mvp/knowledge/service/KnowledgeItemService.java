@@ -135,7 +135,12 @@ public class KnowledgeItemService {
             tempFile = createTempFile(originalFilename);
             file.transferTo(tempFile);
 
-            ParsedDocument parsed = markItDownService.parseDocument(tempFile.toFile());
+            ParsedDocument parsed;
+            try {
+                parsed = markItDownService.parseDocument(tempFile.toFile());
+            } catch (RuntimeException ex) {
+                throw new BadRequestException("Uploaded file could not be parsed");
+            }
             if (parsed == null || parsed.markdown() == null || parsed.markdown().isBlank()) {
                 throw new BadRequestException("Uploaded file could not be parsed");
             }

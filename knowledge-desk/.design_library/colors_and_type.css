@@ -1,0 +1,169 @@
+/* ============================================
+   知识台 Design System — Colors & Typography
+   ============================================ */
+
+:root {
+  /* --- Color Palette --- */
+
+  /* Backgrounds */
+  --bg-primary: #F7F5F0;
+  --bg-secondary: #F0EDE6;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #FAFAF7;
+  --bg-sidebar: #F0EDE6;
+  --bg-sidebar-hover: #E8E4DB;
+  --bg-sidebar-active: rgba(91, 122, 111, 0.12);
+  --bg-input: #FFFFFF;
+  --bg-input-focus: #FFFFFF;
+  --bg-badge: rgba(91, 122, 111, 0.1);
+  --bg-badge-copper: rgba(184, 132, 92, 0.1);
+  --bg-badge-teal: rgba(61, 90, 94, 0.1);
+  --bg-overlay: rgba(0, 0, 0, 0.04);
+
+  /* Primary — Sage Green */
+  --primary: #5B7A6F;
+  --primary-hover: #4D6B60;
+  --primary-light: rgba(91, 122, 111, 0.08);
+  --primary-lighter: rgba(91, 122, 111, 0.04);
+
+  /* Secondary — Low-saturation Copper */
+  --secondary: #B8845C;
+  --secondary-hover: #A57550;
+  --secondary-light: rgba(184, 132, 92, 0.1);
+
+  /* Depth — Deep Teal Gray */
+  --depth: #3D5A5E;
+  --depth-hover: #2F4A4E;
+  --depth-light: rgba(61, 90, 94, 0.08);
+
+  /* Text */
+  --text-heading: #2C2C2C;
+  --text-base: #4A4A4A;
+  --text-secondary: #7A7A7A;
+  --text-muted: #9E9E9E;
+  --text-inverse: #FFFFFF;
+  --text-link: #5B7A6F;
+
+  /* Borders */
+  --border: #E5E2DA;
+  --border-light: #EDE9E0;
+  --border-focus: #5B7A6F;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
+
+  /* Status */
+  --status-amber: #D4A853;
+  --status-amber-bg: rgba(212, 168, 83, 0.12);
+  --status-sage: #5B7A6F;
+  --status-sage-bg: rgba(91, 122, 111, 0.12);
+  --status-red: #C45B5B;
+  --status-red-bg: rgba(196, 91, 91, 0.1);
+
+  /* Source type colors */
+  --source-web: #5B7A6F;
+  --source-pdf: #C45B5B;
+  --source-md: #3D5A5E;
+  --source-book: #B8845C;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* --- Typography --- */
+
+  /* Font Families */
+  --font-heading: 'Newsreader', 'Georgia', 'Noto Serif SC', serif;
+  --font-body: 'Source Sans 3', 'Source Sans Pro', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+
+  /* Font Sizes */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.8125rem;  /* 13px */
+  --text-base: 0.9375rem; /* 15px */
+  --text-md: 1rem;       /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.25rem;    /* 20px */
+  --text-2xl: 1.5rem;    /* 24px */
+  --text-3xl: 2rem;      /* 32px */
+  --text-4xl: 2.5rem;    /* 40px */
+
+  /* Font Weights */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Line Heights */
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.75;
+
+  /* Letter Spacing */
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+
+  /* Spacing Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+
+  /* Compatibility aliases for the newer prototype pages */
+  --background: var(--bg-primary);
+  --background-subtle: var(--bg-secondary);
+  --card: var(--bg-card);
+  --card-hover: var(--bg-card-hover);
+  --sidebar: var(--bg-sidebar);
+  --sidebar-border: var(--border);
+  --sidebar-foreground: var(--text-heading);
+  --sidebar-active: var(--bg-sidebar-active);
+  --sidebar-active-foreground: var(--primary);
+  --foreground: var(--text-heading);
+  --foreground-secondary: var(--text-secondary);
+  --foreground-inverse: var(--text-inverse);
+  --muted-foreground: var(--text-muted);
+  --primary-subtle: var(--primary-light);
+  --primary-foreground: var(--text-inverse);
+  --accent: var(--secondary);
+  --accent-foreground: var(--text-inverse);
+  --accent-subtle: var(--secondary-light);
+  --teal: var(--depth);
+  --teal-subtle: var(--depth-light);
+  --info: var(--source-web);
+  --destructive: var(--status-red);
+  --success: var(--status-sage);
+  --warning: var(--status-amber);
+  --ring: rgba(91, 122, 111, 0.24);
+  --ring-offset: var(--bg-primary);
+  --border-subtle: var(--border-light);
+  --shadow-xs: var(--shadow-sm);
+  --font-display: var(--font-heading);
+  --font-light: 400;
+  --font-regular: var(--weight-regular);
+  --font-medium: var(--weight-medium);
+  --font-semibold: var(--weight-semibold);
+  --font-bold: var(--weight-bold);
+  --tracking-wider: 0.08em;
+  --transition-normal: var(--transition-base);
+  --z-sticky: 20;
+}

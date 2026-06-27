@@ -1,4 +1,4 @@
-import { app, ipcMain, shell, BrowserWindow } from 'electron';
+import { app, ipcMain, shell, BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { randomBytes, randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -85,6 +85,7 @@ export class IpcRegistry {
     });
     ipcMain.handle('chat:append-message', (_event, id, msg) => this.chatManager.appendMessage(id, msg));
     ipcMain.handle('chat:summarize-title', (_event, id, text) => this.chatManager.summarizeTitle(id, text));
+    ipcMain.handle('chat:delete-session', (_event, id) => this.chatManager.deleteSession(id));
 
     // Terminal PTY Handlers (single terminal for backward compat)
     let legacyTerminalId: string | null = null;
@@ -120,6 +121,33 @@ export class IpcRegistry {
 
     ipcMain.handle('local-service:is-ready', () => {
       return this.localServiceManager.isReady();
+    });
+
+    ipcMain.handle('knowledge:request', async (_event, payload: {
+      method?: string;
+      path: string;
+      body?: unknown;
+    }) => {
+      if (!payload?.path?.startsWith('/api/v1/')) {
+        throw new Error('Knowledge API path must start with /api/v1/');
+      }
+      const method = (payload.method || 'GET').toUpperCase();
+      return this.backendRequest(payload.path, {
+        method,
+        body: payload.body === undefined ? undefined : JSON.stringify(payload.body),
+      });
+    });
+
+    ipcMain.handle('knowledge:import-local-file', async (_event, payload?: {
+      title?: string;
+    }) => {
+      const filePath = await this.selectKnowledgeFile();
+      if (!filePath) {
+        return { canceled: true };
+      }
+
+      const item = await this.importKnowledgeLocalFile(filePath, payload?.title);
+      return { canceled: false, item };
     });
 
     // Computer Use Handlers
@@ -184,8 +212,9 @@ export class IpcRegistry {
       model?: string;
       customBaseUrl?: string;
       customApiKey?: string;
+      customInstructions?: string;
     }) => {
-      const { message, workspacePath, selectedFiles = [], sessionId, provider, model, customBaseUrl, customApiKey } = payload;
+      const { message, workspacePath, selectedFiles = [], sessionId, provider, model, customBaseUrl, customApiKey, customInstructions } = payload;
       const requestId = randomUUID();
       const isNewSession = !sessionId;
       const resolvedSessionId = sessionId ?? (await this.createBackendSession()).id;
@@ -237,6 +266,12 @@ export class IpcRegistry {
         } catch (err) {
           console.warn('[ipc] Failed to fetch context from local-service:', err);
         }
+      }
+
+      if (customInstructions && customInstructions.trim()) {
+        systemContext = systemContext
+          ? `${customInstructions.trim()}\n\n${systemContext}`
+          : customInstructions.trim();
       }
 
       event.sender.send('chat:stream-event', {
@@ -650,11 +685,69 @@ export class IpcRegistry {
     return JSON.parse(text);
   }
 
+  private async selectKnowledgeFile(): Promise<string | null> {
+    const options: OpenDialogOptions = {
+      title: '选择 Markdown 或 PDF 资料',
+      buttonLabel: '导入到 Inbox',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Markdown / PDF', extensions: ['md', 'markdown', 'pdf'] },
+        { name: 'Markdown', extensions: ['md', 'markdown', 'txt', 'html', 'htm'] },
+        { name: 'PDF', extensions: ['pdf'] },
+      ],
+    };
+    const window = this.mainWindowGetter();
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+
+    const filePath = result.filePaths[0];
+    if (!this.isSupportedKnowledgeFile(filePath)) {
+      throw new Error('仅支持 Markdown 与 PDF 文件。');
+    }
+    return filePath;
+  }
+
+  private async importKnowledgeLocalFile(filePath: string, title?: string): Promise<any> {
+    const filename = path.basename(filePath);
+    const fileBuffer = await fs.promises.readFile(filePath);
+    const formData = new FormData();
+    formData.append('file', new Blob([fileBuffer], { type: this.mimeTypeForKnowledgeFile(filePath) }), filename);
+
+    const normalizedTitle = title?.trim();
+    if (normalizedTitle) {
+      formData.append('title', normalizedTitle);
+    }
+
+    return this.backendRequest('/api/v1/knowledge-items/import/upload', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  private isSupportedKnowledgeFile(filePath: string): boolean {
+    return ['.md', '.markdown', '.pdf', '.txt', '.html', '.htm'].includes(path.extname(filePath).toLowerCase());
+  }
+
+  private mimeTypeForKnowledgeFile(filePath: string): string {
+    const extension = path.extname(filePath).toLowerCase();
+    if (extension === '.pdf') return 'application/pdf';
+    if (extension === '.md' || extension === '.markdown') return 'text/markdown';
+    if (extension === '.html' || extension === '.htm') return 'text/html';
+    return 'text/plain';
+  }
+
   private async backendRequestRaw(pathname: string, init: RequestInit): Promise<Response> {
     const token = await this.ensureDesktopAccessToken();
     const port = this.getActivePort();
     const headers = new Headers(init.headers || {});
-    headers.set('Content-Type', 'application/json');
+    if (!headers.has('Content-Type') && !this.isMultipartBody(init.body)) {
+      headers.set('Content-Type', 'application/json');
+    }
     headers.set('Authorization', `Bearer ${token}`);
 
     const response = await fetch(`http://127.0.0.1:${port}${pathname}`, { ...init, headers });
@@ -673,6 +766,10 @@ export class IpcRegistry {
       throw new Error(await this.toErrorMessage(response));
     }
     return response;
+  }
+
+  private isMultipartBody(body: RequestInit['body'] | undefined): body is FormData {
+    return typeof FormData !== 'undefined' && body instanceof FormData;
   }
 
   public async getDesktopAccessToken(): Promise<string> {

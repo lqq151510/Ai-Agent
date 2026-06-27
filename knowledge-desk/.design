@@ -1,0 +1,17 @@
+{
+  "name": "知识台 - 个人知识工作台",
+  "type": "webapp",
+  "description": "面向个人学习者/深度信息用户的知识收纳与检索中台。安静、克制、可信赖的个人研究台。",
+  "pages": [
+    {"file": "pages/dashboard.html", "name": "工作台 Dashboard", "description": "今日概览、最近整理、高频标签、收集箱预览、快速导入"},
+    {"file": "pages/inbox.html", "name": "收集箱 Inbox", "description": "待整理/整理中/已整理内容管理，从混乱到有序"},
+    {"file": "pages/library.html", "name": "知识库 Library", "description": "列表/卡片双视图，按标签/来源/时间筛选浏览全部知识条目"},
+    {"file": "pages/detail.html", "name": "知识详情 Detail", "description": "正文阅读 + AI摘要/标签/关联条目，知识网络节点视图"},
+    {"file": "pages/search.html", "name": "全局搜索 Search", "description": "核心检索能力，关键词高亮、命中片段、多维筛选"},
+    {"file": "pages/settings.html", "name": "设置中心 Settings", "description": "账户信息、模型配置、AI偏好、隐私数据、导入集成"}
+  ],
+  "designSystem": ".design_library/colors_and_type.css",
+  "style": "modern editorial + digital knowledge workbench",
+  "colors": ["#F7F5F0", "#5B7A6F", "#B8845C", "#3D5A5E", "#1A1D23"],
+  "fonts": ["Newsreader", "Source Sans 3", "JetBrains Mono"]
+}

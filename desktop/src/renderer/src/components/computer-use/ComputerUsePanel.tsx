@@ -71,7 +71,9 @@ export function ComputerUsePanel({ onClose }: ComputerUsePanelProps) {
 
   // Auto-check permissions on mount
   useEffect(() => {
-    void checkPermissions();
+    queueMicrotask(() => {
+      void checkPermissions();
+    });
   }, [checkPermissions]);
 
   const allGranted = permissions &&

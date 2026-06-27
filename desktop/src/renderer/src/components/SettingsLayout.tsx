@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Settings, User, Sun, Sliders, Palette, Keyboard, Activity, Link, LayoutGrid, Globe, MousePointer2, GitBranch, TerminalSquare, Archive, ArrowLeft, Search, Plus, RefreshCw, Folder, Check, Trash2, AlertCircle, MoreHorizontal } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Settings, User, Sun, Sliders, Palette, Keyboard, Activity, Link, LayoutGrid, Globe, MousePointer2, GitBranch, TerminalSquare, Archive, ArrowLeft, Search, Plus, RefreshCw, Folder, Check, Trash2, AlertCircle } from 'lucide-react';
 
 const SidebarItem = ({ icon: Icon, label, active = false, onClick }: { icon: React.ElementType, label: string, active?: boolean, onClick: () => void }) => (
   <div onClick={onClick} className={`flex items-center gap-3 px-3 py-1.5 rounded-lg cursor-pointer text-[13px] ${active ? 'bg-[#e8e8e8] text-black font-semibold' : 'text-[#555] hover:bg-[#ebebeb]'}`}>
@@ -14,7 +14,42 @@ const SidebarSection = ({ title }: { title: string }) => (
   </div>
 );
 
-export const SettingsLayout = ({ onBack, initialTab = '常规' }: { onBack: () => void; initialTab?: string }) => {
+type ThreadSummary = {
+  id: string;
+  name?: string;
+  status?: string;
+  projectPath?: string;
+  branch?: string;
+};
+
+type ArchivedSessionSummary = {
+  id: string;
+  title?: string;
+  branch?: string;
+  updatedAt: number | string;
+};
+
+type ArchivedConversation = {
+  id: string;
+  title: string;
+  time: string;
+};
+
+type ArchivedConversationGroup = {
+  project: string;
+  count: number;
+  conversations: ArchivedConversation[];
+};
+
+const toSessionTimestamp = (value: number | string) => {
+  if (typeof value === 'number') {
+    return value;
+  }
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+};
+
+export const SettingsLayout = ({ onBack, initialTab = '常规', workspacePath }: { onBack: () => void; initialTab?: string; workspacePath?: string | null }) => {
   const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
   const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -47,6 +82,8 @@ export const SettingsLayout = ({ onBack, initialTab = '常规' }: { onBack: () =
         return <WorktreeTab />;
       case '已归档对话':
         return <ArchivedConversationsTab />;
+      case '环境':
+        return <EnvironmentTab workspacePath={workspacePath} />;
       default:
         return <PlaceholderTab name={activeTab} />;
     }
@@ -103,6 +140,101 @@ export const SettingsLayout = ({ onBack, initialTab = '常规' }: { onBack: () =
       <div className="flex-1 overflow-y-auto bg-white">
         <div className="max-w-[720px] mx-auto py-10 px-8">
           {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const EnvironmentTab = ({ workspacePath }: { workspacePath?: string | null }) => {
+  const [localPort, setLocalPort] = useState<number | null>(null);
+  const [localReady, setLocalReady] = useState<boolean>(false);
+
+  useEffect(() => {
+    const fetchLocalServiceInfo = async () => {
+      if (window.electronAPI?.localService) {
+        try {
+          const port = await window.electronAPI.localService.port();
+          const ready = await window.electronAPI.localService.isReady();
+          setLocalPort(port);
+          setLocalReady(ready);
+        } catch (err) {
+          console.error('Failed to get local-service info:', err);
+        }
+      }
+    };
+    void fetchLocalServiceInfo();
+  }, []);
+
+  const platformInfo = navigator.userAgent;
+  const isMac = platformInfo.includes('Mac');
+
+  return (
+    <div className="space-y-6 text-[#1f2328] select-none pb-12">
+      <div className="border-b border-[#eee] pb-3.5 mb-2">
+        <h2 className="text-[20px] font-bold text-black">环境诊断</h2>
+        <div className="text-[12px] text-[#57606a] mt-1">
+          查看客户端与后端微服务组件的运行端口、通信状态及核心系统环境。
+        </div>
+      </div>
+
+      {/* 核心诊断卡片 */}
+      <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm divide-y divide-[#eee]">
+        {/* 客户端版本 */}
+        <div className="p-4 flex justify-between items-center">
+          <div>
+            <div className="text-[13px] font-semibold text-black">客户端版本</div>
+            <div className="text-[11px] text-[#57606a] mt-0.5">当前 Electron Desktop App 的版本信息</div>
+          </div>
+          <span className="font-mono text-[12px] bg-[#eff1f3] px-2.5 py-1 rounded font-bold text-black">v0.1.0 (Dev)</span>
+        </div>
+
+        {/* 工作区目录 */}
+        <div className="p-4 flex justify-between items-center">
+          <div className="min-w-0 pr-4 flex-1">
+            <div className="text-[13px] font-semibold text-black">活动工作区</div>
+            <div className="text-[11px] text-[#57606a] mt-0.5">当前已挂载的项目根目录绝对路径</div>
+          </div>
+          <span className="font-mono text-[11px] bg-[#eff1f3] px-2.5 py-1 rounded text-black truncate max-w-xs block font-bold" title={workspacePath || '未挂载工作区'}>
+            {workspacePath || '未挂载工作区'}
+          </span>
+        </div>
+
+        {/* Java 后端服务 */}
+        <div className="p-4 flex justify-between items-center">
+          <div>
+            <div className="text-[13px] font-semibold text-black">Java Spring Boot 核心微服务</div>
+            <div className="text-[11px] text-[#57606a] mt-0.5">AI-Agent 的后端逻辑与编排服务</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
+            <span className="font-mono text-[12px] text-black font-bold">Port: 18080 (Active)</span>
+          </div>
+        </div>
+
+        {/* 本地工具链服务 */}
+        <div className="p-4 flex justify-between items-center">
+          <div>
+            <div className="text-[13px] font-semibold text-black">本地工具链服务 (Local Service)</div>
+            <div className="text-[11px] text-[#57606a] mt-0.5">负责执行本地终端、文件及环境审查的 Node.js 辅助服务</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${localReady ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className="font-mono text-[12px] text-black font-bold">
+              {localPort ? `Port: ${localPort} (${localReady ? 'Active' : 'Error'})` : '检测中...'}
+            </span>
+          </div>
+        </div>
+
+        {/* 运行平台环境 */}
+        <div className="p-4 flex justify-between items-center">
+          <div>
+            <div className="text-[13px] font-semibold text-black">宿主系统平台</div>
+            <div className="text-[11px] text-[#57606a] mt-0.5">客户端所运行的操作系统架构</div>
+          </div>
+          <span className="font-mono text-[12px] bg-[#eff1f3] px-2.5 py-1 rounded text-black font-bold uppercase">
+            {isMac ? 'macOS (Darwin)' : 'Windows / Linux'}
+          </span>
         </div>
       </div>
     </div>
@@ -817,15 +949,29 @@ const ColorPill = ({ color, label, onChange }: { color: string; label: string; o
 };
 
 const AppearanceTab = () => {
-  const [theme, setTheme] = useState('system'); // system, light, dark
+  const [theme, setTheme] = useState(() => localStorage.getItem('codex_theme') || 'light'); // system, light, dark
   const [lightThemeSelect, setLightThemeSelect] = useState('Codex');
-  const [lightAccent, setLightAccent] = useState('#339CFF');
-  const [lightBg, setLightBg] = useState('#FFFFFF');
-  const [lightFg, setLightFg] = useState('#1A1C1F');
+  const [lightAccent, setLightAccent] = useState(() => localStorage.getItem('codex_light_accent') || '#0969da');
+  const [lightBg, setLightBg] = useState(() => localStorage.getItem('codex_light_bg') || '#ffffff');
+  const [lightFg, setLightFg] = useState(() => localStorage.getItem('codex_light_fg') || '#1f2328');
   const [lightUiFont, setLightUiFont] = useState('-apple-system, Blink');
   const [lightCodeFont, setLightCodeFont] = useState('ui-monospace, "SFM');
   const [lightTransSidebar, setLightTransSidebar] = useState(true);
   const [lightContrast, setLightContrast] = useState(45);
+
+  useEffect(() => {
+    localStorage.setItem('codex_theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('codex_light_accent', lightAccent);
+    localStorage.setItem('codex_light_bg', lightBg);
+    localStorage.setItem('codex_light_fg', lightFg);
+
+    document.documentElement.style.setProperty('--color-accent', lightAccent);
+    document.documentElement.style.setProperty('--color-bg-secondary', lightBg);
+    document.documentElement.style.setProperty('--color-text', lightFg);
+  }, [lightAccent, lightBg, lightFg]);
 
   const [darkThemeSelect, setDarkThemeSelect] = useState('Codex');
   const [darkAccent, setDarkAccent] = useState('#339CFF');
@@ -1629,19 +1775,89 @@ const HooksTab = () => {
   );
 };
 
-const WorktreeTab = () => (
-  <div className="space-y-6 text-[#1f2328] select-none pb-12">
-    <div className="flex justify-between items-center border-b border-[#eee] pb-3.5 mb-2">
-      <h2 className="text-[20px] font-bold text-black">工作树</h2>
-      <RefreshCw size={14} className="text-[#888] cursor-pointer hover:text-black transition-colors" />
+const WorktreeTab = () => {
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+
+  const fetchThreads = async () => {
+    if (window.electronAPI?.thread?.list) {
+      try {
+        const list = await window.electronAPI.thread.list();
+        if (Array.isArray(list)) {
+          setThreads(list);
+        }
+      } catch (err) {
+        console.error('Failed to fetch threads/worktrees:', err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchThreads();
+    });
+  }, []);
+
+  const handleRemove = async (id: string, branchName: string) => {
+    if (confirm(`确认要删除工作树分支 "${branchName}" 吗？此操作将移除对应的临时文件/工作区。`)) {
+      if (window.electronAPI?.thread?.remove) {
+        try {
+          await window.electronAPI.thread.remove(id);
+          void fetchThreads();
+        } catch (err) {
+          alert('删除失败: ' + String(err));
+        }
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-6 text-[#1f2328] select-none pb-12">
+      <div className="flex justify-between items-center border-b border-[#eee] pb-3.5 mb-2">
+        <h2 className="text-[20px] font-bold text-black">工作树</h2>
+        <RefreshCw
+          size={14}
+          onClick={() => void fetchThreads()}
+          className="text-[#888] cursor-pointer hover:text-black transition-colors"
+        />
+      </div>
+
+      {threads.length === 0 ? (
+        <div className="bg-white border border-[#e5e5e5] rounded-xl p-10 text-center shadow-sm max-w-lg mx-auto mt-8">
+          <h3 className="text-[14px] font-bold text-black mb-1">尚无活动工作树</h3>
+          <p className="text-[12px] text-[#666]">当你使用多分支线程（Thread）时，Codex 创建的临时工作区目录将显示在此处。</p>
+        </div>
+      ) : (
+        <div className="bg-white border border-[#e5e5e5] rounded-xl overflow-hidden shadow-sm divide-y divide-[#eee]">
+          {threads.map(thread => (
+            <div key={thread.id} className="p-4 flex justify-between items-center hover:bg-[#fafafa] transition-colors group">
+              <div className="min-w-0 pr-4 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="bg-[#eff1f3] text-[#57606a] text-[10px] px-2 py-0.5 rounded font-mono font-bold uppercase select-none shrink-0">
+                    {thread.status || 'Active'}
+                  </span>
+                  <div className="text-[13px] font-bold text-black truncate" title={thread.name}>{thread.name}</div>
+                </div>
+                <div className="text-[11px] text-[#57606a] mt-1 font-mono truncate" title={thread.projectPath}>
+                  路径: {thread.projectPath}
+                </div>
+                <div className="text-[11px] text-[#888] mt-0.5">
+                  分支: <span className="font-semibold text-black">{thread.branch}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => void handleRemove(thread.id, thread.branch || 'main')}
+                className="opacity-0 group-hover:opacity-100 hover:bg-[#fff0f0] hover:text-red-600 p-1.5 rounded transition-all text-gray-400 shrink-0 cursor-pointer"
+                title="删除工作树"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-    
-    <div className="bg-white border border-[#e5e5e5] rounded-xl p-10 text-center shadow-sm max-w-lg mx-auto mt-8">
-      <h3 className="text-[14px] font-bold text-black mb-1">尚无工作树</h3>
-      <p className="text-[12px] text-[#666]">Codex 创建的工作树将显示在此处。</p>
-    </div>
-  </div>
-);
+  );
+};
 
 const ArchivedConversationsTab = () => {
   const [showTypeDrop, setShowTypeDrop] = useState(false);
@@ -1649,54 +1865,100 @@ const ArchivedConversationsTab = () => {
   const [typeFilter, setTypeFilter] = useState('全部聊天');
   const [sortMethod, setSortMethod] = useState('更新时间');
   const [projectFilter, setProjectFilter] = useState('All projects');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const [chats, setChats] = useState([
-    {
-      project: 'AI Agent',
-      count: 2,
-      conversations: [
-        { title: '分析一下当前项目，为后续动作作出计划', time: '2026年6月20日, 8:28' },
-        { title: '梳理作业评分规则', time: '2026年6月10日, 8:07' }
-      ]
-    },
-    {
-      project: 'Sdk',
-      count: 1,
-      conversations: [
-        { title: '申请 Codex for OSS', time: '2026年6月17日, 17:08' }
-      ]
-    },
-    {
-      project: 'Liuyongze',
-      count: 1,
-      conversations: [
-        { title: '解决问题', time: '2026年6月17日, 13:21' }
-      ]
-    },
-    {
-      project: 'Openai',
-      count: 1,
-      conversations: [
-        { title: '确认 OpenAI 验证要求', time: '2026年6月17日, 10:41' }
-      ]
-    },
-    {
-      project: 'New Chat',
-      count: 1,
-      conversations: [
-        { title: '晚上好', time: '2026年6月16日, 17:49' }
-      ]
+  const [rawSessions, setRawSessions] = useState<ArchivedSessionSummary[]>([]);
+
+  const fetchSessions = async () => {
+    if (window.electronAPI?.chat?.getSessions) {
+      try {
+        const data = await window.electronAPI.chat.getSessions();
+        if (Array.isArray(data)) {
+          setRawSessions(data);
+        }
+      } catch (err) {
+        console.error('Failed to get real sessions:', err);
+      }
     }
-  ]);
+  };
 
-  const handleDeleteAll = () => {
+  useEffect(() => {
+    queueMicrotask(() => {
+      void fetchSessions();
+    });
+  }, []);
+
+  const chats = useMemo<ArchivedConversationGroup[]>(() => {
+    let filtered = [...rawSessions];
+
+    // 1. Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(s => (s.title || '').toLowerCase().includes(q));
+    }
+
+    // 2. Project/Branch filter
+    if (projectFilter !== 'All projects') {
+      filtered = filtered.filter(s => (s.branch || 'main') === projectFilter);
+    }
+
+    // 3. Sort method
+    if (sortMethod === '更新时间') {
+      filtered.sort((a, b) => toSessionTimestamp(b.updatedAt) - toSessionTimestamp(a.updatedAt));
+    } else if (sortMethod === '创建时间') {
+      filtered.sort((a, b) => toSessionTimestamp(a.updatedAt) - toSessionTimestamp(b.updatedAt));
+    } else if (sortMethod === '按字母顺序') {
+      filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    }
+
+    // 4. Categorize by branch/project
+    const groups: Record<string, ArchivedConversation[]> = {};
+    filtered.forEach(s => {
+      const proj = s.branch || 'main';
+      if (!groups[proj]) {
+        groups[proj] = [];
+      }
+      groups[proj].push({
+        id: s.id,
+        title: s.title || '新对话',
+        time: new Date(s.updatedAt).toLocaleString('zh-CN', { hour12: false })
+      });
+    });
+
+    return Object.keys(groups).map(proj => ({
+      project: proj,
+      count: groups[proj].length,
+      conversations: groups[proj]
+    }));
+  }, [rawSessions, searchQuery, projectFilter, sortMethod]);
+
+  const handleDelete = async (id: string) => {
+    if (confirm('确认删除该对话吗？此操作无法撤销。')) {
+      if (window.electronAPI?.chat?.deleteSession) {
+        const ok = await window.electronAPI.chat.deleteSession(id);
+        if (ok) {
+          void fetchSessions();
+        } else {
+          alert('删除失败');
+        }
+      }
+    }
+  };
+
+  const handleDeleteAll = async () => {
     if (confirm('确认删除所有已归档对话吗？此操作无法撤销。')) {
-      setChats([]);
+      if (window.electronAPI?.chat?.deleteSession) {
+        for (const s of rawSessions) {
+          await window.electronAPI.chat.deleteSession(s.id);
+        }
+        void fetchSessions();
+      }
     }
   };
 
   const projectOptions = [
-    'All projects', 'Liuyongze', 'Project2 FaceRecognition', 'Aicli', '实习', '复习', '政治', 'Sdk', 'Java', '生日快乐', '操作系统复习笔记', 'Trae', 'New Project', 'AI Agent', 'Chats', 'Automations'
+    'All projects',
+    ...Array.from(new Set(rawSessions.map(s => s.branch || 'main')))
   ];
 
   return (
@@ -1716,11 +1978,13 @@ const ArchivedConversationsTab = () => {
       <div className="flex items-center gap-2 mb-4">
         {/* Search */}
         <div className="relative flex-1">
-          <Search size={13} className="absolute left-2.5 top-2 text-[#888]" />
+          <Search size={13} className="absolute left-2.5 top-2.5 text-[#888]" />
           <input 
             type="text" 
             placeholder="搜索已归档聊天..." 
-            className="w-full bg-[#f5f5f5] border border-[#e5e5e5] rounded-md py-1 pl-8 pr-3 text-[12px] outline-none focus:border-[#007aff] transition-colors"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full bg-[#f5f5f5] border border-[#e5e5e5] rounded-md py-1.5 pl-8 pr-3 text-[12px] outline-none focus:border-[#007aff] transition-colors text-black"
           />
         </div>
 
@@ -1728,7 +1992,7 @@ const ArchivedConversationsTab = () => {
         <div className="relative">
           <button 
             onClick={() => setShowTypeDrop(!showTypeDrop)}
-            className="flex items-center gap-1 bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-2.5 py-1 text-[12px] text-black font-semibold"
+            className="flex items-center gap-1 bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-2.5 py-1.5 text-[12px] text-black font-semibold cursor-pointer"
           >
             <span>{typeFilter}</span>
             <span className="text-[9px] text-[#888]">▼</span>
@@ -1766,7 +2030,7 @@ const ArchivedConversationsTab = () => {
         <div className="relative">
           <button 
             onClick={() => setShowProjDrop(!showProjDrop)}
-            className="flex items-center gap-1 bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-2.5 py-1 text-[12px] text-black font-semibold"
+            className="flex items-center gap-1 bg-[#f5f5f5] border border-[#e5e5e5] rounded-md px-2.5 py-1.5 text-[12px] text-black font-semibold cursor-pointer"
           >
             <Folder size={12} className="text-gray-500" />
             <span>{projectFilter}</span>
@@ -1806,16 +2070,22 @@ const ArchivedConversationsTab = () => {
                 </div>
                 <div className="flex items-center gap-2 text-[11px] text-gray-500 font-semibold">
                   <span>{group.count} 个聊天</span>
-                  <button className="hover:bg-[#eee] p-1 rounded transition-colors text-gray-600">
-                    <MoreHorizontal size={13} />
-                  </button>
                 </div>
               </div>
               <div className="divide-y divide-[#eee]">
                 {group.conversations.map((c, cIdx) => (
-                  <div key={cIdx} className="p-4 hover:bg-[#fafafa] cursor-pointer transition-colors">
-                    <div className="text-[13px] font-semibold text-black leading-snug">{c.title}</div>
-                    <div className="text-[11px] text-[#888] mt-1.5">{c.time}</div>
+                  <div key={cIdx} className="p-4 hover:bg-[#fafafa] cursor-pointer transition-colors flex justify-between items-center group">
+                    <div className="min-w-0 pr-4 flex-1">
+                      <div className="text-[13px] font-semibold text-black leading-snug truncate" title={c.title}>{c.title}</div>
+                      <div className="text-[11px] text-[#888] mt-1.5">{c.time}</div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); void handleDelete(c.id); }}
+                      className="opacity-0 group-hover:opacity-100 hover:bg-[#fff0f0] hover:text-red-600 p-1.5 rounded transition-all text-gray-400 shrink-0 cursor-pointer"
+                      title="删除对话"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -1828,16 +2098,21 @@ const ArchivedConversationsTab = () => {
 };
 
 const PersonalizationTab = () => {
-  const [tone, setTone] = useState('务实'); // 务实, 亲和
+  const [tone, setTone] = useState(() => localStorage.getItem('codex_tone') || '务实'); // 务实, 亲和
   const [isToneOpen, setIsToneOpen] = useState(false);
-  const [customInstructions, setCustomInstructions] = useState(
+  const [customInstructions, setCustomInstructions] = useState(() =>
+    localStorage.getItem('codex_custom_instructions') ||
     `# 关于我\n\n叫我"**泽宝**"，你是我的 AI 搭档"**开心**"。\n我是大学生，研究方向是 AI + Java 技术融合。\n英语不太好，用中文沟通。\n性格内向。\n生日：2005年08月15日。\n\n# 协作方式\n\n- 搭档型协作：直接一起写代码、debug、解决问题，不需要过多教学铺垫\n- 需求不明确时：**先追问再动手**，不要自行假设`
   );
   const [isSaved, setIsSaved] = useState(false);
-  const [enableMemory, setEnableMemory] = useState(true);
-  const [skipToolConv, setSkipToolConv] = useState(true);
+  const [enableMemory, setEnableMemory] = useState(() => localStorage.getItem('codex_enable_memory') !== 'false');
+  const [skipToolConv, setSkipToolConv] = useState(() => localStorage.getItem('codex_skip_tool_conv') !== 'false');
 
   const handleSave = () => {
+    localStorage.setItem('codex_custom_instructions', customInstructions);
+    localStorage.setItem('codex_tone', tone);
+    localStorage.setItem('codex_enable_memory', String(enableMemory));
+    localStorage.setItem('codex_skip_tool_conv', String(skipToolConv));
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 1500);
   };

@@ -88,6 +88,17 @@ export function MainLayout() {
     localStorage.setItem('codex_active_provider', provider);
   }, []);
 
+  // 初始化时加载并注入用户自定义的强调色及背景主题色
+  useEffect(() => {
+    const lightAccent = localStorage.getItem('codex_light_accent');
+    const lightBg = localStorage.getItem('codex_light_bg');
+    const lightFg = localStorage.getItem('codex_light_fg');
+
+    if (lightAccent) document.documentElement.style.setProperty('--color-accent', lightAccent);
+    if (lightBg) document.documentElement.style.setProperty('--color-bg-secondary', lightBg);
+    if (lightFg) document.documentElement.style.setProperty('--color-text', lightFg);
+  }, []);
+
   useEffect(() => {
     const activeProvider = localStorage.getItem('codex_active_provider') || 'deepseek';
     if (activeProvider === 'local') {
@@ -627,6 +638,7 @@ export function MainLayout() {
         model: customModel,
         customBaseUrl,
         customApiKey,
+        customInstructions: localStorage.getItem('codex_custom_instructions') || undefined,
       });
       if (!result?.requestId || !result?.sessionId) {
         throw new Error('stream request did not return identifiers');
@@ -1029,7 +1041,7 @@ export function MainLayout() {
 
       {showSettings && (
         <div className="settings-overlay">
-          <SettingsLayout onBack={handleSettingsClose} />
+          <SettingsLayout onBack={handleSettingsClose} workspacePath={workspacePath} />
         </div>
       )}
     </div>

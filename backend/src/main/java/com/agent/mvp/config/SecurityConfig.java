@@ -59,6 +59,7 @@ public class SecurityConfig {
                                                 "/api/v1/auth/register",
                                                 "/api/v1/auth/refresh",
                                                 "/api/v1/sentinel/report",
+                                                "/api/v1/system/health/ready",
                                                 "/actuator/health/liveness")
                                         .permitAll()
                                         .anyRequest()
@@ -126,7 +127,8 @@ public class SecurityConfig {
     public CorsConfigurationSource desktopCorsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(
-                java.util.List.of("file://*", "http://localhost:5173"));
+                java.util.List.of(
+                        "file://*", "http://localhost:5173", "http://127.0.0.1:5173"));
         configuration.setAllowedMethods(
                 java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(java.util.List.of("*"));

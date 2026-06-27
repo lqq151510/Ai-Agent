@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model?: string;
       customBaseUrl?: string;
       customApiKey?: string;
+      customInstructions?: string;
     }) => ipcRenderer.invoke('chat:send-with-context', payload),
     testConnection: (payload: {
       provider: string;
@@ -66,6 +67,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       customApiKey: string;
       model: string;
     }) => ipcRenderer.invoke('chat:test-connection', payload),
+    deleteSession: (id: string) => ipcRenderer.invoke('chat:delete-session', id),
     onStreamEvent: (callback: (event: any) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
       ipcRenderer.on('chat:stream-event', listener);
@@ -88,6 +90,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   localService: {
     port: () => ipcRenderer.invoke('local-service:port'),
     isReady: () => ipcRenderer.invoke('local-service:is-ready'),
+  },
+
+  knowledge: {
+    request: (payload: { method?: string; path: string; body?: unknown }) =>
+      ipcRenderer.invoke('knowledge:request', payload),
+    importLocalFile: (payload?: { title?: string }) =>
+      ipcRenderer.invoke('knowledge:import-local-file', payload),
   },
 
   terminal: {

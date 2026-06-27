@@ -113,4 +113,18 @@ export class ChatManager {
     }
     return title;
   }
+
+  public deleteSession(id: string) {
+    this.sessions.delete(id);
+    const sessionFile = path.join(this.chatsDir, `${id}.json`);
+    try {
+      if (fs.existsSync(sessionFile)) {
+        fs.unlinkSync(sessionFile);
+      }
+      return true;
+    } catch (e) {
+      console.error(`Failed to delete session file: ${id}`, e);
+      return false;
+    }
+  }
 }

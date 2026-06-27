@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>知识库 — 知识台</title>
+  <link rel="stylesheet" href="../.design_library/colors_and_type.css">
+  <style>
+    /* ============================================================
+       Reset & Base
+       ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    body {
+      font-family: var(--font-body);
+      font-size: var(--text-base);
+      line-height: var(--leading-normal);
+      color: var(--foreground);
+      background: var(--background);
+      display: flex;
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; }
+    input, select { font-family: inherit; }
+
+    /* ============================================================
+       Sidebar
+       ============================================================ */
+    .sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: var(--sidebar);
+      border-right: 1px solid var(--sidebar-border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      z-index: var(--z-sticky);
+    }
+    .sidebar-logo {
+      padding: var(--space-6) var(--space-6) var(--space-4);
+      font-family: var(--font-display);
+      font-size: var(--text-xl);
+      font-weight: var(--font-semibold);
+      color: var(--primary);
+      letter-spacing: var(--tracking-tight);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .sidebar-logo svg { flex-shrink: 0; }
+    .sidebar-nav { padding: var(--space-2) var(--space-3); flex: 1; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-md);
+      font-size: var(--text-sm);
+      font-weight: var(--font-medium);
+      color: var(--foreground-secondary);
+      transition: background var(--transition-fast), color var(--transition-fast);
+      margin-bottom: 2px;
+    }
+    .nav-item:hover { background: var(--border-subtle); color: var(--foreground); }
+    .nav-item.active {
+      background: var(--sidebar-active);
+      color: var(--sidebar-active-foreground);
+    }
+    .nav-item svg { flex-shrink: 0; opacity: 0.7; }
+    .nav-item.active svg { opacity: 1; }
+    .nav-item .shortcut {
+      margin-left: auto;
+      font-size: var(--text-xs);
+      opacity: 0.5;
+      font-family: var(--font-mono);
+    }
+    .nav-divider {
+      height: 1px;
+      background: var(--sidebar-border);
+      margin: var(--space-3) var(--space-3);
+    }
+    .nav-section-label {
+      font-size: var(--text-xs);
+      font-weight: var(--font-semibold);
+      color: var(--muted-foreground);
+      text-transform: uppercase;
+      letter-spacing: var(--tracking-wider);
+      padding: var(--space-2) var(--space-3) var(--space-1);
+    }
+    .sidebar-bottom {
+      padding: var(--space-4);
+      border-top: 1px solid var(--sidebar-border);
+    }
+    .sidebar-user {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-md);
+      font-size: var(--text-sm);
+      font-weight: var(--font-medium);
+      color: var(--foreground-secondary);
+      transition: background var(--transition-fast);
+      cursor: pointer;
+    }
+    .sidebar-user:hover { background: var(--border-subtle); }
+    .sidebar-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-full);
+      background: var(--primary-subtle);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--text-xs);
+      font-weight: var(--font-semibold);
+      flex-shrink: 0;
+    }
+    .storage-bar-wrap {
+      margin-top: var(--space-3);
+      padding: 0 var(--space-3);
+    }
+    .storage-label {
+      font-size: var(--text-xs);
+      color: var(--muted-foreground);
+      margin-bottom: var(--space-1);
+      display: flex;
+      justify-content: space-between;
+    }
+    .storage-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+    }
+    .storage-bar-fill {
+      height: 100%;
+      width: 34%;
+      background: var(--primary);
+      border-radius: var(--radius-full);
+      transition: width var(--transition-slow);
+    }
+
+    /* ============================================================
+       Main Content
+       ============================================================ */
+    .main {
+      flex: 1;
+      min-width: 0;
+      padding: var(--space-8) var(--space-10);
+      max-width: 1200px;
+    }
+
+    /* --- Page Header --- */
+    .page-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: var(--space-6);
+    }
+    .page-header-left {}
+    .page-title {
+      font-family: var(--font-display);
+      font-size: var(--text-2xl);
+      font-weight: var(--font-semibold);
+      color: var(--foreground);
+      letter-spacing: var(--tracking-tight);
+      line-height: var(--leading-tight);
+    }
+    .page-subtitle {
+      font-size: var(--text-sm);
+      color: var(--muted-foreground);
+      margin-top: var(--space-1);
+    }
+    .view-toggle {
+      display: flex;
+      gap: 2px;
+      background: var(--background-subtle);
+      padding: 3px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+    }
+    .view-toggle-btn {
+      width: 34px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-sm);
+      color: var(--muted-foreground);
+      transition: all var(--transition-fast);
+    }
+    .view-toggle-btn:hover { color: var(--foreground-secondary); }
+    .view-toggle-btn.active {
+      background: var(--card);
+      color: var(--primary);
+      box-shadow: var(--shadow-xs);
+    }
+
+    /* ============================================================
+       Filter Bar
+       ============================================================ */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-4) var(--space-5);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      margin-bottom: var(--space-4);
+      box-shadow: var(--shadow-xs);
+      flex-wrap: wrap;
+    }
+    .filter-search {
+      flex: 1;
+      min-width: 220px;
+      position: relative;
+    }
+    .filter-search svg {
+      position: absolute;
+      left: var(--space-3);
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted-foreground);
+      pointer-events: none;
+    }
+    .filter-search input {
+      width: 100%;
+      padding: var(--space-2) var(--space-3) var(--space-2) var(--space-8);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      font-size: var(--text-sm);
+      color: var(--foreground);
+      background: var(--background);
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+      outline: none;
+    }
+    .filter-search input::placeholder { color: var(--muted-foreground); }
+    .filter-search input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--primary-subtle);
+    }
+    .filter-divider {
+      width: 1px;
+      height: 28px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .filter-pills {
+      display: flex;
+      gap: 2px;
+      background: var(--background-subtle);
+      padding: 2px;
+      border-radius: var(--radius-md);
+    }
+    .filter-pill {
+      padding: var(--space-1) var(--space-3);
+      font-size: var(--text-xs);
+      font-weight: var(--font-medium);
+      color: var(--foreground-secondary);
+      border-radius: var(--radius-sm);
+      transition: all var(--transition-fast);
+      white-space: nowrap;
+    }
+    .filter-pill:hover { color: var(--foreground); background: var(--border-subtle); }
+    .filter-pill.active {
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+    .filter-dropdown {
+      position: relative;
+    }
+    .filter-dropdown-btn {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--text-xs);
+      font-weight: var(--font-medium);
+      color: var(--foreground-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--card);
+      transition: all var(--transition-fast);
+      white-space: nowrap;
+    }
+    .filter-dropdown-btn:hover {
+      border-color: var(--primary);
+      color: var(--foreground);
+    }
+    .filter-dropdown-btn svg { transition: transform var(--transition-fast); }
+    .filter-dropdown-btn.open svg { transform: rotate(180deg); }
+
+    /* --- Active Filter Tags --- */
+    .active-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin-bottom: var(--space-4);
+      min-height: 0;
+    }
+    .active-filters:empty { display: none; }
+    .active-filter-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      padding: var(--space-1) var(--space-3);
+      font-size: var(--text-xs);
+      font-weight: var(--font-medium);
+      background: var(--primary-subtle);
+      color: var(--primary);
+      border-radius: var(--radius-full);
+      transition: all var(--transition-fast);
+    }
+    .active-filter-tag:hover { background: var(--primary); color: var(--primary-foreground); }
+    .active-filter-tag svg { width: 12px; height: 12px; }
+    .clear-all-filters {
+      font-size: var(--text-xs);
+      font-weight: var(--font-medium);
+      color: var(--muted-foreground);
+      padding: var(--space-1) var(--space-2);
+      transition: color var(--transition-fast);
+    }
+    .clear-all-filters:hover { color: var(--destructive); }
+
+    /* ============================================================
+       List View
+       ============================================================ */
+    .content-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .list-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-4) var(--space-5);
+      border-bottom: 1px solid var(--border-subtle);
+      transition: background var(--transition-fast);
+      cursor: pointer;
+      position: relative;
+    }
+    .list-item:last-child { border-bottom: none; }
+    .list-item:hover { background: var(--card-hover); }
+    .list-item:hover .list-item-action { opacity: 1; }
+    .list-item-type {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .list-item-type.type-web { background: var(--teal-subtle); color: var(--teal); }
+    .list-item-type.type-pdf { background: var(--accent-subtle); color: var(--accent); }
+    .list-item-type.type-md { background: var(--primary-subtle); color: var(--primary); }
+    .list-item-type.type-paste { background: var(--background-subtle); color: var(--muted-foreground); }
+    .list-item-body { flex: 1; min-width: 0; }
+    .list-item-title {
+      font-size: var(--text-sm);
+      font-weight: var(--font-semibold);
+      color: var(--foreground);
+      transition: color var(--transition-fast);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .list-item:hover .list-item-title { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+    .list-item-summary {
+      font-size: var(--text-xs);
+      color: var(--muted-foreground);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .list-item-meta {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      flex-shrink: 0;
+    }
+    .list-item-tags {
+      display: flex;
+      gap: var(--space-1);
+      flex-wrap: nowrap;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px var(--space-2);
+      font-size: 11px;
+      font-weight: var(--font-medium);
+      border-radius: var(--radius-sm);
+      white-space: nowrap;
+    }
+    .tag-tech { background: var(--primary-subtle); color: var(--primary); }
+    .tag-design { background: var(--accent-subtle); color: var(--accent-foreground); }
+    .tag-science { background: var(--teal-subtle); color: var(--teal); }
+    .tag-general { background: var(--background-subtle); color: var(--muted-foreground); }
+    .list-item-source {
+      font-size: var(--text-xs);
+      color: var(--muted-foreground);
+      min-width: 80px;
+      text-align: right;
+    }
+    .list-item-date {
+      font-size: var(--text-xs);
+      color: var(--muted-foreground);
+      min-width: 100px;
+      text-align: right;
+    }
+    .list-item-action {
+      opacity: 0;
+      transition: opacity var(--transition-fast);
+      flex-shrink: 0;
+    }
+    .list-item-action button {
+      padding: var(--space-1) var(--space-3);
+      font-size: var(--text-xs);
+      font-weight: var(--font-medium);
+      color: var(--primary);
+      border: 1px solid var(--primary);
+      border-radius: var(--radius-md);
+      transition: all var(--transition-fast);
+      white-space: nowrap;
+    }
+    .list-item-action button:hover {
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+
+    /* ============================================================
+       Card View
+       ============================================================ */
+    .content-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-5);
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      transition: all var(--transition-normal);
+      cursor: pointer;
+      position: relative;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-md);
+      border-color: var(--border);
+      transform: translateY(-1px);
+    }
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-3);
+    }
+    .card-type-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      font-size: 11px;
+      font-weight: var(--font-semibold);
+      padding: 2px var(--space-2);
+      border-radius: var(--radius-sm);
+    }
+    .card-type-badge.type-web { background: var(--teal-subtle); color: var(--teal); }
+    .card-type-badge.type-pdf { background: var(--accent-subtle); color: var(--accent); }
+    .card-type-badge.type-md { background: var(--primary-subtle); color: var(--primary); }
+    .card-type-badge.type-paste { background: var(--background-subtle); color: var(--muted-foreground); }
+    .card-type-badge svg { width: 14px; height: 14px; }
+    .card-date {
+      font-size: 11px;
+      color: var(--muted-foreground);
+    }
+    .card-title {
+      font-size: var(--text-sm);
+      font-weight: var(--font-semibold);
+      color: var(--foreground);
+      line-height: var(--leading-snug);
+      margin-bottom: var(--space-2);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      transition: color var(--transition-fast);
+    }
+    .card:hover .card-title { color: var(--primary); }
+    .card-summary {
+      font-size: var(--text-xs);
+      color: var(--muted-foreground);
+      line-height: var(--leading-normal);
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      flex: 1;
+      margin-bottom: var(--space-4);
+    }
+    .card-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border-subtle);
+      padding-top: var(--space-3);
+    }
+    .card-tags {
+      display: flex;
+      gap: var(--space-1);
+      flex-wrap: wrap;
+    }
+    .card-source {
+      font-size: 11px;
+      color: var(--muted-foreground);
+      flex-shrink: 0;
+    }
+
+    /* ============================================================
+       View Toggle — hide/show via data attribute
+       ============================================================ */
+    body[data-view="list"] .content-grid { display: none; }
+    body[data-view="list"] .content-list { display: flex; }
+    body[data-view="card"] .content-list { display: none; }
+    body[data-view="card"] .content-grid { display: grid; }
+
+    /* ============================================================
+       Pagination
+       ============================================================ */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: var(--space-8);
+      padding-top: var(--space-5);
+      border-top: 1px solid var(--border-subtle);
+    }
+    .pagination-info {
+      font-size: var(--text-sm);
+      color: var(--muted-foreground);
+    }
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .page-btn {
+      min-width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: var(--text-sm);
+      font-weight: var(--font-medium);
+      color: var(--foreground-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--card);
+      transition: all var(--transition-fast);
+      padding: 0 var(--space-2);
+    }
+    .page-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .page-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: var(--primary-foreground);
+    }
+    .page-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .page-btn:disabled:hover { border-color: var(--border); color: var(--foreground-secondary); }
+    .page-jump {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-sm);
+      color: var(--muted-foreground);
+      margin-left: var(--space-4);
+    }
+    .page-jump input {
+      width: 48px;
+      height: 32px;
+      text-align: center;
+      font-size: var(--text-sm);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--card);
+      color: var(--foreground);
+      outline: none;
+      transition: border-color var(--transition-fast);
+    }
+    .page-jump input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-subtle); }
+
+    /* ============================================================
+       Empty State
+       ============================================================ */
+    .empty-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-16) var(--space-8);
+      text-align: center;
+    }
+    body[data-view="empty"] .content-list,
+    body[data-view="empty"] .content-grid,
+    body[data-view="empty"] .pagination { display: none !important; }
+    body[data-view="empty"] .empty-state { display: flex; }
+    .empty-illustration {
+      width: 120px;
+      height: 120px;
+      margin-bottom: var(--space-6);
+      position: relative;
+    }
+    .empty-illustration .shape {
+      position: absolute;
+      border-radius: var(--radius-md);
+    }
+    .empty-illustration .shape-1 {
+      width: 48px; height: 48px;
+      background: var(--primary-subtle);
+      top: 10px; left: 36px;
+      transform: rotate(12deg);
+    }
+    .empty-illustration .shape-2 {
+      width: 36px; height: 36px;
+      background: var(--accent-subtle);
+      top: 50px; left: 60px;
+      transform: rotate(-8deg);
+      border-radius: var(--radius-full);
+    }
+    .empty-illustration .shape-3 {
+      width: 28px; height: 28px;
+      background: var(--teal-subtle);
+      top: 20px; left: 70px;
+      transform: rotate(25deg);
+    }
+    .empty-illustration .shape-4 {
+      width: 20px; height: 20px;
+      background: var(--border);
+      top: 60px; left: 30px;
+      border-radius: var(--radius-full);
+    }
+    .empty-title {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      font-weight: var(--font-medium);
+      color: var(--foreground);
+      margin-bottom: var(--space-2);
+    }
+    .empty-desc {
+      font-size: var(--text-sm);
+      color: var(--muted-foreground);
+      margin-bottom: var(--space-6);
+    }
+    .empty-action {
+      padding: var(--space-2) var(--space-5);
+      font-size: var(--text-sm);
+      font-weight: var(--font-medium);
+      color: var(--primary);
+      background: var(--primary-subtle);
+      border-radius: var(--radius-md);
+      transition: all var(--transition-fast);
+    }
+    .empty-action:hover {
+      background: var(--primary);
+      color: var(--primary-foreground);
+    }
+
+    /* ============================================================
+       Scrollbar
+       ============================================================ */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-full); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+  </style>
+</head>
+<body data-view="list">
+
+  <!-- ============================================================
+       Sidebar
+       ============================================================ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        <line x1="8" y1="7" x2="16" y2="7"/>
+        <line x1="8" y1="11" x2="14" y2="11"/>
+      </svg>
+      知识台
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        仪表盘
+      </a>
+      <a href="#" class="nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        收集箱
+      </a>
+      <a href="#" class="nav-item active">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        知识库
+      </a>
+      <a href="#" class="nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        搜索
+        <span class="shortcut">&#8984;K</span>
+      </a>
+
+      <div class="nav-divider"></div>
+
+      <div class="nav-section-label">管理</div>
+      <a href="#" class="nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+          <line x1="7" y1="7" x2="7.01" y2="7"/>
+        </svg>
+        标签管理
+      </a>
+      <a href="#" class="nav-item">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+        来源管理
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-user">
+        <div class="sidebar-avatar">Y</div>
+        <span>我的设置</span>
+      </div>
+      <div class="storage-bar-wrap">
+        <div class="storage-label">
+          <span>存储空间</span>
+          <span>1.7 GB / 5 GB</span>
+        </div>
+        <div class="storage-bar">
+          <div class="storage-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============================================================
+       Main Content
+       ============================================================ -->
+  <main class="main">
+
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-header-left">
+        <h1 class="page-title">知识库</h1>
+        <p class="page-subtitle">1,247 条知识条目</p>
+      </div>
+      <div class="view-toggle">
+        <button class="view-toggle-btn active" data-view="list" title="列表视图">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/>
+            <line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/>
+            <line x1="3" y1="12" x2="3.01" y2="12"/>
+            <line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+        </button>
+        <button class="view-toggle-btn" data-view="card" title="卡片视图">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <div class="filter-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" placeholder="在知识库中搜索…">
+      </div>
+      <div class="filter-divider"></div>
+      <div class="filter-group">
+        <div class="filter-pills">
+          <button class="filter-pill active">全部</button>
+          <button class="filter-pill">网页</button>
+          <button class="filter-pill">PDF</button>
+          <button class="filter-pill">Markdown</button>
+          <button class="filter-pill">粘贴</button>
+        </div>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="filter-dropdown">
+        <button class="filter-dropdown-btn">
+          标签
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </div>
+      <div class="filter-dropdown">
+        <button class="filter-dropdown-btn">
+          全部时间
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </div>
+      <div class="filter-dropdown">
+        <button class="filter-dropdown-btn">
+          最新优先
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Filters (hidden by default, shown via JS) -->
+    <div class="active-filters" id="activeFilters"></div>
+
+    <!-- ============================================================
+         List View
+         ============================================================ -->
+    <div class="content-list" id="contentList">
+
+      <!-- 1. Transformer 架构详解 -->
+      <div class="list-item">
+        <div class="list-item-type type-web">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">Transformer 架构详解：从注意力机制到多头注意力</div>
+          <div class="list-item-summary">深入解析 Transformer 模型的核心架构，包括自注意力机制、多头注意力、位置编码等关键组件的设计原理与实现细节。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">深度学习</span>
+            <span class="tag tag-tech">自然语言处理</span>
+          </div>
+          <div class="list-item-source">juejin.cn</div>
+          <div class="list-item-date">2024年3月15日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 2. Attention Is All You Need -->
+      <div class="list-item">
+        <div class="list-item-type type-pdf">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">Attention Is All You Need</div>
+          <div class="list-item-summary">提出 Transformer 架构的开创性论文，彻底改变了自然语言处理领域的研究方向，奠定了 GPT、BERT 等模型的理论基础。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">论文笔记</span>
+            <span class="tag tag-tech">深度学习</span>
+          </div>
+          <div class="list-item-source">arxiv.org</div>
+          <div class="list-item-date">2024年3月12日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 3. 设计系统的原子化方法论 -->
+      <div class="list-item">
+        <div class="list-item-type type-web">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">设计系统的原子化方法论：从原子到页面</div>
+          <div class="list-item-summary">系统介绍 Atomic Design 方法论，探讨如何通过原子、分子、有机体、模板、页面五个层级构建可扩展的设计系统。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-design">产品设计</span>
+            <span class="tag tag-design">设计系统</span>
+          </div>
+          <div class="list-item-source">medium.com</div>
+          <div class="list-item-date">2024年3月10日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 4. React 18 新特性学习笔记 -->
+      <div class="list-item">
+        <div class="list-item-type type-md">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">React 18 新特性学习笔记</div>
+          <div class="list-item-summary">记录 React 18 的并发特性、Suspense 改进、useTransition、useDeferredValue 等新 API 的学习心得与使用示例。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">前端开发</span>
+            <span class="tag tag-tech">React</span>
+          </div>
+          <div class="list-item-source">本地文件</div>
+          <div class="list-item-date">2024年3月8日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 5. 认知偏差对决策的影响 -->
+      <div class="list-item">
+        <div class="list-item-type type-web">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">认知偏差对决策的影响：常见的思维陷阱</div>
+          <div class="list-item-summary">梳理确认偏差、锚定效应、可得性偏差等常见认知偏差的定义、表现及在产品设计和日常决策中的应对策略。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-science">认知科学</span>
+            <span class="tag tag-design">产品设计</span>
+          </div>
+          <div class="list-item-source">zhihu.com</div>
+          <div class="list-item-date">2024年3月5日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 6. 深度学习在自然语言处理中的应用综述 -->
+      <div class="list-item">
+        <div class="list-item-type type-pdf">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">深度学习在自然语言处理中的应用综述</div>
+          <div class="list-item-summary">全面综述深度学习技术在 NLP 领域的应用，涵盖词向量、序列模型、预训练语言模型及大语言模型的演进历程。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">自然语言处理</span>
+            <span class="tag tag-tech">机器学习</span>
+          </div>
+          <div class="list-item-source">arxiv.org</div>
+          <div class="list-item-date">2024年3月2日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 7. 产品需求分析框架整理 -->
+      <div class="list-item">
+        <div class="list-item-type type-md">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">产品需求分析框架整理</div>
+          <div class="list-item-summary">整理 KANO 模型、MoSCoW 优先级、用户故事地图等需求分析工具的使用方法，结合实际项目经验总结最佳实践。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-design">产品设计</span>
+            <span class="tag tag-general">方法论</span>
+          </div>
+          <div class="list-item-source">本地文件</div>
+          <div class="list-item-date">2024年2月28日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 8. 微服务架构设计模式 -->
+      <div class="list-item">
+        <div class="list-item-type type-web">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">微服务架构设计模式：从单体到分布式</div>
+          <div class="list-item-summary">对比单体架构与微服务架构的优劣，详解服务拆分策略、API 网关、服务发现、熔断器等核心设计模式的落地实践。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">系统架构</span>
+            <span class="tag tag-tech">后端开发</span>
+          </div>
+          <div class="list-item-source">infoq.cn</div>
+          <div class="list-item-date">2024年2月25日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 9. 粘贴笔记 - 会议记录 -->
+      <div class="list-item">
+        <div class="list-item-type type-paste">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">Q1 产品规划会议要点</div>
+          <div class="list-item-summary">记录 Q1 产品规划会议的核心讨论内容，包括新功能优先级排序、技术债务清理计划、团队资源分配方案。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-general">会议记录</span>
+            <span class="tag tag-design">产品设计</span>
+          </div>
+          <div class="list-item-source">粘贴</div>
+          <div class="list-item-date">2024年2月22日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 10. CSS Grid 布局完全指南 -->
+      <div class="list-item">
+        <div class="list-item-type type-web">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">CSS Grid 布局完全指南：二维布局的终极方案</div>
+          <div class="list-item-summary">从基础概念到高级用法，全面讲解 CSS Grid 的网格定义、区域命名、自动填充、响应式布局等核心知识点。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">前端开发</span>
+            <span class="tag tag-tech">CSS</span>
+          </div>
+          <div class="list-item-source">css-tricks.com</div>
+          <div class="list-item-date">2024年2月18日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 11. 大语言模型幻觉问题研究 -->
+      <div class="list-item">
+        <div class="list-item-type type-pdf">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">大语言模型幻觉问题研究：成因分析与缓解策略</div>
+          <div class="list-item-summary">系统分析 LLM 产生幻觉的内在原因，综述 RAG、RLHF、自我一致性解码等缓解策略的最新研究进展。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">机器学习</span>
+            <span class="tag tag-tech">论文笔记</span>
+          </div>
+          <div class="list-item-source">arxiv.org</div>
+          <div class="list-item-date">2024年2月15日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 12. TypeScript 高级类型体操 -->
+      <div class="list-item">
+        <div class="list-item-type type-md">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">TypeScript 高级类型体操笔记</div>
+          <div class="list-item-summary">整理条件类型、映射类型、模板字面量类型等 TypeScript 高级类型的使用技巧，附带大量实战练习题解析。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">前端开发</span>
+            <span class="tag tag-tech">TypeScript</span>
+          </div>
+          <div class="list-item-source">本地文件</div>
+          <div class="list-item-date">2024年2月10日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 13. 粘贴 - 阅读摘录 -->
+      <div class="list-item">
+        <div class="list-item-type type-paste">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">《思考，快与慢》核心概念摘录</div>
+          <div class="list-item-summary">摘录 Daniel Kahneman 关于系统1与系统2思维模式的核心观点，包括前景理论和损失厌恶的实验证据。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-science">认知科学</span>
+            <span class="tag tag-general">阅读笔记</span>
+          </div>
+          <div class="list-item-source">粘贴</div>
+          <div class="list-item-date">2024年2月8日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 14. PostgreSQL 性能优化实战 -->
+      <div class="list-item">
+        <div class="list-item-type type-web">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">PostgreSQL 性能优化实战：索引策略与查询调优</div>
+          <div class="list-item-summary">结合实际案例讲解 PostgreSQL 的索引选择策略、EXPLAIN ANALYZE 分析方法、慢查询诊断与优化技巧。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">数据库</span>
+            <span class="tag tag-tech">后端开发</span>
+          </div>
+          <div class="list-item-source">postgresql.org</div>
+          <div class="list-item-date">2024年2月5日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 15. 设计心理学读书笔记 -->
+      <div class="list-item">
+        <div class="list-item-type type-md">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">设计心理学读书笔记：日常的设计</div>
+          <div class="list-item-summary">记录 Don Norman 关于可供性、映射、反馈等核心设计原则的思考，以及如何将这些原则应用到数字产品设计中的实践心得。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-design">产品设计</span>
+            <span class="tag tag-science">认知科学</span>
+          </div>
+          <div class="list-item-source">本地文件</div>
+          <div class="list-item-date">2024年1月30日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 16. 粘贴 - 灵感收集 -->
+      <div class="list-item">
+        <div class="list-item-type type-paste">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">信息架构设计原则速记</div>
+          <div class="list-item-summary">快速记录关于信息架构设计的核心原则，包括组织系统、标签系统、导航系统和搜索系统的设计要点。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-design">产品设计</span>
+            <span class="tag tag-general">方法论</span>
+          </div>
+          <div class="list-item-source">粘贴</div>
+          <div class="list-item-date">2024年1月25日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 17. Docker 容器化部署实践 -->
+      <div class="list-item">
+        <div class="list-item-type type-web">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">Docker 容器化部署实践：从开发到生产</div>
+          <div class="list-item-summary">完整介绍 Docker 容器化部署流程，包括 Dockerfile 最佳实践、多阶段构建、Docker Compose 编排和 K8s 部署策略。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-tech">系统架构</span>
+            <span class="tag tag-tech">DevOps</span>
+          </div>
+          <div class="list-item-source">docker.com</div>
+          <div class="list-item-date">2024年1月20日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+      <!-- 18. 知识管理方法论 -->
+      <div class="list-item">
+        <div class="list-item-type type-web">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+        </div>
+        <div class="list-item-body">
+          <div class="list-item-title">个人知识管理方法论：从信息到智慧</div>
+          <div class="list-item-summary">探讨 DIKW 模型在个人知识管理中的应用，介绍卡片盒笔记法、渐进式总结和知识图谱等工具的使用心得。</div>
+        </div>
+        <div class="list-item-meta">
+          <div class="list-item-tags">
+            <span class="tag tag-general">方法论</span>
+            <span class="tag tag-science">认知科学</span>
+          </div>
+          <div class="list-item-source">sspai.com</div>
+          <div class="list-item-date">2024年1月15日</div>
+        </div>
+        <div class="list-item-action">
+          <button>查看详情</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================
+         Card View
+         ============================================================ -->
+    <div class="content-grid" id="contentGrid">
+
+      <!-- Card 1 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-web">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            网页
+          </span>
+          <span class="card-date">2024年3月15日</span>
+        </div>
+        <div class="card-title">Transformer 架构详解：从注意力机制到多头注意力</div>
+        <div class="card-summary">深入解析 Transformer 模型的核心架构，包括自注意力机制、多头注意力、位置编码等关键组件的设计原理与实现细节。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">深度学习</span>
+            <span class="tag tag-tech">自然语言处理</span>
+          </div>
+          <span class="card-source">juejin.cn</span>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-pdf">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            PDF
+          </span>
+          <span class="card-date">2024年3月12日</span>
+        </div>
+        <div class="card-title">Attention Is All You Need</div>
+        <div class="card-summary">提出 Transformer 架构的开创性论文，彻底改变了自然语言处理领域的研究方向，奠定了 GPT、BERT 等模型的理论基础。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">论文笔记</span>
+            <span class="tag tag-tech">深度学习</span>
+          </div>
+          <span class="card-source">arxiv.org</span>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-web">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            网页
+          </span>
+          <span class="card-date">2024年3月10日</span>
+        </div>
+        <div class="card-title">设计系统的原子化方法论：从原子到页面</div>
+        <div class="card-summary">系统介绍 Atomic Design 方法论，探讨如何通过原子、分子、有机体、模板、页面五个层级构建可扩展的设计系统。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-design">产品设计</span>
+            <span class="tag tag-design">设计系统</span>
+          </div>
+          <span class="card-source">medium.com</span>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-md">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            Markdown
+          </span>
+          <span class="card-date">2024年3月8日</span>
+        </div>
+        <div class="card-title">React 18 新特性学习笔记</div>
+        <div class="card-summary">记录 React 18 的并发特性、Suspense 改进、useTransition、useDeferredValue 等新 API 的学习心得与使用示例。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">前端开发</span>
+            <span class="tag tag-tech">React</span>
+          </div>
+          <span class="card-source">本地文件</span>
+        </div>
+      </div>
+
+      <!-- Card 5 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-web">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            网页
+          </span>
+          <span class="card-date">2024年3月5日</span>
+        </div>
+        <div class="card-title">认知偏差对决策的影响：常见的思维陷阱</div>
+        <div class="card-summary">梳理确认偏差、锚定效应、可得性偏差等常见认知偏差的定义、表现及在产品设计和日常决策中的应对策略。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-science">认知科学</span>
+            <span class="tag tag-design">产品设计</span>
+          </div>
+          <span class="card-source">zhihu.com</span>
+        </div>
+      </div>
+
+      <!-- Card 6 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-pdf">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            PDF
+          </span>
+          <span class="card-date">2024年3月2日</span>
+        </div>
+        <div class="card-title">深度学习在自然语言处理中的应用综述</div>
+        <div class="card-summary">全面综述深度学习技术在 NLP 领域的应用，涵盖词向量、序列模型、预训练语言模型及大语言模型的演进历程。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">自然语言处理</span>
+            <span class="tag tag-tech">机器学习</span>
+          </div>
+          <span class="card-source">arxiv.org</span>
+        </div>
+      </div>
+
+      <!-- Card 7 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-md">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            Markdown
+          </span>
+          <span class="card-date">2024年2月28日</span>
+        </div>
+        <div class="card-title">产品需求分析框架整理</div>
+        <div class="card-summary">整理 KANO 模型、MoSCoW 优先级、用户故事地图等需求分析工具的使用方法，结合实际项目经验总结最佳实践。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-design">产品设计</span>
+            <span class="tag tag-general">方法论</span>
+          </div>
+          <span class="card-source">本地文件</span>
+        </div>
+      </div>
+
+      <!-- Card 8 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-web">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            网页
+          </span>
+          <span class="card-date">2024年2月25日</span>
+        </div>
+        <div class="card-title">微服务架构设计模式：从单体到分布式</div>
+        <div class="card-summary">对比单体架构与微服务架构的优劣，详解服务拆分策略、API 网关、服务发现、熔断器等核心设计模式的落地实践。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">系统架构</span>
+            <span class="tag tag-tech">后端开发</span>
+          </div>
+          <span class="card-source">infoq.cn</span>
+        </div>
+      </div>
+
+      <!-- Card 9 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-paste">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            粘贴
+          </span>
+          <span class="card-date">2024年2月22日</span>
+        </div>
+        <div class="card-title">Q1 产品规划会议要点</div>
+        <div class="card-summary">记录 Q1 产品规划会议的核心讨论内容，包括新功能优先级排序、技术债务清理计划、团队资源分配方案。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-general">会议记录</span>
+            <span class="tag tag-design">产品设计</span>
+          </div>
+          <span class="card-source">粘贴</span>
+        </div>
+      </div>
+
+      <!-- Card 10 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-web">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            网页
+          </span>
+          <span class="card-date">2024年2月18日</span>
+        </div>
+        <div class="card-title">CSS Grid 布局完全指南：二维布局的终极方案</div>
+        <div class="card-summary">从基础概念到高级用法，全面讲解 CSS Grid 的网格定义、区域命名、自动填充、响应式布局等核心知识点。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">前端开发</span>
+            <span class="tag tag-tech">CSS</span>
+          </div>
+          <span class="card-source">css-tricks.com</span>
+        </div>
+      </div>
+
+      <!-- Card 11 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-pdf">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            PDF
+          </span>
+          <span class="card-date">2024年2月15日</span>
+        </div>
+        <div class="card-title">大语言模型幻觉问题研究：成因分析与缓解策略</div>
+        <div class="card-summary">系统分析 LLM 产生幻觉的内在原因，综述 RAG、RLHF、自我一致性解码等缓解策略的最新研究进展。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">机器学习</span>
+            <span class="tag tag-tech">论文笔记</span>
+          </div>
+          <span class="card-source">arxiv.org</span>
+        </div>
+      </div>
+
+      <!-- Card 12 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-md">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            Markdown
+          </span>
+          <span class="card-date">2024年2月10日</span>
+        </div>
+        <div class="card-title">TypeScript 高级类型体操笔记</div>
+        <div class="card-summary">整理条件类型、映射类型、模板字面量类型等 TypeScript 高级类型的使用技巧，附带大量实战练习题解析。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">前端开发</span>
+            <span class="tag tag-tech">TypeScript</span>
+          </div>
+          <span class="card-source">本地文件</span>
+        </div>
+      </div>
+
+      <!-- Card 13 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-paste">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            粘贴
+          </span>
+          <span class="card-date">2024年2月8日</span>
+        </div>
+        <div class="card-title">《思考，快与慢》核心概念摘录</div>
+        <div class="card-summary">摘录 Daniel Kahneman 关于系统1与系统2思维模式的核心观点，包括前景理论和损失厌恶的实验证据。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-science">认知科学</span>
+            <span class="tag tag-general">阅读笔记</span>
+          </div>
+          <span class="card-source">粘贴</span>
+        </div>
+      </div>
+
+      <!-- Card 14 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-web">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            网页
+          </span>
+          <span class="card-date">2024年2月5日</span>
+        </div>
+        <div class="card-title">PostgreSQL 性能优化实战：索引策略与查询调优</div>
+        <div class="card-summary">结合实际案例讲解 PostgreSQL 的索引选择策略、EXPLAIN ANALYZE 分析方法、慢查询诊断与优化技巧。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">数据库</span>
+            <span class="tag tag-tech">后端开发</span>
+          </div>
+          <span class="card-source">postgresql.org</span>
+        </div>
+      </div>
+
+      <!-- Card 15 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-md">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            Markdown
+          </span>
+          <span class="card-date">2024年1月30日</span>
+        </div>
+        <div class="card-title">设计心理学读书笔记：日常的设计</div>
+        <div class="card-summary">记录 Don Norman 关于可供性、映射、反馈等核心设计原则的思考，以及如何将这些原则应用到数字产品设计中的实践心得。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-design">产品设计</span>
+            <span class="tag tag-science">认知科学</span>
+          </div>
+          <span class="card-source">本地文件</span>
+        </div>
+      </div>
+
+      <!-- Card 16 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-paste">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            粘贴
+          </span>
+          <span class="card-date">2024年1月25日</span>
+        </div>
+        <div class="card-title">信息架构设计原则速记</div>
+        <div class="card-summary">快速记录关于信息架构设计的核心原则，包括组织系统、标签系统、导航系统和搜索系统的设计要点。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-design">产品设计</span>
+            <span class="tag tag-general">方法论</span>
+          </div>
+          <span class="card-source">粘贴</span>
+        </div>
+      </div>
+
+      <!-- Card 17 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-web">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            网页
+          </span>
+          <span class="card-date">2024年1月20日</span>
+        </div>
+        <div class="card-title">Docker 容器化部署实践：从开发到生产</div>
+        <div class="card-summary">完整介绍 Docker 容器化部署流程，包括 Dockerfile 最佳实践、多阶段构建、Docker Compose 编排和 K8s 部署策略。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-tech">系统架构</span>
+            <span class="tag tag-tech">DevOps</span>
+          </div>
+          <span class="card-source">docker.com</span>
+        </div>
+      </div>
+
+      <!-- Card 18 -->
+      <div class="card">
+        <div class="card-top">
+          <span class="card-type-badge type-web">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            网页
+          </span>
+          <span class="card-date">2024年1月15日</span>
+        </div>
+        <div class="card-title">个人知识管理方法论：从信息到智慧</div>
+        <div class="card-summary">探讨 DIKW 模型在个人知识管理中的应用，介绍卡片盒笔记法、渐进式总结和知识图谱等工具的使用心得。</div>
+        <div class="card-bottom">
+          <div class="card-tags">
+            <span class="tag tag-general">方法论</span>
+            <span class="tag tag-science">认知科学</span>
+          </div>
+          <span class="card-source">sspai.com</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================
+         Empty State
+         ============================================================ -->
+    <div class="empty-state">
+      <div class="empty-illustration">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+        <div class="shape shape-4"></div>
+      </div>
+      <div class="empty-title">未找到匹配的知识条目</div>
+      <div class="empty-desc">尝试调整筛选条件或搜索关键词</div>
+      <button class="empty-action">清除筛选</button>
+    </div>
+
+    <!-- ============================================================
+         Pagination
+         ============================================================ -->
+    <div class="pagination">
+      <div class="pagination-info">显示 1-20 / 共 1,247 条</div>
+      <div style="display:flex;align-items:center;">
+        <div class="pagination-controls">
+          <button class="page-btn" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn">3</button>
+          <button class="page-btn">4</button>
+          <button class="page-btn">5</button>
+          <span style="color:var(--muted-foreground);font-size:var(--text-sm);padding:0 var(--space-1);">...</span>
+          <button class="page-btn">63</button>
+          <button class="page-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+        <div class="page-jump">
+          跳转至
+          <input type="text" placeholder="">
+          页
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ============================================================
+       Minimal JS for View Toggle & Filter Interaction
+       ============================================================ -->
+  <script>
+    // View toggle
+    document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const view = btn.dataset.view;
+        document.body.setAttribute('data-view', view);
+        document.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // Source type filter pills
+    document.querySelectorAll('.filter-pills .filter-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('.filter-pills .filter-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+      });
+    });
+
+    // Empty state toggle (for demo)
+    document.querySelector('.empty-action').addEventListener('click', () => {
+      document.body.setAttribute('data-view', 'list');
+    });
+  </script>
+
+</body>
+</html>

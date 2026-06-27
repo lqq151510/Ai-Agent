@@ -96,3 +96,6 @@ python-service:
   read-timeout-ms: ${PYTHON_SERVICE_READ_TIMEOUT_MS:30000}
   # 是否启用（不可用时降级到本地 MarkItDownService 逻辑）
   enabled: ${PYTHON_SERVICE_ENABLED:true}
+
+mybatis-plus:
+  type-handlers-package: com.agent.mvp.config
