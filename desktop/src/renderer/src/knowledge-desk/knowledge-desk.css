@@ -117,6 +117,7 @@
 .kd-danger-zone button,
 .kd-segmented button,
 .kd-primary-button,
+.kd-filter-summary button,
 .kd-search-box button {
   border: 1px solid transparent;
   background: transparent;
@@ -817,6 +818,42 @@
   color: var(--kd-muted);
 }
 
+.kd-filter-group input {
+  accent-color: var(--kd-sage);
+}
+
+.kd-filter-summary {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  background: var(--kd-bg);
+  border: 1px solid var(--kd-soft-line);
+  border-radius: 8px;
+  color: var(--kd-muted);
+}
+
+.kd-filter-summary strong {
+  color: var(--kd-text);
+}
+
+.kd-filter-summary span {
+  font-size: 13px;
+}
+
+.kd-filter-summary button {
+  width: fit-content;
+  border-color: var(--kd-line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: var(--kd-teal);
+  font-weight: 700;
+}
+
+.kd-filter-summary button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .kd-empty-filter {
   display: grid;
   gap: 4px;
@@ -898,6 +935,29 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.kd-detail-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 20px;
+  padding: 8px 11px;
+  border: 1px solid var(--kd-line);
+  border-radius: 999px;
+  background: var(--kd-bg);
+  color: var(--kd-muted);
+  font-size: 13px;
+}
+
+.kd-detail-status svg {
+  flex: 0 0 auto;
+}
+
+.kd-detail-status--error {
+  border-color: rgba(150, 77, 61, 0.25);
+  background: rgba(150, 77, 61, 0.08);
+  color: var(--kd-copper);
 }
 
 .kd-search-page {

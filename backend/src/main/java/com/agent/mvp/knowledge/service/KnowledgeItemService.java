@@ -29,11 +29,14 @@ import com.agent.mvp.knowledge.entity.KnowledgeItemTag;
 import com.agent.mvp.knowledge.entity.KnowledgeTag;
 import com.agent.mvp.knowledge.repo.KnowledgeItemRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
+import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
+import com.agent.mvp.knowledge.repo.KnowledgeTagUsageCountView;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
 import com.agent.mvp.settings.OrganizeMode;
 import com.agent.mvp.settings.entity.UserProfile;
 import com.agent.mvp.settings.service.UserProfileService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,17 +47,26 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class KnowledgeItemService {
+    private static final String LIST_SUMMARY_SQL =
+            "COALESCE(NULLIF(summary, ''), SUBSTRING(COALESCE(NULLIF(cleaned_content, ''), raw_content), 1, 280)) AS summary";
+    private static final String SEARCH_VECTOR_SQL =
+            "to_tsvector('simple', COALESCE(title, '') || ' ' || COALESCE(summary, '') || ' ' || "
+                    + "COALESCE(NULLIF(cleaned_content, ''), raw_content, ''))";
 
     private final KnowledgeItemRepository knowledgeItemRepository;
     private final KnowledgeTagRepository knowledgeTagRepository;
@@ -64,6 +76,30 @@ public class KnowledgeItemService {
     private final MarkItDownService markItDownService;
     private final UserProfileService userProfileService;
     private final ObjectMapper objectMapper;
+    private final boolean postgresFullTextSearch;
+
+    @Autowired
+    public KnowledgeItemService(
+            KnowledgeItemRepository knowledgeItemRepository,
+            KnowledgeTagRepository knowledgeTagRepository,
+            KnowledgeItemTagRepository knowledgeItemTagRepository,
+            IngestionJobService ingestionJobService,
+            KnowledgeOrganizerService knowledgeOrganizerService,
+            MarkItDownService markItDownService,
+            UserProfileService userProfileService,
+            ObjectMapper objectMapper,
+            @Value("${spring.datasource.url:}") String datasourceUrl) {
+        this(
+                knowledgeItemRepository,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository,
+                ingestionJobService,
+                knowledgeOrganizerService,
+                markItDownService,
+                userProfileService,
+                objectMapper,
+                isPostgresDatasource(datasourceUrl));
+    }
 
     public KnowledgeItemService(
             KnowledgeItemRepository knowledgeItemRepository,
@@ -74,6 +110,28 @@ public class KnowledgeItemService {
             MarkItDownService markItDownService,
             UserProfileService userProfileService,
             ObjectMapper objectMapper) {
+        this(
+                knowledgeItemRepository,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository,
+                ingestionJobService,
+                knowledgeOrganizerService,
+                markItDownService,
+                userProfileService,
+                objectMapper,
+                false);
+    }
+
+    KnowledgeItemService(
+            KnowledgeItemRepository knowledgeItemRepository,
+            KnowledgeTagRepository knowledgeTagRepository,
+            KnowledgeItemTagRepository knowledgeItemTagRepository,
+            IngestionJobService ingestionJobService,
+            KnowledgeOrganizerService knowledgeOrganizerService,
+            MarkItDownService markItDownService,
+            UserProfileService userProfileService,
+            ObjectMapper objectMapper,
+            boolean postgresFullTextSearch) {
         this.knowledgeItemRepository = knowledgeItemRepository;
         this.knowledgeTagRepository = knowledgeTagRepository;
         this.knowledgeItemTagRepository = knowledgeItemTagRepository;
@@ -82,6 +140,11 @@ public class KnowledgeItemService {
         this.markItDownService = markItDownService;
         this.userProfileService = userProfileService;
         this.objectMapper = objectMapper;
+        this.postgresFullTextSearch = postgresFullTextSearch;
+    }
+
+    private static boolean isPostgresDatasource(String datasourceUrl) {
+        return datasourceUrl != null && datasourceUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql:");
     }
 
     @Transactional
@@ -193,11 +256,7 @@ public class KnowledgeItemService {
     public KnowledgeItemPageResponse listItems(
             UUID userId, String status, String sourceType, String tag, long page, long pageSize) {
         Page<KnowledgeItem> itemPage = queryItems(userId, null, status, sourceType, tag, null, null, page, pageSize);
-        return new KnowledgeItemPageResponse(
-                itemPage.getRecords().stream().map(this::toResponse).toList(),
-                itemPage.getTotal(),
-                page,
-                pageSize);
+        return toPageResponse(itemPage, page, pageSize);
     }
 
     public KnowledgeItemResponse getItem(UUID userId, UUID itemId) {
@@ -238,11 +297,7 @@ public class KnowledgeItemService {
             long page,
             long pageSize) {
         Page<KnowledgeItem> itemPage = queryItems(userId, query, null, sourceType, tag, from, to, page, pageSize);
-        return new KnowledgeItemPageResponse(
-                itemPage.getRecords().stream().map(this::toResponse).toList(),
-                itemPage.getTotal(),
-                page,
-                pageSize);
+        return toPageResponse(itemPage, page, pageSize);
     }
 
     @Transactional
@@ -420,27 +475,28 @@ public class KnowledgeItemService {
         userProfileService.requireUser(userId);
         List<KnowledgeItem> recentItems =
                 knowledgeItemRepository.selectList(
-                        new LambdaQueryWrapper<KnowledgeItem>()
-                                .eq(KnowledgeItem::getUserId, userId)
-                                .orderByDesc(KnowledgeItem::getUpdatedAt)
+                        new QueryWrapper<KnowledgeItem>()
+                                .select("id", "title", "status", "source_type", "updated_at")
+                                .eq("user_id", userId)
+                                .orderByDesc("updated_at")
                                 .last("LIMIT 5"));
 
-        List<DashboardTagSummaryResponse> topTags =
-                knowledgeTagRepository
-                        .selectList(
-                                new LambdaQueryWrapper<KnowledgeTag>()
-                                        .eq(KnowledgeTag::getUserId, userId))
-                        .stream()
-                        .map(
-                                tag ->
-                                        new DashboardTagSummaryResponse(
-                                                tag.getId(),
-                                                tag.getName(),
-                                                tag.getColor(),
-                                                knowledgeItemTagRepository.findKnowledgeItemIdsByTagId(tag.getId()).size()))
-                        .sorted(Comparator.comparingLong(DashboardTagSummaryResponse::usageCount).reversed())
-                        .limit(5)
-                        .toList();
+        List<KnowledgeTag> tags =
+                knowledgeTagRepository.selectList(
+                        new LambdaQueryWrapper<KnowledgeTag>().eq(KnowledgeTag::getUserId, userId));
+        Map<UUID, Long> tagUsageCounts =
+                getTagUsageCounts(tags.stream().map(KnowledgeTag::getId).toList());
+        List<DashboardTagSummaryResponse> topTags = tags.stream()
+                .map(
+                        tag ->
+                                new DashboardTagSummaryResponse(
+                                        tag.getId(),
+                                        tag.getName(),
+                                        tag.getColor(),
+                                        tagUsageCounts.getOrDefault(tag.getId(), 0L)))
+                .sorted(Comparator.comparingLong(DashboardTagSummaryResponse::usageCount).reversed())
+                .limit(5)
+                .toList();
 
         return new DashboardSummaryResponse(
                 countItems(userId, null),
@@ -459,6 +515,14 @@ public class KnowledgeItemService {
                         .toList(),
                 topTags,
                 Instant.now());
+    }
+
+    private Map<UUID, Long> getTagUsageCounts(List<UUID> tagIds) {
+        if (tagIds == null || tagIds.isEmpty()) {
+            return Map.of();
+        }
+        return knowledgeItemTagRepository.findUsageCountsByTagIds(tagIds).stream()
+                .collect(Collectors.toMap(KnowledgeTagUsageCountView::getTagId, KnowledgeTagUsageCountView::getUsageCount));
     }
 
     private KnowledgeItem createItem(
@@ -491,30 +555,36 @@ public class KnowledgeItemService {
             long page,
             long pageSize) {
         Page<KnowledgeItem> pagination = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
-        LambdaQueryWrapper<KnowledgeItem> wrapper =
-                new LambdaQueryWrapper<KnowledgeItem>().eq(KnowledgeItem::getUserId, userId);
+        QueryWrapper<KnowledgeItem> wrapper = new QueryWrapper<KnowledgeItem>()
+                .select(
+                        "id",
+                        "user_id",
+                        "source_type",
+                        "title",
+                        "source_uri",
+                        LIST_SUMMARY_SQL,
+                        "status",
+                        "language",
+                        "word_count",
+                        "created_at",
+                        "updated_at",
+                        "archived_at")
+                .eq("user_id", userId);
 
         if (query != null && !query.isBlank()) {
-            String q = query.trim();
-            wrapper.and(
-                    nested ->
-                            nested.like(KnowledgeItem::getTitle, q)
-                                    .or()
-                                    .like(KnowledgeItem::getSummary, q)
-                                    .or()
-                                    .like(KnowledgeItem::getCleanedContent, q));
+            applyKeywordSearch(wrapper, query.trim());
         }
         if (status != null && !status.isBlank()) {
-            wrapper.eq(KnowledgeItem::getStatus, KnowledgeItemStatus.from(status).value());
+            wrapper.eq("status", KnowledgeItemStatus.from(status).value());
         }
         if (sourceType != null && !sourceType.isBlank()) {
-            wrapper.eq(KnowledgeItem::getSourceType, KnowledgeItemSourceType.from(sourceType).value());
+            wrapper.eq("source_type", KnowledgeItemSourceType.from(sourceType).value());
         }
         if (from != null) {
-            wrapper.ge(KnowledgeItem::getCreatedAt, from);
+            wrapper.ge("created_at", from);
         }
         if (to != null) {
-            wrapper.le(KnowledgeItem::getCreatedAt, to);
+            wrapper.le("created_at", to);
         }
         if (tag != null && !tag.isBlank()) {
             KnowledgeTag targetTag =
@@ -525,14 +595,28 @@ public class KnowledgeItemService {
             if (targetTag == null) {
                 return new Page<>(pagination.getCurrent(), pagination.getSize(), 0);
             }
-            List<UUID> itemIds = knowledgeItemTagRepository.findKnowledgeItemIdsByTagId(targetTag.getId());
-            if (itemIds.isEmpty()) {
-                return new Page<>(pagination.getCurrent(), pagination.getSize(), 0);
-            }
-            wrapper.in(KnowledgeItem::getId, itemIds);
+            wrapper.exists(
+                    "SELECT 1 FROM knowledge_item_tags kit "
+                            + "WHERE kit.knowledge_item_id = knowledge_items.id "
+                            + "AND kit.tag_id = {0,typeHandler=com.agent.mvp.config.UuidTypeHandler}",
+                    targetTag.getId());
         }
-        wrapper.orderByDesc(KnowledgeItem::getUpdatedAt);
+        wrapper.orderByDesc("updated_at");
         return knowledgeItemRepository.selectPage(pagination, wrapper);
+    }
+
+    private void applyKeywordSearch(QueryWrapper<KnowledgeItem> wrapper, String query) {
+        if (postgresFullTextSearch) {
+            wrapper.apply(SEARCH_VECTOR_SQL + " @@ websearch_to_tsquery('simple', {0})", query);
+            return;
+        }
+        wrapper.and(
+                nested ->
+                        nested.like("title", query)
+                                .or()
+                                .like("summary", query)
+                                .or()
+                                .like("cleaned_content", query));
     }
 
     private KnowledgeItem requireOwnedItem(UUID userId, UUID itemId) {
@@ -591,26 +675,81 @@ public class KnowledgeItemService {
         return knowledgeTagRepository.selectBatchIds(tagIds).stream().map(this::toTagResponse).toList();
     }
 
+    private KnowledgeItemPageResponse toPageResponse(Page<KnowledgeItem> itemPage, long page, long pageSize) {
+        Map<UUID, List<TagResponse>> tagsByItemId =
+                getTagsByItemIds(itemPage.getRecords().stream().map(KnowledgeItem::getId).toList());
+        return new KnowledgeItemPageResponse(
+                itemPage.getRecords().stream()
+                        .map(item -> toListResponse(item, tagsByItemId.getOrDefault(item.getId(), List.of())))
+                        .toList(),
+                itemPage.getTotal(),
+                page,
+                pageSize);
+    }
+
+    private Map<UUID, List<TagResponse>> getTagsByItemIds(List<UUID> itemIds) {
+        if (itemIds == null || itemIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<TagResponse>> tagsByItemId = new HashMap<>();
+        for (KnowledgeItemTagView tag : knowledgeItemTagRepository.findTagsByKnowledgeItemIds(itemIds)) {
+            tagsByItemId
+                    .computeIfAbsent(tag.getKnowledgeItemId(), ignored -> new ArrayList<>())
+                    .add(new TagResponse(tag.getTagId(), tag.getName(), tag.getColor(), tag.getCreatedAt()));
+        }
+        return tagsByItemId;
+    }
+
     private TagResponse toTagResponse(KnowledgeTag tag) {
         return new TagResponse(tag.getId(), tag.getName(), tag.getColor(), tag.getCreatedAt());
     }
 
     private KnowledgeItemResponse toResponse(KnowledgeItem item) {
+        return toResponse(item, getTags(item.getId()));
+    }
+
+    private KnowledgeItemResponse toResponse(KnowledgeItem item, List<TagResponse> tags) {
+        return toResponse(item, tags, true);
+    }
+
+    private KnowledgeItemResponse toListResponse(KnowledgeItem item, List<TagResponse> tags) {
+        return toResponse(item, tags, false);
+    }
+
+    private KnowledgeItemResponse toResponse(KnowledgeItem item, List<TagResponse> tags, boolean includeContent) {
         return new KnowledgeItemResponse(
                 item.getId(),
                 item.getSourceType(),
                 item.getTitle(),
                 item.getSourceUri(),
-                item.getRawContent(),
-                item.getCleanedContent(),
-                item.getSummary(),
+                includeContent ? item.getRawContent() : null,
+                includeContent ? item.getCleanedContent() : null,
+                includeContent ? item.getSummary() : summaryForList(item),
                 item.getStatus(),
                 item.getLanguage(),
                 item.getWordCount() == null ? 0 : item.getWordCount(),
-                getTags(item.getId()),
+                tags,
                 item.getCreatedAt(),
                 item.getUpdatedAt(),
                 item.getArchivedAt());
+    }
+
+    private String summaryForList(KnowledgeItem item) {
+        if (item.getSummary() != null && !item.getSummary().isBlank()) {
+            return item.getSummary();
+        }
+        String content = item.getCleanedContent() != null && !item.getCleanedContent().isBlank()
+                ? item.getCleanedContent()
+                : item.getRawContent();
+        if (content == null || content.isBlank()) {
+            return item.getSummary();
+        }
+        String normalized = content.replaceAll("\\s+", " ").trim();
+        int maxLength = 280;
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLength) + "...";
     }
 
     private long countItems(UUID userId, String status) {

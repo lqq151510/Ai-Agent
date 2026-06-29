@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useDeferredValue, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Archive,
@@ -41,6 +41,7 @@ import {
   importBrowserKnowledgeFile,
   importKnowledgeItem,
   importLocalKnowledgeFile,
+  loadKnowledgeItemDetail,
   loadKnowledgeDeskSnapshot,
   organizeKnowledgeItems,
   searchKnowledgeItems,
@@ -55,6 +56,14 @@ import './knowledge-desk.css';
 type MainPage = 'dashboard' | 'inbox' | 'library' | 'detail' | 'search' | 'settings';
 type SettingsTab = 'profile' | 'models' | 'ai' | 'privacy' | 'integrations';
 type ImportMode = 'web' | 'file' | 'snippet';
+type FilterCategory = 'source' | 'time' | 'tag';
+type ItemFilters = Record<FilterCategory, string[]>;
+
+const emptyFilters: ItemFilters = {
+  source: [],
+  time: [],
+  tag: [],
+};
 
 const pages: Array<{ id: MainPage; label: string; icon: React.ElementType; badge?: string }> = [
   { id: 'dashboard', label: '工作台', icon: Archive },
@@ -93,10 +102,15 @@ const KnowledgeDeskApp = () => {
   const [snapshot, setSnapshot] = useState<KnowledgeDeskSnapshot>(fallbackSnapshot);
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(true);
   const [selectedItem, setSelectedItem] = useState<KnowledgeItem | null>(null);
+  const [detailFetch, setDetailFetch] = useState<{ isLoading: boolean; error: string | null }>({
+    isLoading: false,
+    error: null,
+  });
   const [importMode, setImportMode] = useState<ImportMode | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const detailRequestRef = useRef(0);
   const desktopFilePickerAvailable = canUseDesktopFilePicker();
 
   useEffect(() => {
@@ -203,8 +217,31 @@ const KnowledgeDeskApp = () => {
   const tags = snapshot.tags.length > 0 ? snapshot.tags : snapshot.dashboard.topTags.map((tag) => tag.name);
   const detailItem = selectedItem ?? libraryItems[0] ?? inboxItems[0] ?? fallbackSnapshot.libraryItems[0];
   const openDetail = (item: KnowledgeItem) => {
+    const requestId = detailRequestRef.current + 1;
+    detailRequestRef.current = requestId;
     setSelectedItem(item);
     setActivePage('detail');
+    if (snapshot.source !== 'api') {
+      setDetailFetch({ isLoading: false, error: null });
+      return;
+    }
+
+    setDetailFetch({ isLoading: true, error: null });
+    void loadKnowledgeItemDetail(item.id)
+      .then((fullItem) => {
+        if (detailRequestRef.current !== requestId) return;
+        startTransition(() => {
+          setSelectedItem(fullItem);
+          setDetailFetch({ isLoading: false, error: null });
+        });
+      })
+      .catch((error) => {
+        if (detailRequestRef.current !== requestId) return;
+        setDetailFetch({
+          isLoading: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
   };
 
   return (
@@ -330,7 +367,9 @@ const KnowledgeDeskApp = () => {
                   totalItems={snapshot.dashboard.totalItems}
                 />
               ) : null}
-              {activePage === 'detail' ? <DetailPage item={detailItem} /> : null}
+              {activePage === 'detail' ? (
+                <DetailPage error={detailFetch.error} isLoading={detailFetch.isLoading} item={detailItem} />
+              ) : null}
               {activePage === 'search' ? (
                 <SearchPage apiEnabled={snapshot.source === 'api'} initialItems={libraryItems} onOpenDetail={openDetail} />
               ) : null}
@@ -674,57 +713,93 @@ const LibraryPage = ({
   onOpenDetail: (item: KnowledgeItem) => void;
   tags: string[];
   totalItems: number;
-}) => (
-  <div className="kd-library-layout">
-    <aside className="kd-filter-rail">
-      <FilterGroup title="来源" values={['网页摘录', 'PDF', 'Markdown', '粘贴内容']} />
-      <FilterGroup title="时间" values={['今天', '本周', '本月', '更早']} />
-      <FilterGroup title="主题" values={tags.slice(0, 4).length > 0 ? tags.slice(0, 4) : ['RAG', 'LLM', 'Java', 'Agent']} />
-      <div className="kd-empty-filter">
-        <FolderOpen size={18} />
-        <strong>图谱研究</strong>
-        <span>这个标签还没有条目</span>
-      </div>
-    </aside>
+}) => {
+  const [filters, setFilters] = useState<ItemFilters>(emptyFilters);
+  const sourceOptions = buildSourceOptions(items, ['网页摘录', 'PDF', 'Markdown', '粘贴内容']);
+  const tagOptions = buildTagOptions(items, tags);
+  const filteredItems = applyItemFilters(items, filters);
+  const hasActiveFilters = activeFilterCount(filters) > 0;
 
-    <div className="kd-stack">
-      <div className="kd-page-tools">
-        <div>
-          <h2 className="kd-section-title">{formatCount(totalItems)} 条知识条目</h2>
-          <p className="kd-muted">按来源、标签、时间和文档类型找回内容。</p>
-        </div>
-        <div className="kd-segmented">
-          <button className={mode === 'list' ? 'is-active' : ''} onClick={() => onModeChange('list')} type="button">
-            <ListFilter size={15} /> 列表
-          </button>
-          <button className={mode === 'cards' ? 'is-active' : ''} onClick={() => onModeChange('cards')} type="button">
-            <LayoutGrid size={15} /> 卡片
-          </button>
-        </div>
-      </div>
+  return (
+    <div className="kd-library-layout">
+      <aside className="kd-filter-rail">
+        <FilterGroup
+          activeValues={filters.source}
+          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'source', value))}
+          title="来源"
+          values={sourceOptions}
+        />
+        <FilterGroup
+          activeValues={filters.time}
+          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'time', value))}
+          title="时间"
+          values={['今天', '本周', '本月', '更早']}
+        />
+        <FilterGroup
+          activeValues={filters.tag}
+          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'tag', value))}
+          title="主题"
+          values={tagOptions}
+        />
+        <FilterSummary
+          filters={filters}
+          onClear={() => setFilters(emptyFilters)}
+          resultCount={filteredItems.length}
+          totalCount={items.length}
+        />
+      </aside>
 
-      <div className={mode === 'list' ? 'kd-library-list' : 'kd-library-cards'}>
-        {items.map((item) => (
-          <article className="kd-library-item" key={item.id} onClick={() => onOpenDetail(item)}>
-            <div className="kd-type-badge">{typeCopy[item.type]}</div>
-            <h3>{item.title}</h3>
-            <p>{item.summary}</p>
-            <MetaLine item={item} />
-          </article>
-        ))}
-        {items.length === 0 ? (
-          <EmptyBlock
-            icon={BookOpen}
-            title="知识库还没有可检索条目"
-            description="完成整理后的资料会出现在这里，并支持按来源、标签、时间和文档类型筛选。"
-          />
-        ) : null}
+      <div className="kd-stack">
+        <div className="kd-page-tools">
+          <div>
+            <h2 className="kd-section-title">{formatCount(filteredItems.length)} / {formatCount(totalItems)} 条知识条目</h2>
+            <p className="kd-muted">
+              {hasActiveFilters ? '已按当前筛选条件收窄结果。' : '按来源、标签、时间和文档类型找回内容。'}
+            </p>
+          </div>
+          <div className="kd-segmented">
+            <button className={mode === 'list' ? 'is-active' : ''} onClick={() => onModeChange('list')} type="button">
+              <ListFilter size={15} /> 列表
+            </button>
+            <button className={mode === 'cards' ? 'is-active' : ''} onClick={() => onModeChange('cards')} type="button">
+              <LayoutGrid size={15} /> 卡片
+            </button>
+          </div>
+        </div>
+
+        <div className={mode === 'list' ? 'kd-library-list' : 'kd-library-cards'}>
+          {filteredItems.map((item) => (
+            <article className="kd-library-item" key={item.id} onClick={() => onOpenDetail(item)}>
+              <div className="kd-type-badge">{typeCopy[item.type]}</div>
+              <h3>{item.title}</h3>
+              <p>{item.summary}</p>
+              <MetaLine item={item} />
+            </article>
+          ))}
+          {filteredItems.length === 0 ? (
+            <EmptyBlock
+              icon={BookOpen}
+              title={hasActiveFilters ? '没有匹配当前筛选的条目' : '知识库还没有可检索条目'}
+              description={hasActiveFilters
+                ? '清空部分筛选条件，或换一个来源、标签、时间范围再找。'
+                : '完成整理后的资料会出现在这里，并支持按来源、标签、时间和文档类型筛选。'}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
-const DetailPage = ({ item }: { item: KnowledgeItem }) => {
+const DetailPage = ({
+  error,
+  isLoading,
+  item,
+}: {
+  error?: string | null;
+  isLoading?: boolean;
+  item: KnowledgeItem;
+}) => {
   const body = item.cleanedContent || item.rawContent || item.summary;
   const paragraphs = body
     .split('\n')
@@ -741,6 +816,19 @@ const DetailPage = ({ item }: { item: KnowledgeItem }) => {
       <span><Clock3 size={16} /> {item.time} 整理</span>
       <span><Globe2 size={16} /> {item.source}</span>
     </div>
+
+    {isLoading ? (
+      <div className="kd-detail-status">
+        <Loader2 size={16} />
+        正在加载完整正文，当前先展示摘要内容。
+      </div>
+    ) : null}
+    {error ? (
+      <div className="kd-detail-status kd-detail-status--error">
+        <AlertTriangle size={16} />
+        完整正文加载失败：{error}
+      </div>
+    ) : null}
 
     {paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
     {paragraphs.length === 0 ? <p>这条知识还没有可展示正文，整理完成后会补充清洗后的内容。</p> : null}
@@ -762,9 +850,14 @@ const SearchPage = ({
 }) => {
   const [query, setQuery] = useState('注意力机制 RAG 检索');
   const [results, setResults] = useState<KnowledgeItem[] | null>(null);
+  const [filters, setFilters] = useState<ItemFilters>(emptyFilters);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const visibleResults = results ?? initialItems.slice(0, 5);
+  const deferredQuery = useDeferredValue(query);
+  const baseResults = results ?? filterLocalItems(initialItems, deferredQuery);
+  const visibleResults = applyItemFilters(baseResults, filters).slice(0, 12);
+  const sourceOptions = buildSourceOptions(baseResults, ['网页摘录', 'PDF', 'Markdown']);
+  const tagOptions = buildTagOptions(baseResults, initialItems.flatMap((item) => item.tags));
 
   const runSearch = async () => {
     const nextQuery = query.trim();
@@ -804,9 +897,30 @@ const SearchPage = ({
 
       <div className="kd-search-layout">
         <aside className="kd-filter-rail">
-          <FilterGroup title="来源" values={['网页摘录', 'PDF', 'Markdown']} />
-          <FilterGroup title="标签" values={['RAG', 'Transformer', 'Embedding']} />
-          <FilterGroup title="时间" values={['今天', '本周', '本月']} />
+          <FilterGroup
+            activeValues={filters.source}
+            onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'source', value))}
+            title="来源"
+            values={sourceOptions}
+          />
+          <FilterGroup
+            activeValues={filters.tag}
+            onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'tag', value))}
+            title="标签"
+            values={tagOptions}
+          />
+          <FilterGroup
+            activeValues={filters.time}
+            onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'time', value))}
+            title="时间"
+            values={['今天', '本周', '本月']}
+          />
+          <FilterSummary
+            filters={filters}
+            onClear={() => setFilters(emptyFilters)}
+            resultCount={visibleResults.length}
+            totalCount={baseResults.length}
+          />
         </aside>
         <section className="kd-search-results">
           {searchError ? (
@@ -1164,17 +1278,50 @@ const MetaLine = ({ item }: { item: KnowledgeItem }) => (
   </div>
 );
 
-const FilterGroup = ({ title, values }: { title: string; values: string[] }) => (
+const FilterGroup = ({
+  activeValues,
+  onToggle,
+  title,
+  values,
+}: {
+  activeValues: string[];
+  onToggle: (value: string) => void;
+  title: string;
+  values: string[];
+}) => (
   <section className="kd-filter-group">
     <h3>{title}</h3>
-    {values.map((value, index) => (
+    {values.map((value) => (
       <label key={value}>
-        <input defaultChecked={index === 0} type="checkbox" />
+        <input checked={activeValues.includes(value)} onChange={() => onToggle(value)} type="checkbox" />
         {value}
       </label>
     ))}
+    {values.length === 0 ? <span className="kd-muted">暂无可筛选项</span> : null}
   </section>
 );
+
+const FilterSummary = ({
+  filters,
+  onClear,
+  resultCount,
+  totalCount,
+}: {
+  filters: ItemFilters;
+  onClear: () => void;
+  resultCount: number;
+  totalCount: number;
+}) => {
+  const activeCount = activeFilterCount(filters);
+  return (
+    <div className="kd-filter-summary">
+      <FolderOpen size={18} />
+      <strong>{activeCount > 0 ? `${activeCount} 个筛选条件` : '未启用筛选'}</strong>
+      <span>{formatCount(resultCount)} / {formatCount(totalCount)} 条结果可见</span>
+      <button disabled={activeCount === 0} onClick={onClear} type="button">清空筛选</button>
+    </div>
+  );
+};
 
 const SettingsHeader = ({ title, description }: { title: string; description: string }) => (
   <header className="kd-settings-header">
@@ -1206,14 +1353,84 @@ const StateStrip = () => (
 );
 
 const filterLocalItems = (items: KnowledgeItem[], query: string) => {
-  const normalized = query.toLowerCase();
-  if (!normalized) return items.slice(0, 10);
+  const tokens = query
+    .toLowerCase()
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (tokens.length === 0) return items.slice(0, 10);
   return items
     .filter((item) => {
       const haystack = [item.title, item.summary, item.source, ...item.tags].join(' ').toLowerCase();
-      return haystack.includes(normalized);
+      return tokens.some((token) => haystack.includes(token));
     })
     .slice(0, 10);
+};
+
+const applyItemFilters = (items: KnowledgeItem[], filters: ItemFilters) => (
+  items.filter((item) => {
+    if (filters.source.length > 0 && !filters.source.includes(sourceFilterLabel(item))) {
+      return false;
+    }
+    if (filters.time.length > 0 && !filters.time.some((range) => itemMatchesTimeRange(item, range))) {
+      return false;
+    }
+    if (filters.tag.length > 0 && !filters.tag.some((tag) => item.tags.includes(tag))) {
+      return false;
+    }
+    return true;
+  })
+);
+
+const toggleFilterValue = (filters: ItemFilters, category: FilterCategory, value: string): ItemFilters => {
+  const currentValues = filters[category];
+  const nextValues = currentValues.includes(value)
+    ? currentValues.filter((current) => current !== value)
+    : [...currentValues, value];
+  return { ...filters, [category]: nextValues };
+};
+
+const activeFilterCount = (filters: ItemFilters) => (
+  filters.source.length + filters.time.length + filters.tag.length
+);
+
+const buildSourceOptions = (items: KnowledgeItem[], fallback: string[]) => {
+  const values = uniqueValues(items.map(sourceFilterLabel));
+  return values.length > 0 ? values : fallback;
+};
+
+const buildTagOptions = (items: KnowledgeItem[], fallback: string[]) => {
+  const values = uniqueValues(items.flatMap((item) => item.tags)).slice(0, 8);
+  return values.length > 0 ? values : uniqueValues(fallback).slice(0, 8);
+};
+
+const uniqueValues = (values: string[]) => (
+  Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
+);
+
+const sourceFilterLabel = (item: KnowledgeItem) => {
+  if (item.type === 'web') return '网页摘录';
+  if (item.type === 'pdf') return 'PDF';
+  if (item.type === 'markdown') return 'Markdown';
+  if (item.type === 'paste' || item.type === 'snippet') return '粘贴内容';
+  return typeCopy[item.type];
+};
+
+const itemMatchesTimeRange = (item: KnowledgeItem, range: string) => {
+  const normalized = item.time.toLowerCase();
+  if (range === '今天') {
+    return normalized.includes('今天') || normalized.includes('分钟前') || normalized.includes('小时前');
+  }
+  if (range === '本周') {
+    return !normalized.includes('更早') && !normalized.includes('上月');
+  }
+  if (range === '本月') {
+    return !normalized.includes('更早');
+  }
+  if (range === '更早') {
+    return normalized.includes('更早') || normalized.includes('上月') || normalized.includes('去年');
+  }
+  return false;
 };
 
 const buildSearchSnippet = (item: KnowledgeItem, query: string) => {

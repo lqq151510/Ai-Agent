@@ -1,6 +1,8 @@
 package com.agent.mvp.agent.service;
 
 import com.agent.mvp.config.AppProperties;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.Metadata;
@@ -15,11 +17,14 @@ import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import jakarta.annotation.PostConstruct;
 import java.io.File;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.Map;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,11 +35,18 @@ import org.springframework.stereotype.Service;
 @Service
 public class RAGMemoryService {
     private static final Logger log = LoggerFactory.getLogger(RAGMemoryService.class);
+    private static final int MAX_RETRIEVAL_RESULTS = 20;
+    private static final int MAX_VECTOR_CANDIDATES = 50;
+    private static final Duration EMBEDDING_FAILURE_BACKOFF = Duration.ofMinutes(2);
 
     private final AppProperties appProperties;
     private final EmbeddingModel embeddingModel;
     private final JdbcTemplate jdbcTemplate;
+    private final Cache<String, Embedding> queryEmbeddingCache;
     private EmbeddingStore<TextSegment> embeddingStore;
+    private volatile boolean pgVectorAvailable;
+    private volatile boolean ftsAvailable;
+    private volatile Instant embeddingDisabledUntil = Instant.EPOCH;
 
     @Value("${PG_HOST:localhost}")
     private String pgHost;
@@ -57,6 +69,11 @@ public class RAGMemoryService {
         this.appProperties = appProperties;
         this.markItDownService = markItDownService;
         this.jdbcTemplate = jdbcTemplate;
+        this.queryEmbeddingCache =
+                Caffeine.newBuilder()
+                        .maximumSize(512)
+                        .expireAfterWrite(Duration.ofMinutes(15))
+                        .build();
         this.embeddingModel =
                 dev.langchain4j.model.openai.OpenAiEmbeddingModel.builder()
                         .apiKey(
@@ -67,6 +84,10 @@ public class RAGMemoryService {
                         .baseUrl(appProperties.getOpenai().getBaseUrl())
                         .modelName("text-embedding-3-small")
                         .dimensions(384)
+                        .timeout(
+                                Duration.ofMillis(
+                                        Math.max(1_000, appProperties.getModelRuntime().getReadTimeoutMs())))
+                        .maxRetries(Math.max(0, appProperties.getModelRuntime().getIdempotentRetries()))
                         .build();
     }
 
@@ -87,6 +108,8 @@ public class RAGMemoryService {
                             .table("engineering_memory")
                             .dimension(384)
                             .build();
+            this.pgVectorAvailable = true;
+            this.ftsAvailable = initializeFtsIndex();
             log.info("PgVectorEmbeddingStore initialized successfully.");
         } catch (Exception ex) {
             log.warn(
@@ -94,6 +117,8 @@ public class RAGMemoryService {
                             + " InMemoryEmbeddingStore. Error: {}",
                     ex.getMessage());
             this.embeddingStore = new InMemoryEmbeddingStore<>();
+            this.pgVectorAvailable = false;
+            this.ftsAvailable = false;
         }
     }
 
@@ -125,14 +150,27 @@ public class RAGMemoryService {
     /** 根据当前消息/症状检索相似的历史诊断记录 */
     public List<String> searchSimilarDiagnoses(UUID userId, String queryText, int maxResults) {
         List<String> results = new ArrayList<>();
+        String normalizedQuery = normalizeQuery(queryText);
+        int safeMaxResults = normalizeMaxResults(maxResults);
+        if (normalizedQuery.isBlank()) {
+            return results;
+        }
         try {
-            Embedding queryEmbedding = embeddingModel.embed(queryText).content();
+            Embedding queryEmbedding = tryEmbedQuery(normalizedQuery);
+            if (queryEmbedding == null) {
+                return results;
+            }
             List<EmbeddingMatch<TextSegment>> matches =
-                    embeddingStore.findRelevant(queryEmbedding, maxResults);
+                    embeddingStore.findRelevant(
+                            queryEmbedding,
+                            Math.min(safeMaxResults * 4, MAX_VECTOR_CANDIDATES));
             for (EmbeddingMatch<TextSegment> match : matches) {
                 String matchUserId = match.embedded().metadata().getString("userId");
-                if (matchUserId == null || matchUserId.equals(userId.toString())) {
+                if (matchUserId == null || userId == null || matchUserId.equals(userId.toString())) {
                     results.add(match.embedded().text());
+                }
+                if (results.size() >= safeMaxResults) {
+                    break;
                 }
             }
         } catch (Exception ex) {
@@ -144,17 +182,35 @@ public class RAGMemoryService {
     }
 
     public List<String> searchCodeContext(String queryText, int maxResults) {
-        List<String> vectorResults = searchCodeContextVector(queryText, maxResults * 2);
-        List<String> ftsResults = searchCodeContextFTS(queryText, maxResults * 2);
-        return rrfCombine(vectorResults, ftsResults, maxResults);
+        String normalizedQuery = normalizeQuery(queryText);
+        int safeMaxResults = normalizeMaxResults(maxResults);
+        if (normalizedQuery.isBlank()) {
+            return List.of();
+        }
+
+        List<String> ftsResults = searchCodeContextFTS(normalizedQuery, safeMaxResults * 2);
+        if (ftsResults.size() >= safeMaxResults && looksLikeExactLookup(normalizedQuery)) {
+            return firstResults(ftsResults, safeMaxResults);
+        }
+
+        List<String> vectorResults = searchCodeContextVector(normalizedQuery, safeMaxResults * 2);
+        return rrfCombine(vectorResults, ftsResults, safeMaxResults);
     }
 
     private List<String> searchCodeContextVector(String queryText, int maxResults) {
         List<String> results = new ArrayList<>();
+        String normalizedQuery = normalizeQuery(queryText);
+        int safeMaxResults = normalizeMaxResults(maxResults);
+        if (normalizedQuery.isBlank()) {
+            return results;
+        }
         try {
-            Embedding queryEmbedding = embeddingModel.embed(queryText).content();
+            Embedding queryEmbedding = tryEmbedQuery(normalizedQuery);
+            if (queryEmbedding == null) {
+                return results;
+            }
             List<EmbeddingMatch<TextSegment>> matches =
-                    embeddingStore.findRelevant(queryEmbedding, maxResults);
+                    embeddingStore.findRelevant(queryEmbedding, safeMaxResults);
             for (EmbeddingMatch<TextSegment> match : matches) {
                 results.add(match.embedded().text());
             }
@@ -165,16 +221,31 @@ public class RAGMemoryService {
     }
 
     public List<String> searchCodeContextFTS(String queryText, int maxResults) {
+        if (!ftsAvailable) {
+            return List.of();
+        }
         List<String> results = new ArrayList<>();
+        String normalizedQuery = normalizeQuery(queryText);
+        int safeMaxResults = normalizeMaxResults(maxResults);
+        if (normalizedQuery.isBlank()) {
+            return results;
+        }
         try {
-            String likePattern = "%" + queryText + "%";
+            String likePattern = "%" + normalizedQuery + "%";
             String sql = "SELECT text FROM engineering_memory " +
                          "WHERE to_tsvector('english', COALESCE(text, '')) @@ plainto_tsquery('english', ?) " +
                          "   OR text ILIKE ? " +
                          "LIMIT ?";
-            results = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("text"), queryText, likePattern, maxResults);
-            log.info("FTS search returned {} results for query: {}", results.size(), queryText);
+            results =
+                    jdbcTemplate.query(
+                            sql,
+                            (rs, rowNum) -> rs.getString("text"),
+                            normalizedQuery,
+                            likePattern,
+                            safeMaxResults);
+            log.info("FTS search returned {} results for query: {}", results.size(), normalizedQuery);
         } catch (Exception e) {
+            ftsAvailable = false;
             log.warn("Failed to perform FTS search. Falling back. Error: {}", e.getMessage());
         }
         return results;
@@ -204,6 +275,81 @@ public class RAGMemoryService {
             finalResults.add(sorted.get(i).getKey());
         }
         return finalResults;
+    }
+
+    private boolean initializeFtsIndex() {
+        if (!pgVectorAvailable) {
+            return false;
+        }
+        try {
+            jdbcTemplate.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_engineering_memory_text_fts "
+                            + "ON engineering_memory USING GIN "
+                            + "(to_tsvector('english', COALESCE(text, '')))");
+            return true;
+        } catch (Exception ex) {
+            log.warn("FTS index initialization skipped: {}", ex.getMessage());
+            return false;
+        }
+    }
+
+    private Embedding tryEmbedQuery(String queryText) {
+        String normalizedQuery = normalizeQuery(queryText);
+        if (normalizedQuery.isBlank()) {
+            return null;
+        }
+        Instant now = Instant.now();
+        if (now.isBefore(embeddingDisabledUntil)) {
+            return null;
+        }
+
+        String cacheKey = normalizedQuery.toLowerCase(Locale.ROOT);
+        Embedding cached = queryEmbeddingCache.getIfPresent(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
+        try {
+            Embedding embedding = embeddingModel.embed(normalizedQuery).content();
+            queryEmbeddingCache.put(cacheKey, embedding);
+            return embedding;
+        } catch (RuntimeException ex) {
+            embeddingDisabledUntil = now.plus(EMBEDDING_FAILURE_BACKOFF);
+            log.warn(
+                    "Embedding model unavailable; vector retrieval is disabled until {}. Error: {}",
+                    embeddingDisabledUntil,
+                    ex.getMessage());
+            return null;
+        }
+    }
+
+    private int normalizeMaxResults(int maxResults) {
+        if (maxResults <= 0) {
+            return 1;
+        }
+        return Math.min(maxResults, MAX_RETRIEVAL_RESULTS);
+    }
+
+    private String normalizeQuery(String queryText) {
+        if (queryText == null) {
+            return "";
+        }
+        return queryText.replaceAll("\\s+", " ").trim();
+    }
+
+    private boolean looksLikeExactLookup(String queryText) {
+        return queryText.contains("/")
+                || queryText.contains(".")
+                || queryText.contains("#")
+                || queryText.contains("::")
+                || queryText.matches(".*\\b[A-Za-z]+(Service|Controller|Repository|Config|Entity|Test|DTO)\\b.*");
+    }
+
+    private List<String> firstResults(List<String> results, int maxResults) {
+        if (results.size() <= maxResults) {
+            return results;
+        }
+        return List.copyOf(results.subList(0, maxResults));
     }
 
     @Async

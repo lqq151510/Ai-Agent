@@ -1,25 +1,37 @@
 package com.agent.mvp.knowledge.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.agent.mvp.agent.dto.ParsedDocument;
 import com.agent.mvp.agent.service.MarkItDownService;
+import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.ingestion.service.IngestionJobService;
 import com.agent.mvp.ingestion.entity.IngestionJob;
 import com.agent.mvp.knowledge.dto.ImportSnippetKnowledgeItemRequest;
 import com.agent.mvp.knowledge.entity.KnowledgeItem;
+import com.agent.mvp.knowledge.entity.KnowledgeTag;
 import com.agent.mvp.knowledge.repo.KnowledgeItemRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
+import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
+import com.agent.mvp.knowledge.repo.KnowledgeTagUsageCountView;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
 import com.agent.mvp.settings.entity.UserProfile;
 import com.agent.mvp.settings.service.UserProfileService;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.Collections;
@@ -307,5 +319,279 @@ class KnowledgeItemServiceTest {
         assertEquals(0, response.failedCount());
         verify(ingestionJobService, Mockito.times(2)).createRunning(eq(userId), any(), eq("organize"), any());
         verify(ingestionJobService, Mockito.times(2)).markSucceeded(any(IngestionJob.class), any());
+    }
+
+    @Test
+    void searchShouldBatchLoadTagsForReturnedPage() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        KnowledgeOrganizerService organizerService = new KnowledgeOrganizerService();
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        organizerService,
+                        markItDownService,
+                        userProfileService,
+                        objectMapper);
+
+        UUID userId = UUID.randomUUID();
+        UUID firstItemId = UUID.randomUUID();
+        UUID secondItemId = UUID.randomUUID();
+        KnowledgeItem firstItem =
+                KnowledgeItem.builder()
+                        .id(firstItemId)
+                        .userId(userId)
+                        .sourceType("markdown")
+                        .title("RAG Index")
+                        .rawContent("retrieval notes")
+                        .cleanedContent("clean retrieval notes")
+                        .status("ready")
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .build();
+        KnowledgeItem secondItem =
+                KnowledgeItem.builder()
+                        .id(secondItemId)
+                        .userId(userId)
+                        .sourceType("pdf")
+                        .title("Vector Search")
+                        .rawContent("embedding notes")
+                        .cleanedContent("clean embedding notes")
+                        .status("ready")
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .build();
+
+        Mockito.doAnswer(
+                        invocation -> {
+                            Page<KnowledgeItem> page = invocation.getArgument(0);
+                            page.setRecords(List.of(firstItem, secondItem));
+                            page.setTotal(2);
+                            return page;
+                        })
+                .when(itemRepository)
+                .selectPage(any(), any());
+
+        KnowledgeItemTagView ragTag = tagView(firstItemId, "rag");
+        KnowledgeItemTagView searchTag = tagView(secondItemId, "search");
+        when(itemTagRepository.findTagsByKnowledgeItemIds(
+                        argThat(ids -> ids.contains(firstItemId) && ids.contains(secondItemId))))
+                .thenReturn(List.of(ragTag, searchTag));
+
+        var response = service.search(userId, "rag", null, null, null, null, 1, 20);
+
+        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(itemRepository).selectPage(any(), wrapperCaptor.capture());
+        String sqlSelect = wrapperCaptor.getValue().getSqlSelect();
+
+        assertEquals(2, response.items().size());
+        assertTrue(sqlSelect.contains("SUBSTRING("));
+        assertTrue(sqlSelect.contains("AS summary"));
+        assertTrue(sqlSelect.contains("source_uri"));
+        assertTrue(sqlSelect.contains("updated_at"));
+        assertNull(response.items().get(0).rawContent());
+        assertNull(response.items().get(0).cleanedContent());
+        assertNull(response.items().get(1).rawContent());
+        assertNull(response.items().get(1).cleanedContent());
+        assertEquals("clean retrieval notes", response.items().get(0).summary());
+        assertEquals("clean embedding notes", response.items().get(1).summary());
+        assertEquals(List.of("rag"), response.items().get(0).tags().stream().map(tag -> tag.name()).toList());
+        assertEquals(List.of("search"), response.items().get(1).tags().stream().map(tag -> tag.name()).toList());
+        verify(itemTagRepository, never()).findTagIdsByKnowledgeItemId(firstItemId);
+        verify(itemTagRepository, never()).findTagIdsByKnowledgeItemId(secondItemId);
+    }
+
+    @Test
+    void searchShouldUsePostgresFullTextPredicateWhenEnabled() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        KnowledgeOrganizerService organizerService = new KnowledgeOrganizerService();
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        organizerService,
+                        markItDownService,
+                        userProfileService,
+                        objectMapper,
+                        true);
+
+        UUID userId = UUID.randomUUID();
+        Mockito.doAnswer(
+                        invocation -> {
+                            Page<KnowledgeItem> page = invocation.getArgument(0);
+                            page.setRecords(List.of());
+                            page.setTotal(0);
+                            return page;
+                        })
+                .when(itemRepository)
+                .selectPage(any(), any());
+
+        service.search(userId, "retrieval augmented generation", null, null, null, null, 1, 20);
+
+        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(itemRepository).selectPage(any(), wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getCustomSqlSegment();
+
+        assertTrue(sqlSegment.contains("to_tsvector"));
+        assertTrue(sqlSegment.contains("websearch_to_tsquery"));
+        assertFalse(sqlSegment.contains(" LIKE "));
+    }
+
+    @Test
+    void retrievalIndexMigrationsShouldCoverSearchAndCommonFilters() throws Exception {
+        String postgresSql = Files.readString(Path.of("src/main/resources/db/migration/V10__knowledge_retrieval_indexes.sql"));
+        String h2Sql = Files.readString(Path.of("src/main/resources/db/h2/V10__knowledge_retrieval_indexes.sql"));
+
+        assertTrue(postgresSql.contains("idx_knowledge_items_search_fts"));
+        assertTrue(postgresSql.contains("USING GIN"));
+        assertTrue(postgresSql.contains("to_tsvector"));
+        assertTrue(postgresSql.contains("idx_knowledge_items_user_status_updated"));
+        assertTrue(h2Sql.contains("idx_knowledge_items_user_status_updated"));
+    }
+
+    @Test
+    void tagFilterShouldNotLoadAllTaggedItemIdsIntoMemory() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        KnowledgeOrganizerService organizerService = new KnowledgeOrganizerService();
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        organizerService,
+                        markItDownService,
+                        userProfileService,
+                        objectMapper);
+
+        UUID userId = UUID.randomUUID();
+        KnowledgeTag tag =
+                KnowledgeTag.builder()
+                        .id(UUID.randomUUID())
+                        .userId(userId)
+                        .name("rag")
+                        .color("#7a8a84")
+                        .createdAt(Instant.now())
+                        .build();
+
+        when(tagRepository.selectOne(any())).thenReturn(tag);
+        Mockito.doAnswer(
+                        invocation -> {
+                            Page<KnowledgeItem> page = invocation.getArgument(0);
+                            page.setRecords(List.of());
+                            page.setTotal(0);
+                            return page;
+                        })
+                .when(itemRepository)
+                .selectPage(any(), any());
+
+        service.search(userId, "retrieval", "rag", null, null, null, 1, 20);
+
+        verify(itemTagRepository, never()).findKnowledgeItemIdsByTagId(tag.getId());
+    }
+
+    @Test
+    void dashboardShouldUseLightweightRecentItemsAndBatchTagUsageCounts() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        KnowledgeOrganizerService organizerService = new KnowledgeOrganizerService();
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        organizerService,
+                        markItDownService,
+                        userProfileService,
+                        objectMapper);
+
+        UUID userId = UUID.randomUUID();
+        UUID ragTagId = UUID.randomUUID();
+        UUID searchTagId = UUID.randomUUID();
+        KnowledgeItem recentItem =
+                KnowledgeItem.builder()
+                        .id(UUID.randomUUID())
+                        .userId(userId)
+                        .sourceType("markdown")
+                        .title("Recent RAG note")
+                        .rawContent("large body should not be selected")
+                        .cleanedContent("large cleaned body should not be selected")
+                        .status("ready")
+                        .updatedAt(Instant.now())
+                        .build();
+        KnowledgeTag ragTag =
+                KnowledgeTag.builder().id(ragTagId).userId(userId).name("rag").color("#7a8a84").build();
+        KnowledgeTag searchTag =
+                KnowledgeTag.builder().id(searchTagId).userId(userId).name("search").color("#a97751").build();
+
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("ze@example.com").build());
+        when(itemRepository.selectList(any())).thenReturn(List.of(recentItem));
+        when(tagRepository.selectList(any())).thenReturn(List.of(ragTag, searchTag));
+        when(itemTagRepository.findUsageCountsByTagIds(argThat(ids -> ids.contains(ragTagId) && ids.contains(searchTagId))))
+                .thenReturn(List.of(tagUsage(ragTagId, 7), tagUsage(searchTagId, 3)));
+
+        var response = service.dashboardSummary(userId);
+
+        ArgumentCaptor<QueryWrapper> itemWrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(itemRepository).selectList(itemWrapperCaptor.capture());
+        String sqlSelect = itemWrapperCaptor.getValue().getSqlSelect();
+
+        assertEquals(1, response.recentItems().size());
+        assertEquals("rag", response.topTags().get(0).name());
+        assertEquals(7, response.topTags().get(0).usageCount());
+        assertTrue(sqlSelect.contains("title"));
+        assertFalse(sqlSelect.contains("raw_content"));
+        assertFalse(sqlSelect.contains("cleaned_content"));
+        verify(itemTagRepository, never()).findKnowledgeItemIdsByTagId(any(UUID.class));
+    }
+
+    private KnowledgeItemTagView tagView(UUID itemId, String name) {
+        KnowledgeItemTagView view = new KnowledgeItemTagView();
+        view.setKnowledgeItemId(itemId);
+        view.setTagId(UUID.randomUUID());
+        view.setName(name);
+        view.setColor("#7a8a84");
+        view.setCreatedAt(Instant.now());
+        return view;
+    }
+
+    private KnowledgeTagUsageCountView tagUsage(UUID tagId, long usageCount) {
+        KnowledgeTagUsageCountView view = new KnowledgeTagUsageCountView();
+        view.setTagId(tagId);
+        view.setUsageCount(usageCount);
+        return view;
     }
 }

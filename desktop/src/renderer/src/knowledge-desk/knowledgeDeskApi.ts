@@ -440,6 +440,10 @@ export const searchKnowledgeItems = async (query: string): Promise<KnowledgeItem
   return page.items.map(toKnowledgeItem);
 };
 
+export const loadKnowledgeItemDetail = async (id: string): Promise<KnowledgeItem> => {
+  return toKnowledgeItem(await request<BackendKnowledgeItem>(`/api/v1/knowledge-items/${encodeURIComponent(id)}`));
+};
+
 export const importKnowledgeItem = async (draft: ImportKnowledgeDraft): Promise<KnowledgeItem> => {
   if (!hasKnowledgeBridge() && !canUseDirectBackend()) {
     return savePreviewImport(draft);
