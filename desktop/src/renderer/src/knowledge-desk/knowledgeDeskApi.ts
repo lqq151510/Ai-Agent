@@ -158,18 +158,6 @@ type BackendLocalFileImportResponse = {
   item?: BackendKnowledgeItem;
 };
 
-type BackendTokenResponse = {
-  accessToken: string;
-  refreshToken?: string;
-};
-
-type DirectPreviewCredentials = {
-  email: string;
-  password: string;
-  accessToken?: string;
-  refreshToken?: string;
-};
-
 type KnowledgeElectronApi = {
   knowledge?: {
     request: <T>(payload: { method?: string; path: string; body?: unknown }) => Promise<T>;
@@ -179,7 +167,8 @@ type KnowledgeElectronApi = {
 };
 
 const DIRECT_API_BASE_URL = import.meta.env.VITE_KNOWLEDGE_API_BASE_URL || 'http://127.0.0.1:18080';
-const DIRECT_PREVIEW_AUTH_KEY = 'knowledge-desk-preview-auth';
+const DIRECT_BACKEND_PREVIEW_ENABLED = import.meta.env.VITE_KNOWLEDGE_DIRECT_BACKEND_PREVIEW === 'true';
+const DIRECT_BACKEND_ACCESS_TOKEN = import.meta.env.VITE_KNOWLEDGE_DIRECT_BACKEND_ACCESS_TOKEN?.trim();
 const getElectronApi = () => (window as unknown as { electronAPI?: KnowledgeElectronApi }).electronAPI;
 
 const hasKnowledgeBridge = () => {
@@ -192,7 +181,14 @@ export const canUseDesktopFilePicker = () => {
   return Boolean(electronApi?.knowledge?.importLocalFile || electronApi?.invoke);
 };
 
-const canUseDirectBackend = () => typeof window !== 'undefined' && typeof fetch === 'function';
+const canUseDirectBackend = () => (
+  DIRECT_BACKEND_PREVIEW_ENABLED
+  && Boolean(DIRECT_BACKEND_ACCESS_TOKEN)
+  && typeof window !== 'undefined'
+  && typeof fetch === 'function'
+);
+
+const isPreviewOnlyMode = () => !hasKnowledgeBridge() && !canUseDirectBackend();
 
 const request = async <T>(path: string, method = 'GET', body?: unknown): Promise<T> => {
   const electronApi = getElectronApi();
@@ -210,8 +206,8 @@ const request = async <T>(path: string, method = 'GET', body?: unknown): Promise
   throw new Error('Knowledge API bridge is not available');
 };
 
-const directBackendRequest = async <T>(path: string, method = 'GET', body?: unknown, retryOnUnauthorized = true): Promise<T> => {
-  const token = await ensureDirectAccessToken();
+const directBackendRequest = async <T>(path: string, method = 'GET', body?: unknown): Promise<T> => {
+  const token = getDirectBackendAccessToken();
   const headers = new Headers();
   headers.set('Authorization', `Bearer ${token}`);
 
@@ -227,11 +223,6 @@ const directBackendRequest = async <T>(path: string, method = 'GET', body?: unkn
     body: requestBody,
   });
 
-  if (response.status === 401 && retryOnUnauthorized) {
-    clearDirectAccessToken();
-    return directBackendRequest<T>(path, method, body, false);
-  }
-
   if (!response.ok) {
     throw new Error(await toDirectErrorMessage(response));
   }
@@ -243,8 +234,8 @@ const directBackendRequest = async <T>(path: string, method = 'GET', body?: unkn
   return response.json() as Promise<T>;
 };
 
-const directBackendMultipartRequest = async <T>(path: string, formData: FormData, retryOnUnauthorized = true): Promise<T> => {
-  const token = await ensureDirectAccessToken();
+const directBackendMultipartRequest = async <T>(path: string, formData: FormData): Promise<T> => {
+  const token = getDirectBackendAccessToken();
   const headers = new Headers();
   headers.set('Authorization', `Bearer ${token}`);
 
@@ -254,11 +245,6 @@ const directBackendMultipartRequest = async <T>(path: string, formData: FormData
     body: formData,
   });
 
-  if (response.status === 401 && retryOnUnauthorized) {
-    clearDirectAccessToken();
-    return directBackendMultipartRequest<T>(path, formData, false);
-  }
-
   if (!response.ok) {
     throw new Error(await toDirectErrorMessage(response));
   }
@@ -266,80 +252,11 @@ const directBackendMultipartRequest = async <T>(path: string, formData: FormData
   return response.json() as Promise<T>;
 };
 
-const ensureDirectAccessToken = async (): Promise<string> => {
-  const credentials = readDirectPreviewCredentials();
-  if (credentials.accessToken) {
-    return credentials.accessToken;
+const getDirectBackendAccessToken = () => {
+  if (!DIRECT_BACKEND_ACCESS_TOKEN) {
+    throw new Error('浏览器直连预览未开启安全访问令牌，请回到桌面端，或显式设置直连开关和访问令牌。');
   }
-
-  try {
-    const tokens = await directAuthRequest('/api/v1/auth/login', credentials);
-    writeDirectPreviewCredentials({ ...credentials, ...tokens });
-    return tokens.accessToken;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes('Invalid credentials')
-      && !message.includes('Invalid email or password')
-      && !message.includes('Request failed')
-      && !message.includes('401')) {
-      throw error;
-    }
-
-    await directAuthRequest('/api/v1/auth/register', credentials);
-    const tokens = await directAuthRequest('/api/v1/auth/login', credentials);
-    writeDirectPreviewCredentials({ ...credentials, ...tokens });
-    return tokens.accessToken;
-  }
-};
-
-const directAuthRequest = async (path: string, credentials: DirectPreviewCredentials): Promise<BackendTokenResponse> => {
-  const response = await fetch(`${DIRECT_API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: credentials.email, password: credentials.password }),
-  });
-  if (!response.ok) {
-    throw new Error(await toDirectErrorMessage(response));
-  }
-  return response.json() as Promise<BackendTokenResponse>;
-};
-
-const readDirectPreviewCredentials = (): DirectPreviewCredentials => {
-  try {
-    const raw = window.localStorage.getItem(DIRECT_PREVIEW_AUTH_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<DirectPreviewCredentials>;
-      if (parsed.email && parsed.password) {
-        return parsed as DirectPreviewCredentials;
-      }
-    }
-  } catch {
-    // Preview auth is best-effort and regenerated if localStorage is corrupted.
-  }
-
-  const nonce = Math.random().toString(36).slice(2, 12);
-  const credentials: DirectPreviewCredentials = {
-    email: `knowledge-preview-${nonce}@local.invalid`,
-    password: `KnowledgePreview!${nonce}Aa1`,
-  };
-  writeDirectPreviewCredentials(credentials);
-  return credentials;
-};
-
-const writeDirectPreviewCredentials = (credentials: DirectPreviewCredentials) => {
-  try {
-    window.localStorage.setItem(DIRECT_PREVIEW_AUTH_KEY, JSON.stringify(credentials));
-  } catch {
-    // If storage is unavailable, the next request will regenerate preview credentials.
-  }
-};
-
-const clearDirectAccessToken = () => {
-  const credentials = readDirectPreviewCredentials();
-  writeDirectPreviewCredentials({
-    email: credentials.email,
-    password: credentials.password,
-  });
+  return DIRECT_BACKEND_ACCESS_TOKEN;
 };
 
 const toDirectErrorMessage = async (response: Response) => {
@@ -426,8 +343,9 @@ export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot
       },
     };
   } catch (error) {
+    const snapshot = isPreviewOnlyMode() ? withPreviewItems(fallbackSnapshot) : fallbackSnapshot;
     return {
-      ...withPreviewItems(fallbackSnapshot),
+      ...snapshot,
       source: 'fallback',
       error: error instanceof Error ? error.message : String(error),
     };
@@ -445,7 +363,7 @@ export const loadKnowledgeItemDetail = async (id: string): Promise<KnowledgeItem
 };
 
 export const importKnowledgeItem = async (draft: ImportKnowledgeDraft): Promise<KnowledgeItem> => {
-  if (!hasKnowledgeBridge() && !canUseDirectBackend()) {
+  if (isPreviewOnlyMode()) {
     return savePreviewImport(draft);
   }
 
@@ -488,8 +406,12 @@ export const importLocalKnowledgeFile = async (title?: string): Promise<Knowledg
 };
 
 export const importBrowserKnowledgeFile = async (file: File, title?: string): Promise<KnowledgeItem> => {
+  if (isPreviewOnlyMode()) {
+    return savePreviewImport(await buildBrowserPreviewDraft(file, title));
+  }
+
   if (!canUseDirectBackend()) {
-    throw new Error('当前环境无法连接本机数据库，请在桌面端使用本地文档导入。');
+    throw new Error('浏览器文件导入仅在桌面端或显式开启直连预览时可用。');
   }
 
   const formData = new FormData();
@@ -503,7 +425,7 @@ export const importBrowserKnowledgeFile = async (file: File, title?: string): Pr
 };
 
 export const organizeKnowledgeItems = async (includeFailed = true): Promise<BatchOrganizeResult> => {
-  if (!hasKnowledgeBridge() && !canUseDirectBackend()) {
+  if (isPreviewOnlyMode()) {
     const previews = readPreviewItems();
     const nextPreviews = previews.map((item) => (
       item.status === 'done' ? item : { ...item, status: 'done' as const, time: '刚刚' }
@@ -630,7 +552,7 @@ const savePreviewImport = (draft: ImportKnowledgeDraft): KnowledgeItem => {
   return item;
 };
 
-const withPreviewItems = (snapshot: KnowledgeDeskSnapshot): KnowledgeDeskSnapshot => {
+export const withPreviewItems = (snapshot: KnowledgeDeskSnapshot): KnowledgeDeskSnapshot => {
   const previews = readPreviewItems();
   if (previews.length === 0) return snapshot;
 
@@ -662,6 +584,41 @@ const fallbackImportTitle = (draft: ImportKnowledgeDraft) => {
   if (draft.kind === 'pdf') return 'PDF 导入';
   if (draft.kind === 'markdown') return 'Markdown 导入';
   return '粘贴片段';
+};
+
+const buildBrowserPreviewDraft = async (file: File, title?: string): Promise<ImportKnowledgeDraft> => {
+  const kind = inferBrowserPreviewKind(file);
+  if (kind === 'pdf') {
+    return {
+      kind,
+      title: title?.trim() || file.name,
+      source: file.name,
+      content: `PDF 文件 ${file.name} 已保存为浏览器预览，未上传到后端。`,
+    };
+  }
+
+  let content = '';
+  try {
+    content = (await file.text()).trim();
+  } catch {
+    // Browser preview keeps a local placeholder when file text is unavailable.
+  }
+
+  return {
+    kind,
+    title: title?.trim() || file.name,
+    source: file.name,
+    content: content || `文件 ${file.name} 已保存为浏览器预览，未上传到后端。`,
+  };
+};
+
+const inferBrowserPreviewKind = (file: File): ImportKnowledgeKind => {
+  const lowerName = file.name.toLowerCase();
+  if (file.type === 'application/pdf' || lowerName.endsWith('.pdf')) return 'pdf';
+  if (file.type.startsWith('text/') || lowerName.endsWith('.md') || lowerName.endsWith('.markdown')) {
+    return 'markdown';
+  }
+  return 'snippet';
 };
 
 const isKnowledgeItemLike = (value: unknown): value is KnowledgeItem => {
