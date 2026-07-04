@@ -1,11 +1,11 @@
-import { useDeferredValue, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useDeferredValue, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   AlertTriangle,
+  Archive,
   BookOpen,
   CheckCircle2,
   Clock3,
   Eye,
-  Filter,
   FolderOpen,
   Globe2,
   Inbox,
@@ -33,10 +33,20 @@ import {
   buildSearchSnippet,
   buildSourceOptions,
   buildTagOptions,
+  buildInboxSegments,
+  buildSearchStatusOptions,
+  buildWorkflowActions,
+  buildSearchCorpus,
   emptyFilters,
+  filterInboxItems,
   filterLocalItems,
+  filterSearchItemsByStatus,
+  mergeSearchResults,
   toggleFilterValue,
+  type InboxSegment,
   type ItemFilters,
+  type KnowledgeWorkflowAction,
+  type SearchStatusFilter,
   typeCopy,
 } from './knowledgeDeskViewModel';
 import {
@@ -153,51 +163,92 @@ export const DashboardPage = ({
 };
 
 export const InboxPage = ({
+  actionState,
+  activeSegment,
   isOrganizing,
   items,
+  onItemAction,
+  onOpenDetail,
   onOrganizeBatch,
+  onSegmentChange,
 }: {
+  actionState: { itemId: string; action: KnowledgeWorkflowAction } | null;
+  activeSegment: InboxSegment;
   isOrganizing: boolean;
   items: KnowledgeItem[];
+  onItemAction: (item: KnowledgeItem, action: KnowledgeWorkflowAction) => Promise<void>;
+  onOpenDetail: (item: KnowledgeItem) => void;
   onOrganizeBatch: () => void;
+  onSegmentChange: (segment: InboxSegment) => void;
 }) => (
   <div className="kd-stack">
     <div className="kd-page-tools">
       <div className="kd-segmented">
-        <button className="is-active" type="button">待整理</button>
-        <button type="button">整理中</button>
-        <button type="button">已整理</button>
+        {buildInboxSegments(items).map((segment) => (
+          <button
+            className={activeSegment === segment.id ? 'is-active' : ''}
+            key={segment.id}
+            onClick={() => onSegmentChange(segment.id)}
+            type="button"
+          >
+            <span>{segment.label}</span>
+            <span className="kd-segment-count">{segment.count}</span>
+          </button>
+        ))}
       </div>
       <div className="kd-tool-actions">
         <button disabled={isOrganizing || items.length === 0} onClick={onOrganizeBatch} type="button">
           <RefreshCw size={16} /> {isOrganizing ? '整理中' : '批量整理'}
         </button>
-        <button type="button"><Filter size={16} /> 来源筛选</button>
+        <span className="kd-tool-note">
+          当前显示 {filterInboxItems(items, activeSegment).length} 条，需要优先处理的失败条目会保留在这里。
+        </span>
       </div>
     </div>
 
     <section className="kd-inbox-board">
-      {items.map((item) => (
-        <article className={`kd-inbox-row kd-inbox-row--${item.status}`} key={item.id}>
-          <div className="kd-source-icon">{sourceIcon(item.type)}</div>
-          <div className="kd-row-main">
-            <div className="kd-row-titleline">
-              <h3>{item.title}</h3>
-              {item.status ? <StatusPill status={item.status} /> : null}
+      {filterInboxItems(items, activeSegment).map((item) => {
+        const actions = buildWorkflowActions(item);
+        return (
+          <article className={`kd-inbox-row kd-inbox-row--${item.status}`} key={item.id}>
+            <div className="kd-source-icon">{sourceIcon(item.type)}</div>
+            <div className="kd-row-main">
+              <div className="kd-row-titleline">
+                <h3>{item.title}</h3>
+                {item.status ? <StatusPill status={item.status} /> : null}
+              </div>
+              <p>{item.summary}</p>
+              <MetaLine item={item} />
             </div>
-            <p>{item.summary}</p>
-            <MetaLine item={item} />
-          </div>
-          <button className="kd-icon-button" type="button" aria-label="预览">
-            <Eye size={17} />
-          </button>
-        </article>
-      ))}
-      {items.length === 0 ? (
+            <div className="kd-row-actions">
+              <button className="kd-icon-button" onClick={() => onOpenDetail(item)} type="button" aria-label="查看详情">
+                <Eye size={17} />
+              </button>
+              {actions.map((action) => {
+                const isPendingAction = actionState?.itemId === item.id && actionState.action === action.id;
+                return (
+                  <button
+                    className={`kd-action-button kd-action-button--${action.tone}`}
+                    disabled={isPendingAction}
+                    key={action.id}
+                    onClick={() => void onItemAction(item, action.id)}
+                    type="button"
+                  >
+                    {isPendingAction ? '处理中' : action.label}
+                  </button>
+                );
+              })}
+            </div>
+          </article>
+        );
+      })}
+      {filterInboxItems(items, activeSegment).length === 0 ? (
         <EmptyBlock
           icon={Inbox}
-          title="收集箱是空的"
-          description="网页摘录、本地 Markdown / PDF 和粘贴内容会先进入这里，再被整理进知识库。"
+          title={activeSegment === 'all' ? '收集箱是空的' : '当前分段没有条目'}
+          description={activeSegment === 'all'
+            ? '网页摘录、本地 Markdown / PDF 和粘贴内容会先进入这里，再被整理进知识库。'
+            : '切回全部，或继续导入资料后再处理。'}
         />
       ) : null}
     </section>
@@ -451,14 +502,121 @@ export const LibraryPage = ({
   );
 };
 
+export const ArchivePage = ({
+  actionState,
+  items,
+  onItemAction,
+  onOpenDetail,
+  tags,
+  totalItems,
+}: {
+  actionState: { itemId: string; action: KnowledgeWorkflowAction } | null;
+  items: KnowledgeItem[];
+  onItemAction: (item: KnowledgeItem, action: KnowledgeWorkflowAction) => Promise<void>;
+  onOpenDetail: (item: KnowledgeItem) => void;
+  tags: string[];
+  totalItems: number;
+}) => {
+  const [filters, setFilters] = useState<ItemFilters>(emptyFilters);
+  const sourceOptions = buildSourceOptions(items, ['网页摘录', 'PDF', 'Markdown', '粘贴内容']);
+  const tagOptions = buildTagOptions(items, tags);
+  const filteredItems = applyItemFilters(items, filters);
+  const hasActiveFilters = activeFilterCount(filters) > 0;
+
+  return (
+    <div className="kd-library-layout">
+      <aside className="kd-filter-rail">
+        <FilterGroup
+          activeValues={filters.source}
+          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'source', value))}
+          title="来源"
+          values={sourceOptions}
+        />
+        <FilterGroup
+          activeValues={filters.time}
+          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'time', value))}
+          title="时间"
+          values={['今天', '本周', '本月', '更早']}
+        />
+        <FilterGroup
+          activeValues={filters.tag}
+          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'tag', value))}
+          title="主题"
+          values={tagOptions}
+        />
+        <FilterSummary
+          filters={filters}
+          onClear={() => setFilters(emptyFilters)}
+          resultCount={filteredItems.length}
+          totalCount={items.length}
+        />
+      </aside>
+
+      <div className="kd-stack">
+        <div className="kd-page-tools">
+          <div>
+            <h2 className="kd-section-title">{formatCount(filteredItems.length)} / {formatCount(totalItems)} 条归档资料</h2>
+            <p className="kd-muted">
+              {hasActiveFilters ? '已按当前筛选条件收窄归档结果。' : '归档不会丢失资料，只是从主知识流中移出，后续仍可恢复。'}
+            </p>
+          </div>
+        </div>
+
+        <div className="kd-library-list">
+          {filteredItems.map((item) => {
+            const restoreAction = buildWorkflowActions(item).find((action) => action.id === 'restore');
+            const isRestoring = actionState?.itemId === item.id && actionState.action === 'restore';
+            return (
+              <article className="kd-archive-item" key={item.id}>
+                <button className="kd-archive-main" onClick={() => onOpenDetail(item)} type="button">
+                  <div className="kd-type-badge">{typeCopy[item.type]}</div>
+                  <div className="kd-row-titleline">
+                    <h3>{item.title}</h3>
+                    {item.status ? <StatusPill status={item.status} /> : null}
+                  </div>
+                  <p>{item.summary}</p>
+                  <MetaLine item={item} />
+                </button>
+                {restoreAction ? (
+                  <button
+                    className={`kd-action-button kd-action-button--${restoreAction.tone}`}
+                    disabled={isRestoring}
+                    onClick={() => void onItemAction(item, restoreAction.id)}
+                    type="button"
+                  >
+                    {isRestoring ? '恢复中' : restoreAction.label}
+                  </button>
+                ) : null}
+              </article>
+            );
+          })}
+          {filteredItems.length === 0 ? (
+            <EmptyBlock
+              icon={Archive}
+              title={hasActiveFilters ? '没有匹配当前筛选的归档资料' : '归档库还是空的'}
+              description={hasActiveFilters
+                ? '清空部分筛选条件，或换一个来源、标签、时间范围再找。'
+                : '把不想参与当前知识流的资料归档后，这里会保留恢复入口。'}
+            />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const DetailPage = ({
+  actionState,
   error,
   isLoading,
   item,
+  onAction,
 }: {
+  actionState: { itemId: string; action: KnowledgeWorkflowAction } | null;
   error?: string | null;
   isLoading?: boolean;
   item: KnowledgeItem;
+  onAction: (item: KnowledgeItem, action: KnowledgeWorkflowAction) => Promise<void>;
 }) => {
   const body = item.cleanedContent || item.rawContent || item.summary;
   const paragraphs = body
@@ -466,17 +624,57 @@ export const DetailPage = ({
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, 4);
+  const workflowActions = buildWorkflowActions(item);
 
   return (
     <article className="kd-detail">
-      <div className="kd-breadcrumb">知识库 / {item.tags[0] ?? '未分类'} / {typeCopy[item.type]}</div>
+      <div className="kd-detail-header">
+        <div className="kd-breadcrumb">{item.status === 'archived' ? '归档库' : '知识库'} / {item.tags[0] ?? '未分类'} / {typeCopy[item.type]}</div>
+        {workflowActions.length > 0 ? (
+          <div className="kd-inline-actions">
+            {workflowActions.map((action) => {
+              const isPendingAction = actionState?.itemId === item.id && actionState.action === action.id;
+              return (
+                <button
+                  className={`kd-action-button kd-action-button--${action.tone}`}
+                  disabled={isPendingAction}
+                  key={action.id}
+                  onClick={() => void onAction(item, action.id)}
+                  type="button"
+                >
+                  {isPendingAction ? '处理中' : action.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
       <h2>{item.title}</h2>
       <div className="kd-detail-meta">
         <span>{sourceIcon(item.type)} {typeCopy[item.type]}</span>
         <span><Clock3 size={16} /> {item.time} 整理</span>
         <span><Globe2 size={16} /> {item.source}</span>
+        {item.status ? <StatusPill status={item.status} /> : null}
       </div>
 
+      {item.status === 'failed' ? (
+        <div className="kd-detail-status kd-detail-status--error">
+          <AlertTriangle size={16} />
+          上次整理失败，可直接重新整理或先归档。
+        </div>
+      ) : null}
+      {item.status === 'archived' ? (
+        <div className="kd-detail-status">
+          <Archive size={16} />
+          这条资料已移出主知识流，恢复后会重新回到可检索集合。
+        </div>
+      ) : null}
+      {item.status === 'processing' ? (
+        <div className="kd-detail-status">
+          <Loader2 size={16} />
+          这条资料仍在整理中，完成后会自动进入知识库。
+        </div>
+      ) : null}
       {isLoading ? (
         <div className="kd-detail-status">
           <Loader2 size={16} />
@@ -501,42 +699,55 @@ export const DetailPage = ({
 
 export const SearchPage = ({
   apiEnabled,
-  initialItems,
+  searchableItems,
   onOpenDetail,
 }: {
   apiEnabled: boolean;
-  initialItems: KnowledgeItem[];
+  searchableItems: KnowledgeItem[];
   onOpenDetail: (item: KnowledgeItem) => void;
 }) => {
   const [query, setQuery] = useState('注意力机制 RAG 检索');
   const [results, setResults] = useState<KnowledgeItem[] | null>(null);
   const [filters, setFilters] = useState<ItemFilters>(emptyFilters);
+  const [statusFilter, setStatusFilter] = useState<SearchStatusFilter>('all');
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const deferredQuery = useDeferredValue(query);
-  const baseResults = results ?? filterLocalItems(initialItems, deferredQuery);
-  const visibleResults = applyItemFilters(baseResults, filters).slice(0, 12);
+  const searchCorpus = buildSearchCorpus(searchableItems);
+  const localResults = filterLocalItems(searchCorpus, deferredQuery);
+  const baseResults = results ?? localResults;
+  const statusOptions = buildSearchStatusOptions(baseResults);
+  const statusFilteredResults = filterSearchItemsByStatus(baseResults, statusFilter);
+  const filteredResults = applyItemFilters(statusFilteredResults, filters);
+  const visibleResults = filteredResults.slice(0, 12);
   const sourceOptions = buildSourceOptions(baseResults, ['网页摘录', 'PDF', 'Markdown']);
-  const tagOptions = buildTagOptions(baseResults, initialItems.flatMap((item) => item.tags));
+  const tagOptions = buildTagOptions(baseResults, searchCorpus.flatMap((item) => item.tags));
 
   const runSearch = async () => {
     const nextQuery = query.trim();
+    const fallbackResults = filterLocalItems(searchCorpus, nextQuery);
     setIsSearching(true);
     setSearchError(null);
     try {
       if (apiEnabled && nextQuery) {
         const apiResults = await searchKnowledgeItems(nextQuery);
-        setResults(apiResults);
+        setResults(mergeSearchResults(apiResults, fallbackResults));
         return;
       }
-      setResults(filterLocalItems(initialItems, nextQuery));
+      setResults(fallbackResults);
     } catch (error) {
-      setResults(filterLocalItems(initialItems, nextQuery));
+      setResults(fallbackResults);
       setSearchError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsSearching(false);
     }
   };
+
+  useEffect(() => {
+    searchInputRef.current?.focus();
+    searchInputRef.current?.select();
+  }, []);
 
   return (
     <div className="kd-search-page">
@@ -548,11 +759,32 @@ export const SearchPage = ({
           onKeyDown={(event) => {
             if (event.key === 'Enter') void runSearch();
           }}
+          ref={searchInputRef}
           value={query}
         />
         <button disabled={isSearching} onClick={() => void runSearch()} type="button">
           {isSearching ? '搜索中' : '搜索'}
         </button>
+      </div>
+      <div className="kd-search-toolbar">
+        <div className="kd-segmented kd-search-status-filter" aria-label="搜索状态筛选">
+          {statusOptions.map((option) => (
+            <button
+              className={statusFilter === option.id ? 'is-active' : ''}
+              key={option.id}
+              onClick={() => setStatusFilter(option.id)}
+              type="button"
+            >
+              {option.label}
+              <span className="kd-segment-count">{option.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="kd-search-scope" aria-live="polite">
+          <strong>{filteredResults.length}</strong>
+          <span>/ {baseResults.length} 条</span>
+          <span>收集箱 + 知识库 + 归档库</span>
+        </div>
       </div>
 
       <div className="kd-search-layout">
@@ -579,7 +811,7 @@ export const SearchPage = ({
             filters={filters}
             onClear={() => setFilters(emptyFilters)}
             resultCount={visibleResults.length}
-            totalCount={baseResults.length}
+            totalCount={statusFilteredResults.length}
           />
         </aside>
         <section className="kd-search-results">
@@ -594,6 +826,7 @@ export const SearchPage = ({
                 <span className="kd-type-badge">{typeCopy[item.type]}</span>
                 <span>{item.source}</span>
                 <span>{item.time}</span>
+                {item.status ? <StatusPill status={item.status} /> : null}
               </div>
               <h3>{item.title}</h3>
               <p>命中片段：{buildSearchSnippet(item, query)}</p>

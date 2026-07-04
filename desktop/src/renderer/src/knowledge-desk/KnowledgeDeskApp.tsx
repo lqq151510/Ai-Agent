@@ -1,16 +1,18 @@
 import { startTransition, useEffect, useRef, useState } from 'react';
 import {
-  Archive,
+  FolderArchive,
   BookOpen,
   FileText,
   Globe2,
   Inbox,
+  LayoutDashboard,
   RefreshCw,
   Search,
   Settings,
   Upload,
 } from 'lucide-react';
 import {
+  archiveKnowledgeItem,
   fallbackSnapshot,
   canUseDesktopFilePicker,
   importBrowserKnowledgeFile,
@@ -18,20 +20,31 @@ import {
   importLocalKnowledgeFile,
   loadKnowledgeItemDetail,
   loadKnowledgeDeskSnapshot,
+  organizeKnowledgeItem,
   organizeKnowledgeItems,
+  reprocessKnowledgeItem,
+  restoreKnowledgeItem,
   type ImportKnowledgeDraft,
   type KnowledgeDeskSnapshot,
   type KnowledgeItem,
 } from './knowledgeDeskApi';
-import { ContextRail, ConnectionBanner, DashboardPage, DetailPage, ImportPanel, InboxPage, LibraryPage, SearchPage } from './knowledgeDeskScreens';
+import { ArchivePage, ContextRail, ConnectionBanner, DashboardPage, DetailPage, ImportPanel, InboxPage, LibraryPage, SearchPage } from './knowledgeDeskScreens';
 import { SettingsPage } from './knowledgeDeskSettings';
 import type { MainPage, SettingsTab, ImportMode } from './knowledgeDeskTypes';
+import {
+  applySnapshotItemUpdate,
+  buildSearchCorpus,
+  isCommandSearchShortcut,
+  type InboxSegment,
+  type KnowledgeWorkflowAction,
+} from './knowledgeDeskViewModel';
 import './knowledge-desk.css';
 
 const pages: Array<{ id: MainPage; label: string; icon: React.ElementType; badge?: string }> = [
-  { id: 'dashboard', label: '工作台', icon: Archive },
+  { id: 'dashboard', label: '工作台', icon: LayoutDashboard },
   { id: 'inbox', label: '收集箱', icon: Inbox },
   { id: 'library', label: '知识库', icon: BookOpen },
+  { id: 'archive', label: '归档库', icon: FolderArchive },
   { id: 'search', label: '全局搜索', icon: Search },
 ];
 
@@ -39,6 +52,7 @@ const KnowledgeDeskApp = () => {
   const [activePage, setActivePage] = useState<MainPage>('dashboard');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('profile');
   const [libraryMode, setLibraryMode] = useState<'list' | 'cards'>('list');
+  const [activeInboxSegment, setActiveInboxSegment] = useState<InboxSegment>('all');
   const [snapshot, setSnapshot] = useState<KnowledgeDeskSnapshot>(fallbackSnapshot);
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(true);
   const [selectedItem, setSelectedItem] = useState<KnowledgeItem | null>(null);
@@ -49,6 +63,7 @@ const KnowledgeDeskApp = () => {
   const [importMode, setImportMode] = useState<ImportMode | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
+  const [itemActionState, setItemActionState] = useState<{ itemId: string; action: KnowledgeWorkflowAction } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const detailRequestRef = useRef(0);
   const desktopFilePickerAvailable = canUseDesktopFilePicker();
@@ -60,7 +75,7 @@ const KnowledgeDeskApp = () => {
       if (cancelled) return;
       startTransition(() => {
         setSnapshot(nextSnapshot);
-        setSelectedItem((current) => current ?? nextSnapshot.libraryItems[0] ?? nextSnapshot.inboxItems[0] ?? null);
+        setSelectedItem((current) => current ?? nextSnapshot.libraryItems[0] ?? nextSnapshot.inboxItems[0] ?? nextSnapshot.archivedItems[0] ?? null);
         setIsLoadingSnapshot(false);
       });
     });
@@ -70,12 +85,23 @@ const KnowledgeDeskApp = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isCommandSearchShortcut(event)) return;
+      event.preventDefault();
+      setActivePage('search');
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const refreshSnapshot = async () => {
     setIsLoadingSnapshot(true);
     const nextSnapshot = await loadKnowledgeDeskSnapshot();
     startTransition(() => {
       setSnapshot(nextSnapshot);
-      setSelectedItem((current) => current ?? nextSnapshot.libraryItems[0] ?? nextSnapshot.inboxItems[0] ?? null);
+      setSelectedItem((current) => current ?? nextSnapshot.libraryItems[0] ?? nextSnapshot.inboxItems[0] ?? nextSnapshot.archivedItems[0] ?? null);
       setIsLoadingSnapshot(false);
     });
     return nextSnapshot;
@@ -151,11 +177,60 @@ const KnowledgeDeskApp = () => {
     }
   };
 
+  const handleItemAction = async (item: KnowledgeItem, action: KnowledgeWorkflowAction) => {
+    setItemActionState({ itemId: item.id, action });
+    try {
+      const nextItem = await runItemAction(item, action);
+
+      if (snapshot.source === 'fallback') {
+        const nextSnapshot = applySnapshotItemUpdate(snapshot, item, nextItem);
+        startTransition(() => {
+          setSnapshot(nextSnapshot);
+          setSelectedItem((current) => (current?.id === item.id ? nextItem : current));
+        });
+      } else {
+        const nextSnapshot = await refreshSnapshot();
+        const refreshedItem = findSnapshotItem(nextSnapshot, nextItem.id) ?? nextItem;
+        setSelectedItem((current) => (current?.id === item.id ? refreshedItem : current));
+      }
+
+      showNotice(workflowNotice(action, nextItem.title));
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setItemActionState(null);
+    }
+  };
+
   const currentTitle = activePage === 'settings' ? '个人中心' : pages.find((page) => page.id === activePage)?.label ?? '工作台';
   const inboxItems = snapshot.inboxItems;
   const libraryItems = snapshot.libraryItems;
+  const archivedItems = snapshot.archivedItems;
+  const searchableItems = buildSearchCorpus(libraryItems, archivedItems, inboxItems);
   const tags = snapshot.tags.length > 0 ? snapshot.tags : snapshot.dashboard.topTags.map((tag) => tag.name);
-  const detailItem = selectedItem ?? libraryItems[0] ?? inboxItems[0] ?? fallbackSnapshot.libraryItems[0];
+  const detailItem = selectedItem ?? libraryItems[0] ?? inboxItems[0] ?? archivedItems[0] ?? fallbackSnapshot.libraryItems[0];
+  const getPageBadge = (page: (typeof pages)[number]) => {
+    if (page.id === 'inbox' && snapshot.inboxItems.length > 0) return String(snapshot.inboxItems.length);
+    if (page.id === 'archive' && snapshot.storage.archivedItems > 0) return String(snapshot.storage.archivedItems);
+    return page.badge;
+  };
+  const renderPageNavButton = (page: (typeof pages)[number], className: string) => {
+    const Icon = page.icon;
+    const badge = getPageBadge(page);
+    return (
+      <button
+        aria-current={activePage === page.id ? 'page' : undefined}
+        className={`${className} ${activePage === page.id ? 'is-active' : ''}`}
+        key={`${className}-${page.id}`}
+        onClick={() => setActivePage(page.id)}
+        type="button"
+      >
+        <Icon size={18} />
+        <span>{page.label}</span>
+        {badge ? <span className="kd-nav-badge">{badge}</span> : null}
+      </button>
+    );
+  };
   const openDetail = (item: KnowledgeItem) => {
     const requestId = detailRequestRef.current + 1;
     detailRequestRef.current = requestId;
@@ -196,22 +271,7 @@ const KnowledgeDeskApp = () => {
         </div>
 
         <nav className="kd-nav" aria-label="主导航">
-          {pages.map((page) => {
-            const Icon = page.icon;
-            const badge = page.id === 'inbox' && snapshot.dashboard.inboxItems > 0 ? String(snapshot.dashboard.inboxItems) : page.badge;
-            return (
-              <button
-                className={`kd-nav-item ${activePage === page.id ? 'is-active' : ''}`}
-                key={page.id}
-                onClick={() => setActivePage(page.id)}
-                type="button"
-              >
-                <Icon size={18} />
-                <span>{page.label}</span>
-                {badge ? <span className="kd-nav-badge">{badge}</span> : null}
-              </button>
-            );
-          })}
+          {pages.map((page) => renderPageNavButton(page, 'kd-nav-item'))}
         </nav>
 
         <div className="kd-import-box">
@@ -246,11 +306,19 @@ const KnowledgeDeskApp = () => {
             <p className="kd-kicker">现代编辑部式知识中台</p>
             <h1>{currentTitle}</h1>
           </div>
-          <button className="kd-command-search" onClick={() => setActivePage('search')} type="button">
+          <button
+            aria-keyshortcuts="Meta+K Control+K"
+            className="kd-command-search"
+            onClick={() => setActivePage('search')}
+            type="button"
+          >
             <Search size={18} />
             <span>搜索主题、来源、标签、关键句</span>
             <kbd>⌘K</kbd>
           </button>
+          <nav className="kd-mobile-nav" aria-label="移动端主导航">
+            {pages.map((page) => renderPageNavButton(page, 'kd-mobile-nav-item'))}
+          </nav>
           <div className="kd-topbar-actions">
             <span className={`kd-sync-badge kd-sync-badge--${snapshot.source}`}>
               {isLoadingSnapshot ? '同步中' : snapshot.source === 'api' ? '数据库已连接' : '预览数据'}
@@ -292,9 +360,14 @@ const KnowledgeDeskApp = () => {
               ) : null}
               {activePage === 'inbox' ? (
                 <InboxPage
+                  actionState={itemActionState}
+                  activeSegment={activeInboxSegment}
                   isOrganizing={isOrganizing}
                   items={inboxItems}
+                  onItemAction={handleItemAction}
+                  onOpenDetail={openDetail}
                   onOrganizeBatch={handleOrganizeBatch}
+                  onSegmentChange={setActiveInboxSegment}
                 />
               ) : null}
               {activePage === 'library' ? (
@@ -304,14 +377,30 @@ const KnowledgeDeskApp = () => {
                   onModeChange={setLibraryMode}
                   onOpenDetail={openDetail}
                   tags={tags}
-                  totalItems={snapshot.dashboard.totalItems}
+                  totalItems={snapshot.storage.readyItems}
+                />
+              ) : null}
+              {activePage === 'archive' ? (
+                <ArchivePage
+                  actionState={itemActionState}
+                  items={archivedItems}
+                  onItemAction={handleItemAction}
+                  onOpenDetail={openDetail}
+                  tags={tags}
+                  totalItems={snapshot.storage.archivedItems}
                 />
               ) : null}
               {activePage === 'detail' ? (
-                <DetailPage error={detailFetch.error} isLoading={detailFetch.isLoading} item={detailItem} />
+                <DetailPage
+                  actionState={itemActionState}
+                  error={detailFetch.error}
+                  isLoading={detailFetch.isLoading}
+                  item={detailItem}
+                  onAction={handleItemAction}
+                />
               ) : null}
               {activePage === 'search' ? (
-                <SearchPage apiEnabled={snapshot.source === 'api'} initialItems={libraryItems} onOpenDetail={openDetail} />
+                <SearchPage apiEnabled={snapshot.source === 'api'} searchableItems={searchableItems} onOpenDetail={openDetail} />
               ) : null}
             </section>
             <ContextRail activePage={activePage} selectedItem={detailItem} snapshot={snapshot} />
@@ -333,5 +422,26 @@ const KnowledgeDeskApp = () => {
     </div>
   );
 };
+
+const runItemAction = async (item: KnowledgeItem, action: KnowledgeWorkflowAction) => {
+  if (action === 'organize') return organizeKnowledgeItem(item);
+  if (action === 'reprocess') return reprocessKnowledgeItem(item);
+  if (action === 'restore') return restoreKnowledgeItem(item);
+  return archiveKnowledgeItem(item);
+};
+
+const workflowNotice = (action: KnowledgeWorkflowAction, title: string) => {
+  if (action === 'organize') return `已开始整理：${title}`;
+  if (action === 'reprocess') return `已重新整理：${title}`;
+  if (action === 'restore') return `已恢复：${title}`;
+  return `已归档：${title}`;
+};
+
+const findSnapshotItem = (snapshot: KnowledgeDeskSnapshot, itemId: string) => (
+  snapshot.libraryItems.find((item) => item.id === itemId)
+  ?? snapshot.inboxItems.find((item) => item.id === itemId)
+  ?? snapshot.archivedItems.find((item) => item.id === itemId)
+  ?? null
+);
 
 export default KnowledgeDeskApp;

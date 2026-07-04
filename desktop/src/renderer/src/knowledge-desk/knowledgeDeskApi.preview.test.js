@@ -1,7 +1,10 @@
 /* global beforeEach, describe, expect, it */
 
 import {
+  archiveKnowledgeItem,
   fallbackSnapshot,
+  organizeKnowledgeItem,
+  restoreKnowledgeItem,
   withPreviewItems,
 } from './knowledgeDeskApi';
 
@@ -45,16 +48,90 @@ describe('knowledgeDeskApi preview fallback', () => {
         tags: ['总结'],
         status: 'done',
       },
+      {
+        id: 'preview-archived',
+        title: '已归档预览',
+        source: '本地预览',
+        type: 'snippet',
+        time: '刚刚',
+        summary: '已归档。',
+        tags: ['归档'],
+        status: 'archived',
+      },
     ]));
 
     const snapshot = withPreviewItems(fallbackSnapshot);
 
-    expect(snapshot.dashboard.totalItems).toBe(fallbackSnapshot.dashboard.totalItems + 2);
+    expect(snapshot.dashboard.totalItems).toBe(fallbackSnapshot.dashboard.totalItems + 3);
     expect(snapshot.dashboard.inboxItems).toBe(fallbackSnapshot.dashboard.inboxItems + 1);
     expect(snapshot.dashboard.readyItems).toBe(fallbackSnapshot.dashboard.readyItems + 1);
     expect(snapshot.dashboard.recentItems[0]?.id).toBe('preview-done');
     expect(snapshot.inboxItems[0]?.id).toBe('preview-pending');
     expect(snapshot.libraryItems[0]?.id).toBe('preview-done');
-    expect(snapshot.tags).toEqual(expect.arrayContaining(['收集箱', 'RAG', '总结']));
+    expect(snapshot.archivedItems[0]?.id).toBe('preview-archived');
+    expect(snapshot.storage.archivedItems).toBe(fallbackSnapshot.storage.archivedItems + 1);
+    expect(snapshot.tags).toEqual(expect.arrayContaining(['收集箱', 'RAG', '总结', '归档']));
+  });
+
+  it('updates preview storage when organizing a locally imported item', async () => {
+    const previewItem = {
+      id: 'preview-pending',
+      title: '待整理预览',
+      source: '本地预览',
+      type: 'markdown',
+      time: '刚刚',
+      summary: '等待整理。',
+      rawContent: '等待整理。',
+      tags: ['收集箱'],
+      status: 'pending',
+    };
+    window.localStorage.setItem('knowledge-desk-preview-items', JSON.stringify([previewItem]));
+
+    const result = await organizeKnowledgeItem(previewItem);
+    const stored = JSON.parse(window.localStorage.getItem('knowledge-desk-preview-items'));
+
+    expect(result.status).toBe('done');
+    expect(stored[0].status).toBe('done');
+    expect(stored[0].cleanedContent).toContain('等待整理');
+  });
+
+  it('marks preview items as archived instead of removing them', async () => {
+    const previewItem = {
+      id: 'preview-pending',
+      title: '待整理预览',
+      source: '本地预览',
+      type: 'markdown',
+      time: '刚刚',
+      summary: '等待整理。',
+      tags: ['收集箱'],
+      status: 'pending',
+    };
+    window.localStorage.setItem('knowledge-desk-preview-items', JSON.stringify([previewItem]));
+
+    const result = await archiveKnowledgeItem(previewItem);
+    const stored = JSON.parse(window.localStorage.getItem('knowledge-desk-preview-items'));
+
+    expect(result.status).toBe('archived');
+    expect(stored[0].status).toBe('archived');
+  });
+
+  it('restores archived preview items back into a searchable state', async () => {
+    const previewItem = {
+      id: 'preview-archived',
+      title: '已归档预览',
+      source: '本地预览',
+      type: 'markdown',
+      time: '刚刚',
+      summary: '这条资料之前已经整理完成。',
+      tags: ['归档'],
+      status: 'archived',
+    };
+    window.localStorage.setItem('knowledge-desk-preview-items', JSON.stringify([previewItem]));
+
+    const result = await restoreKnowledgeItem(previewItem);
+    const stored = JSON.parse(window.localStorage.getItem('knowledge-desk-preview-items'));
+
+    expect(result.status).toBe('done');
+    expect(stored[0].status).toBe('done');
   });
 });

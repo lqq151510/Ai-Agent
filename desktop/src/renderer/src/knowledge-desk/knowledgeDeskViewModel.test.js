@@ -1,10 +1,20 @@
 /* global beforeEach, describe, expect, it */
 
 import {
+  applySnapshotItemUpdate,
   applyItemFilters,
+  buildInboxSegments,
+  buildSearchCorpus,
   buildSearchSnippet,
+  buildSearchStatusOptions,
+  buildWorkflowActions,
   filterLocalItems,
+  filterInboxItems,
+  filterSearchItemsByStatus,
+  isCommandSearchShortcut,
+  mergeSearchResults,
 } from './knowledgeDeskViewModel';
+import { fallbackSnapshot } from './knowledgeDeskApi';
 
 const makeItem = (overrides = {}) => ({
   id: 'item',
@@ -76,6 +86,105 @@ describe('knowledgeDeskViewModel', () => {
 
     expect(filtered.map((item) => item.id)).toEqual(['web-today-rag']);
     expect(buildSearchSnippet(filtered[0], 'pgvector')).toContain('关联关键词：pgvector');
+  });
+
+  it('builds a unified search corpus and merges api results without dropping archived items', () => {
+    const ready = makeItem({ id: 'ready-1', status: 'done', title: '知识库条目' });
+    const archived = makeItem({ id: 'archived-1', status: 'archived', title: '归档条目' });
+    const duplicateReady = makeItem({ id: 'ready-1', status: 'done', title: '重复知识库条目' });
+
+    const corpus = buildSearchCorpus([ready], [archived], [duplicateReady]);
+    const merged = mergeSearchResults([ready], [archived, duplicateReady]);
+
+    expect(corpus.map((item) => item.id)).toEqual(['ready-1', 'archived-1']);
+    expect(merged.map((item) => item.id)).toEqual(['ready-1', 'archived-1']);
+  });
+
+  it('builds search status filters and keeps archived items directly filterable', () => {
+    const items = [
+      makeItem({ id: 'pending', status: 'pending' }),
+      makeItem({ id: 'ready', status: 'done' }),
+      makeItem({ id: 'archived', status: 'archived' }),
+      makeItem({ id: 'failed', status: 'failed' }),
+    ];
+
+    expect(buildSearchStatusOptions(items)).toEqual([
+      { id: 'all', label: '全部资料', count: 4 },
+      { id: 'pending', label: '待整理', count: 1 },
+      { id: 'processing', label: '整理中', count: 0 },
+      { id: 'done', label: '知识库', count: 1 },
+      { id: 'failed', label: '需重试', count: 1 },
+      { id: 'archived', label: '归档', count: 1 },
+    ]);
+    expect(filterSearchItemsByStatus(items, 'archived').map((item) => item.id)).toEqual(['archived']);
+    expect(filterSearchItemsByStatus(items, 'all').map((item) => item.id)).toEqual([
+      'pending',
+      'ready',
+      'archived',
+      'failed',
+    ]);
+  });
+
+  it('detects the command search shortcut without hijacking modified text input shortcuts', () => {
+    expect(isCommandSearchShortcut({ key: 'k', metaKey: true })).toBe(true);
+    expect(isCommandSearchShortcut({ key: 'K', ctrlKey: true })).toBe(true);
+    expect(isCommandSearchShortcut({ key: 'k', metaKey: true, shiftKey: true })).toBe(false);
+    expect(isCommandSearchShortcut({ key: 'k', ctrlKey: true, altKey: true })).toBe(false);
+    expect(isCommandSearchShortcut({ key: 'k', metaKey: true, isComposing: true })).toBe(false);
+    expect(isCommandSearchShortcut({ key: 'j', metaKey: true })).toBe(false);
+  });
+
+  it('builds inbox segments and workflow actions from item status', () => {
+    const items = [
+      makeItem({ id: 'pending', status: 'pending' }),
+      makeItem({ id: 'processing', status: 'processing' }),
+      makeItem({ id: 'failed', status: 'failed' }),
+    ];
+
+    expect(buildInboxSegments(items)).toEqual([
+      { id: 'all', label: '全部', count: 3 },
+      { id: 'pending', label: '待整理', count: 1 },
+      { id: 'processing', label: '整理中', count: 1 },
+      { id: 'failed', label: '失败重试', count: 1 },
+    ]);
+    expect(filterInboxItems(items, 'failed').map((item) => item.id)).toEqual(['failed']);
+    expect(buildWorkflowActions(items[0]).map((action) => action.id)).toEqual(['organize', 'archive']);
+    expect(buildWorkflowActions(items[2]).map((action) => action.id)).toEqual(['reprocess', 'archive']);
+    expect(buildWorkflowActions(makeItem({ id: 'archived', status: 'archived' })).map((action) => action.id)).toEqual(['restore']);
+  });
+
+  it('moves a just-organized item from inbox to library and adjusts counts', () => {
+    const previousItem = fallbackSnapshot.inboxItems[0];
+    const nextItem = {
+      ...previousItem,
+      status: 'done',
+      time: '刚刚',
+    };
+
+    const nextSnapshot = applySnapshotItemUpdate(fallbackSnapshot, previousItem, nextItem);
+
+    expect(nextSnapshot.inboxItems.some((item) => item.id === previousItem.id)).toBe(false);
+    expect(nextSnapshot.libraryItems[0]?.id).toBe(previousItem.id);
+    expect(nextSnapshot.dashboard.inboxItems).toBe(fallbackSnapshot.dashboard.inboxItems - 1);
+    expect(nextSnapshot.dashboard.readyItems).toBe(fallbackSnapshot.dashboard.readyItems + 1);
+    expect(nextSnapshot.storage.archivedItems).toBe(fallbackSnapshot.storage.archivedItems);
+  });
+
+  it('moves an archived item into the archive collection without changing total item count', () => {
+    const previousItem = fallbackSnapshot.libraryItems[0];
+    const nextItem = {
+      ...previousItem,
+      status: 'archived',
+      time: '刚刚',
+    };
+
+    const nextSnapshot = applySnapshotItemUpdate(fallbackSnapshot, previousItem, nextItem);
+
+    expect(nextSnapshot.libraryItems.some((item) => item.id === previousItem.id)).toBe(false);
+    expect(nextSnapshot.archivedItems[0]?.id).toBe(previousItem.id);
+    expect(nextSnapshot.dashboard.readyItems).toBe(fallbackSnapshot.dashboard.readyItems - 1);
+    expect(nextSnapshot.dashboard.totalItems).toBe(fallbackSnapshot.dashboard.totalItems);
+    expect(nextSnapshot.storage.archivedItems).toBe(fallbackSnapshot.storage.archivedItems + 1);
   });
 });
 

@@ -14,6 +14,7 @@ const statusCopy: Record<NonNullable<KnowledgeItem['status']>, string> = {
   processing: '整理中',
   done: '已整理',
   failed: '需重试',
+  archived: '已归档',
 };
 
 export const Panel = ({ title, icon: Icon, children }: { title: string; icon: ElementType; children: ReactNode }) => (

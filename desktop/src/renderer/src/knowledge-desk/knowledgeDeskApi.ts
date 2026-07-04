@@ -1,5 +1,5 @@
 export type KnowledgeSourceType = 'web' | 'pdf' | 'markdown' | 'paste' | 'snippet';
-export type KnowledgeStatus = 'pending' | 'processing' | 'done' | 'failed';
+export type KnowledgeStatus = 'pending' | 'processing' | 'done' | 'failed' | 'archived';
 
 export type KnowledgeItem = {
   id: string;
@@ -56,6 +56,7 @@ export type KnowledgeDeskSnapshot = {
   dashboard: DashboardSummary;
   inboxItems: KnowledgeItem[];
   libraryItems: KnowledgeItem[];
+  archivedItems: KnowledgeItem[];
   tags: string[];
   modelProviders: ModelProvider[];
   profile: SettingsProfile;
@@ -75,6 +76,13 @@ export type BatchOrganizeResult = {
   total: number;
   succeeded: number;
   failed: number;
+};
+
+const WORKFLOW_STATUS_PRIORITY: Record<string, number> = {
+  inbox: 0,
+  processing: 1,
+  failed: 2,
+  archived: 3,
 };
 
 type BackendTag = {
@@ -291,7 +299,10 @@ export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot
     const [
       dashboard,
       inbox,
+      processing,
+      failed,
       ready,
+      archived,
       tags,
       modelSources,
       profile,
@@ -299,14 +310,19 @@ export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot
     ] = await Promise.all([
       request<BackendDashboard>('/api/v1/dashboard/summary'),
       request<BackendKnowledgePage>('/api/v1/knowledge-items?status=inbox&page=1&pageSize=12'),
+      request<BackendKnowledgePage>('/api/v1/knowledge-items?status=processing&page=1&pageSize=12'),
+      request<BackendKnowledgePage>('/api/v1/knowledge-items?status=failed&page=1&pageSize=12'),
       request<BackendKnowledgePage>('/api/v1/knowledge-items?status=ready&page=1&pageSize=16'),
+      request<BackendKnowledgePage>('/api/v1/knowledge-items?status=archived&page=1&pageSize=12'),
       request<BackendTag[]>('/api/v1/tags'),
       request<BackendModelSource[]>('/api/v1/model-sources'),
       request<BackendProfile>('/api/v1/settings/profile'),
       request<BackendStorage>('/api/v1/settings/storage'),
     ]);
 
-    const inboxItems = inbox.items.map(toKnowledgeItem);
+    const inboxItems = [...inbox.items, ...processing.items, ...failed.items]
+      .sort(compareWorkflowItems)
+      .map(toKnowledgeItem);
     const libraryItems = ready.items.map(toKnowledgeItem);
     return {
       source: 'api',
@@ -324,6 +340,7 @@ export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot
       },
       inboxItems,
       libraryItems,
+      archivedItems: archived.items.map(toKnowledgeItem),
       tags: tags.map((tag) => tag.name),
       modelProviders: modelSources.map(toModelProvider),
       profile: {
@@ -428,7 +445,9 @@ export const organizeKnowledgeItems = async (includeFailed = true): Promise<Batc
   if (isPreviewOnlyMode()) {
     const previews = readPreviewItems();
     const nextPreviews = previews.map((item) => (
-      item.status === 'done' ? item : { ...item, status: 'done' as const, time: '刚刚' }
+      item.status === 'done' || item.status === 'archived'
+        ? item
+        : { ...item, status: 'done' as const, time: '刚刚' }
     ));
     writePreviewItems(nextPreviews);
     const changed = nextPreviews.filter((item, index) => item.status !== previews[index]?.status).length;
@@ -442,6 +461,54 @@ export const organizeKnowledgeItems = async (includeFailed = true): Promise<Batc
     succeeded: result.succeeded ?? result.successCount ?? 0,
     failed: result.failed ?? result.failedCount ?? 0,
   };
+};
+
+export const organizeKnowledgeItem = async (item: KnowledgeItem): Promise<KnowledgeItem> => {
+  if (isPreviewOnlyMode()) {
+    const nextItem = toPreviewReadyItem(item);
+    syncPreviewItem(nextItem);
+    return nextItem;
+  }
+
+  return toKnowledgeItem(await request<BackendKnowledgeItem>(`/api/v1/knowledge-items/${encodeURIComponent(item.id)}/organize`, 'POST'));
+};
+
+export const reprocessKnowledgeItem = async (item: KnowledgeItem): Promise<KnowledgeItem> => {
+  if (isPreviewOnlyMode()) {
+    const nextItem = toPreviewReadyItem(item);
+    syncPreviewItem(nextItem);
+    return nextItem;
+  }
+
+  return toKnowledgeItem(await request<BackendKnowledgeItem>(`/api/v1/knowledge-items/${encodeURIComponent(item.id)}/reprocess`, 'POST'));
+};
+
+export const archiveKnowledgeItem = async (item: KnowledgeItem): Promise<KnowledgeItem> => {
+  if (isPreviewOnlyMode()) {
+    const nextItem = {
+      ...item,
+      status: 'archived' as const,
+      time: '刚刚',
+    };
+    syncPreviewItem(nextItem);
+    return nextItem;
+  }
+
+  return toKnowledgeItem(await request<BackendKnowledgeItem>(`/api/v1/knowledge-items/${encodeURIComponent(item.id)}/archive`, 'POST'));
+};
+
+export const restoreKnowledgeItem = async (item: KnowledgeItem): Promise<KnowledgeItem> => {
+  if (isPreviewOnlyMode()) {
+    const nextItem = {
+      ...item,
+      status: item.summary?.trim() ? ('done' as const) : ('pending' as const),
+      time: '刚刚',
+    };
+    syncPreviewItem(nextItem);
+    return nextItem;
+  }
+
+  return toKnowledgeItem(await request<BackendKnowledgeItem>(`/api/v1/knowledge-items/${encodeURIComponent(item.id)}/restore`, 'POST'));
 };
 
 const toKnowledgeItem = (item: BackendKnowledgeItem): KnowledgeItem => ({
@@ -488,6 +555,7 @@ const toStatus = (status: string): KnowledgeStatus => {
   if (status === 'ready') return 'done';
   if (status === 'processing') return 'processing';
   if (status === 'failed') return 'failed';
+  if (status === 'archived') return 'archived';
   return 'pending';
 };
 
@@ -556,8 +624,9 @@ export const withPreviewItems = (snapshot: KnowledgeDeskSnapshot): KnowledgeDesk
   const previews = readPreviewItems();
   if (previews.length === 0) return snapshot;
 
-  const previewInbox = previews.filter((item) => item.status !== 'done');
+  const previewInbox = previews.filter((item) => item.status !== 'done' && item.status !== 'archived');
   const previewLibrary = previews.filter((item) => item.status === 'done');
+  const previewArchived = previews.filter((item) => item.status === 'archived');
   return {
     ...snapshot,
     dashboard: {
@@ -569,12 +638,14 @@ export const withPreviewItems = (snapshot: KnowledgeDeskSnapshot): KnowledgeDesk
     },
     inboxItems: [...previewInbox, ...snapshot.inboxItems],
     libraryItems: [...previewLibrary, ...snapshot.libraryItems],
+    archivedItems: [...previewArchived, ...snapshot.archivedItems],
     tags: Array.from(new Set([...snapshot.tags, ...previews.flatMap((item) => item.tags)])),
     storage: {
       ...snapshot.storage,
       totalItems: snapshot.storage.totalItems + previews.length,
       inboxItems: snapshot.storage.inboxItems + previewInbox.length,
       readyItems: snapshot.storage.readyItems + previewLibrary.length,
+      archivedItems: snapshot.storage.archivedItems + previewArchived.length,
     },
   };
 };
@@ -631,6 +702,32 @@ const isKnowledgeItemLike = (value: unknown): value is KnowledgeItem => {
     && Array.isArray(item.tags);
 };
 
+const compareWorkflowItems = (left: BackendKnowledgeItem, right: BackendKnowledgeItem) => {
+  const priorityDelta = (WORKFLOW_STATUS_PRIORITY[left.status] ?? 9) - (WORKFLOW_STATUS_PRIORITY[right.status] ?? 9);
+  if (priorityDelta !== 0) return priorityDelta;
+  return toTimestamp(right.updatedAt || right.createdAt) - toTimestamp(left.updatedAt || left.createdAt);
+};
+
+const toTimestamp = (value?: string) => {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const toPreviewReadyItem = (item: KnowledgeItem): KnowledgeItem => ({
+  ...item,
+  time: '刚刚',
+  status: 'done',
+  summary: item.summary || firstLine(item.cleanedContent || item.rawContent) || '已整理完成',
+  cleanedContent: item.cleanedContent || item.rawContent || item.summary,
+});
+
+const syncPreviewItem = (item: KnowledgeItem) => {
+  if (!item.id.startsWith('preview-')) return;
+  const current = readPreviewItems().filter((previewItem) => previewItem.id !== item.id);
+  writePreviewItems([item, ...current]);
+};
+
 export const fallbackSnapshot: KnowledgeDeskSnapshot = {
   source: 'fallback',
   dashboard: {
@@ -673,9 +770,9 @@ export const fallbackSnapshot: KnowledgeDeskSnapshot = {
       source: 'notes/pkm.md',
       type: 'markdown',
       time: '昨天',
-      summary: '围绕 DIKW、渐进式总结和卡片盒笔记法建立个人知识沉淀路径。',
+      summary: '内容已经收进收集箱，等待整理成可检索的主题摘要与标签。',
       tags: ['个人知识管理', '回顾'],
-      status: 'done',
+      status: 'pending',
     },
     {
       id: 'sample-inbox-4',
@@ -728,6 +825,28 @@ export const fallbackSnapshot: KnowledgeDeskSnapshot = {
       summary: '比较本地工具调用、审批机制、上下文注入和多代理协作差异。',
       tags: ['智能体', '工具协议'],
       status: 'done',
+    },
+  ],
+  archivedItems: [
+    {
+      id: 'sample-archived-1',
+      title: '旧版课程项目资料整理流程',
+      source: 'project-archive.md',
+      type: 'markdown',
+      time: '上周',
+      summary: '这批旧资料已经不再参与当前检索，但仍保留恢复入口。',
+      tags: ['归档', '项目流程'],
+      status: 'archived',
+    },
+    {
+      id: 'sample-archived-2',
+      title: '过期的 API 对接草稿',
+      source: 'archive-notes.pdf',
+      type: 'pdf',
+      time: '上月',
+      summary: '历史方案被替换后进入归档库，便于后续查旧决策。',
+      tags: ['归档', '接口'],
+      status: 'archived',
     },
   ],
   tags: ['RAG', 'LLM', 'Spring AI', 'Transformer', 'Milvus', '智能体', 'Java', '阅读'],
