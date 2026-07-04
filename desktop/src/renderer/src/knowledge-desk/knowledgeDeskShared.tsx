@@ -27,9 +27,20 @@ export const Panel = ({ title, icon: Icon, children }: { title: string; icon: El
   </section>
 );
 
-export const ContextBlock = ({ title, children }: { title: string; children: ReactNode }) => (
+export const ContextBlock = ({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon?: ElementType;
+  children: ReactNode;
+}) => (
   <section className="kd-context-block">
-    <h2>{title}</h2>
+    <h2>
+      {Icon ? <Icon size={15} /> : null}
+      {title}
+    </h2>
     {children}
   </section>
 );
@@ -50,10 +61,12 @@ export const TimelineItem = ({ item }: { item: KnowledgeItem }) => (
 );
 
 export const EmptyBlock = ({
+  action,
   description,
   icon: Icon,
   title,
 }: {
+  action?: { label: string; onClick: () => void };
   description: string;
   icon: ElementType;
   title: string;
@@ -62,6 +75,11 @@ export const EmptyBlock = ({
     <Icon size={18} />
     <strong>{title}</strong>
     <span>{description}</span>
+    {action ? (
+      <button className="kd-action-button kd-action-button--primary" onClick={action.onClick} type="button">
+        {action.label}
+      </button>
+    ) : null}
   </div>
 );
 

@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   FolderArchive,
   BookOpen,
@@ -6,6 +6,7 @@ import {
   Globe2,
   Inbox,
   LayoutDashboard,
+  Plus,
   RefreshCw,
   Search,
   Settings,
@@ -28,6 +29,8 @@ import {
   type KnowledgeDeskSnapshot,
   type KnowledgeItem,
 } from './knowledgeDeskApi';
+import { Button } from '../components/ui';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ArchivePage, ContextRail, ConnectionBanner, DashboardPage, DetailPage, ImportPanel, InboxPage, LibraryPage, SearchPage } from './knowledgeDeskScreens';
 import { SettingsPage } from './knowledgeDeskSettings';
 import type { MainPage, SettingsTab, ImportMode } from './knowledgeDeskTypes';
@@ -96,7 +99,7 @@ const KnowledgeDeskApp = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const refreshSnapshot = async () => {
+  const refreshSnapshot = useCallback(async () => {
     setIsLoadingSnapshot(true);
     const nextSnapshot = await loadKnowledgeDeskSnapshot();
     startTransition(() => {
@@ -105,14 +108,14 @@ const KnowledgeDeskApp = () => {
       setIsLoadingSnapshot(false);
     });
     return nextSnapshot;
-  };
+  }, []);
 
   const showNotice = (message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(null), 3200);
   };
 
-  const handleImportSubmit = async (draft: ImportKnowledgeDraft) => {
+  const handleImportSubmit = useCallback(async (draft: ImportKnowledgeDraft) => {
     setIsImporting(true);
     try {
       const item = await importKnowledgeItem(draft);
@@ -126,9 +129,9 @@ const KnowledgeDeskApp = () => {
     } finally {
       setIsImporting(false);
     }
-  };
+  }, [refreshSnapshot]);
 
-  const handleLocalFileImport = async (title?: string) => {
+  const handleLocalFileImport = useCallback(async (title?: string) => {
     setIsImporting(true);
     try {
       const item = await importLocalKnowledgeFile(title);
@@ -146,9 +149,9 @@ const KnowledgeDeskApp = () => {
     } finally {
       setIsImporting(false);
     }
-  };
+  }, [refreshSnapshot]);
 
-  const handleBrowserFileImport = async (file: File, title?: string) => {
+  const handleBrowserFileImport = useCallback(async (file: File, title?: string) => {
     setIsImporting(true);
     try {
       const item = await importBrowserKnowledgeFile(file, title);
@@ -162,9 +165,9 @@ const KnowledgeDeskApp = () => {
     } finally {
       setIsImporting(false);
     }
-  };
+  }, [refreshSnapshot]);
 
-  const handleOrganizeBatch = async () => {
+  const handleOrganizeBatch = useCallback(async () => {
     setIsOrganizing(true);
     try {
       const result = await organizeKnowledgeItems(true);
@@ -175,9 +178,9 @@ const KnowledgeDeskApp = () => {
     } finally {
       setIsOrganizing(false);
     }
-  };
+  }, [refreshSnapshot]);
 
-  const handleItemAction = async (item: KnowledgeItem, action: KnowledgeWorkflowAction) => {
+  const handleItemAction = useCallback(async (item: KnowledgeItem, action: KnowledgeWorkflowAction) => {
     setItemActionState({ itemId: item.id, action });
     try {
       const nextItem = await runItemAction(item, action);
@@ -200,15 +203,15 @@ const KnowledgeDeskApp = () => {
     } finally {
       setItemActionState(null);
     }
-  };
+  }, [snapshot, refreshSnapshot]);
 
   const currentTitle = activePage === 'settings' ? '个人中心' : pages.find((page) => page.id === activePage)?.label ?? '工作台';
   const inboxItems = snapshot.inboxItems;
   const libraryItems = snapshot.libraryItems;
   const archivedItems = snapshot.archivedItems;
-  const searchableItems = buildSearchCorpus(libraryItems, archivedItems, inboxItems);
-  const tags = snapshot.tags.length > 0 ? snapshot.tags : snapshot.dashboard.topTags.map((tag) => tag.name);
-  const detailItem = selectedItem ?? libraryItems[0] ?? inboxItems[0] ?? archivedItems[0] ?? fallbackSnapshot.libraryItems[0];
+  const searchableItems = useMemo(() => buildSearchCorpus(libraryItems, archivedItems, inboxItems), [libraryItems, archivedItems, inboxItems]);
+  const tags = useMemo(() => (snapshot.tags.length > 0 ? snapshot.tags : snapshot.dashboard.topTags.map((tag) => tag.name)), [snapshot.tags, snapshot.dashboard.topTags]);
+  const detailItem = useMemo(() => selectedItem ?? libraryItems[0] ?? inboxItems[0] ?? archivedItems[0] ?? fallbackSnapshot.libraryItems[0], [selectedItem, libraryItems, inboxItems, archivedItems]);
   const getPageBadge = (page: (typeof pages)[number]) => {
     if (page.id === 'inbox' && snapshot.inboxItems.length > 0) return String(snapshot.inboxItems.length);
     if (page.id === 'archive' && snapshot.storage.archivedItems > 0) return String(snapshot.storage.archivedItems);
@@ -220,6 +223,7 @@ const KnowledgeDeskApp = () => {
     return (
       <button
         aria-current={activePage === page.id ? 'page' : undefined}
+        aria-label={`切换到${page.label}`}
         className={`${className} ${activePage === page.id ? 'is-active' : ''}`}
         key={`${className}-${page.id}`}
         onClick={() => setActivePage(page.id)}
@@ -231,7 +235,7 @@ const KnowledgeDeskApp = () => {
       </button>
     );
   };
-  const openDetail = (item: KnowledgeItem) => {
+  const openDetail = useCallback((item: KnowledgeItem) => {
     const requestId = detailRequestRef.current + 1;
     detailRequestRef.current = requestId;
     setSelectedItem(item);
@@ -257,7 +261,7 @@ const KnowledgeDeskApp = () => {
           error: error instanceof Error ? error.message : String(error),
         });
       });
-  };
+  }, [snapshot.source]);
 
   return (
     <div className="kd-app">
@@ -276,25 +280,27 @@ const KnowledgeDeskApp = () => {
 
         <div className="kd-import-box">
           <div className="kd-import-title">快速导入</div>
-          <button className="kd-import-action" onClick={() => setImportMode('web')} type="button">
+          <button aria-label="导入网页摘录" className="kd-import-action" onClick={() => setImportMode('web')} type="button">
             <Globe2 size={16} />
             网页摘录
           </button>
-          <button className="kd-import-action" onClick={() => setImportMode('file')} type="button">
+          <button aria-label="导入本地文档" className="kd-import-action" onClick={() => setImportMode('file')} type="button">
             <Upload size={16} />
             本地文档
           </button>
-          <button className="kd-import-action" onClick={() => setImportMode('snippet')} type="button">
+          <button aria-label="粘贴文本片段" className="kd-import-action" onClick={() => setImportMode('snippet')} type="button">
             <FileText size={16} />
             粘贴内容
           </button>
         </div>
 
-        <button className="kd-user-card" onClick={() => setActivePage('settings')} type="button">
+        <button aria-label="打开个人中心" className="kd-user-card" onClick={() => setActivePage('settings')} type="button">
           <div className="kd-avatar">泽</div>
           <div className="kd-user-meta">
             <strong>{snapshot.profile.displayName}</strong>
-            <span>{snapshot.source === 'api' ? '数据库已连接' : '预览数据，未连接数据库'}</span>
+            <span className={snapshot.source === 'fallback' ? 'kd-user-meta--warning' : ''}>
+              {snapshot.source === 'api' ? '数据库已连接' : '后端连接异常，当前为预览数据'}
+            </span>
           </div>
           <Settings size={16} />
         </button>
@@ -308,6 +314,7 @@ const KnowledgeDeskApp = () => {
           </div>
           <button
             aria-keyshortcuts="Meta+K Control+K"
+            aria-label="打开全局搜索"
             className="kd-command-search"
             onClick={() => setActivePage('search')}
             type="button"
@@ -320,10 +327,15 @@ const KnowledgeDeskApp = () => {
             {pages.map((page) => renderPageNavButton(page, 'kd-mobile-nav-item'))}
           </nav>
           <div className="kd-topbar-actions">
+            <Button onClick={() => setImportMode('snippet')} variant="primary">
+              <Plus size={16} />
+              新建资料
+            </Button>
             <span className={`kd-sync-badge kd-sync-badge--${snapshot.source}`}>
               {isLoadingSnapshot ? '同步中' : snapshot.source === 'api' ? '数据库已连接' : '预览数据'}
             </span>
             <button
+              aria-label="刷新数据"
               className="kd-refresh-button"
               disabled={isLoadingSnapshot}
               onClick={() => void refreshSnapshot()}
@@ -348,59 +360,74 @@ const KnowledgeDeskApp = () => {
             ) : null}
             <section className="kd-workspace" aria-label={`${currentTitle} 主内容`}>
               {activePage === 'dashboard' ? (
-                <DashboardPage
-                  dashboard={snapshot.dashboard}
-                  inboxItems={inboxItems}
-                  isLoading={isLoadingSnapshot}
-                  libraryItems={libraryItems}
-                  onOpenImport={() => setImportMode('snippet')}
-                  onOpenDetail={openDetail}
-                  tags={tags}
-                />
+                <PageErrorBoundary label="工作台" onReset={() => setActivePage('dashboard')}>
+                  <DashboardPage
+                    dashboard={snapshot.dashboard}
+                    inboxItems={inboxItems}
+                    isLoading={isLoadingSnapshot}
+                    libraryItems={libraryItems}
+                    onOpenImport={() => setImportMode('snippet')}
+                    onOpenDetail={openDetail}
+                    tags={tags}
+                  />
+                </PageErrorBoundary>
               ) : null}
               {activePage === 'inbox' ? (
-                <InboxPage
-                  actionState={itemActionState}
-                  activeSegment={activeInboxSegment}
-                  isOrganizing={isOrganizing}
-                  items={inboxItems}
-                  onItemAction={handleItemAction}
-                  onOpenDetail={openDetail}
-                  onOrganizeBatch={handleOrganizeBatch}
-                  onSegmentChange={setActiveInboxSegment}
-                />
+                <PageErrorBoundary label="收集箱" onReset={() => setActivePage('inbox')}>
+                  <InboxPage
+                    actionState={itemActionState}
+                    activeSegment={activeInboxSegment}
+                    isLoading={isLoadingSnapshot}
+                    isOrganizing={isOrganizing}
+                    items={inboxItems}
+                    onItemAction={handleItemAction}
+                    onOpenDetail={openDetail}
+                    onOrganizeBatch={handleOrganizeBatch}
+                    onSegmentChange={setActiveInboxSegment}
+                  />
+                </PageErrorBoundary>
               ) : null}
               {activePage === 'library' ? (
-                <LibraryPage
-                  items={libraryItems}
-                  mode={libraryMode}
-                  onModeChange={setLibraryMode}
-                  onOpenDetail={openDetail}
-                  tags={tags}
-                  totalItems={snapshot.storage.readyItems}
-                />
+                <PageErrorBoundary label="知识库" onReset={() => setActivePage('library')}>
+                  <LibraryPage
+                    isLoading={isLoadingSnapshot}
+                    items={libraryItems}
+                    mode={libraryMode}
+                    onModeChange={setLibraryMode}
+                    onOpenDetail={openDetail}
+                    tags={tags}
+                    totalItems={snapshot.storage.readyItems}
+                  />
+                </PageErrorBoundary>
               ) : null}
               {activePage === 'archive' ? (
-                <ArchivePage
-                  actionState={itemActionState}
-                  items={archivedItems}
-                  onItemAction={handleItemAction}
-                  onOpenDetail={openDetail}
-                  tags={tags}
-                  totalItems={snapshot.storage.archivedItems}
-                />
+                <PageErrorBoundary label="归档库" onReset={() => setActivePage('archive')}>
+                  <ArchivePage
+                    actionState={itemActionState}
+                    isLoading={isLoadingSnapshot}
+                    items={archivedItems}
+                    onItemAction={handleItemAction}
+                    onOpenDetail={openDetail}
+                    tags={tags}
+                    totalItems={snapshot.storage.archivedItems}
+                  />
+                </PageErrorBoundary>
               ) : null}
               {activePage === 'detail' ? (
-                <DetailPage
-                  actionState={itemActionState}
-                  error={detailFetch.error}
-                  isLoading={detailFetch.isLoading}
-                  item={detailItem}
-                  onAction={handleItemAction}
-                />
+                <PageErrorBoundary label="详情" onReset={() => setActivePage('dashboard')}>
+                  <DetailPage
+                    actionState={itemActionState}
+                    error={detailFetch.error}
+                    isLoading={detailFetch.isLoading}
+                    item={detailItem}
+                    onAction={handleItemAction}
+                  />
+                </PageErrorBoundary>
               ) : null}
               {activePage === 'search' ? (
-                <SearchPage apiEnabled={snapshot.source === 'api'} searchableItems={searchableItems} onOpenDetail={openDetail} />
+                <PageErrorBoundary label="全局搜索" onReset={() => setActivePage('search')}>
+                  <SearchPage apiEnabled={snapshot.source === 'api'} searchableItems={searchableItems} onOpenDetail={openDetail} />
+                </PageErrorBoundary>
               ) : null}
             </section>
             <ContextRail activePage={activePage} selectedItem={detailItem} snapshot={snapshot} />
@@ -418,10 +445,33 @@ const KnowledgeDeskApp = () => {
           onSubmit={handleImportSubmit}
         />
       ) : null}
-      {notice ? <div className="kd-toast">{notice}</div> : null}
+      {notice ? (
+        <div className="kd-toast" role="status" aria-live="polite">
+          {notice}
+        </div>
+      ) : null}
     </div>
   );
 };
+
+const PageErrorBoundary = ({
+  children,
+  label,
+  onReset,
+}: {
+  children: ReactNode;
+  label: string;
+  onReset: () => void;
+}) => (
+  <ErrorBoundary
+    description={`${label}页面发生异常，已隔离显示，不影响其他页面。`}
+    onReset={onReset}
+    showDetails
+    title={`${label}加载失败`}
+  >
+    {children}
+  </ErrorBoundary>
+);
 
 const runItemAction = async (item: KnowledgeItem, action: KnowledgeWorkflowAction) => {
   if (action === 'organize') return organizeKnowledgeItem(item);

@@ -1,57 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
+@import "./styles/tokens.css";
 
 /* ============================================================
    Plus Jakarta Sans & JetBrains Mono Premium Fonts Integration
    ============================================================ */
-
-:root {
-  --layout-sidebar-w: 240px;
-  --layout-context-w: 290px;
-
-  /* Codex Apple-Style Minimalist Light Palette (Ultra Premium) */
-  --color-bg: #f6f8fa; /* Soft cold grey background */
-  --color-bg-secondary: #ffffff; /* Card/Panel pure white */
-  --color-bg-hover: rgba(0, 0, 0, 0.035);
-  --color-bg-active: rgba(0, 0, 0, 0.055);
-  
-  /* Micro borders */
-  --color-border: rgba(31, 35, 40, 0.08); /* GitHub light border */
-  --color-border-hover: rgba(9, 105, 218, 0.35); /* Focus blue */
-  
-  /* Text System (GitHub Core Carbon) */
-  --color-text: #1f2328;
-  --color-text-muted: #57606a;
-  --color-text-dim: #8c959f;
-
-  /* OpenAI Codex Geeky Blue */
-  --color-accent: #0969da;
-  --color-accent-dim: #0550ae;
-  --color-accent-gradient: linear-gradient(135deg, #0969da 0%, #1f85ff 100%);
-  --color-accent-glow: rgba(9, 105, 218, 0.1);
-  
-  /* Status Colors */
-  --color-error: #cf222e;
-  --color-success: #1a7f37;
-  --color-warning: #9a6700;
-  
-  /* UI Tokens */
-  --color-chip-bg: #eff1f3;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
-  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
-  
-  /* Border Radii */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  
-  /* Deluxe Soft Shadows */
-  --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.04);
-  --shadow-md: 0 3px 6px rgba(140, 149, 159, 0.12);
-  --shadow-lg: 0 8px 24px rgba(140, 149, 159, 0.15);
-  --shadow-glow: 0 0 12px rgba(9, 105, 218, 0.08);
-}
 
 /* ============================================================
    Base Setup & Reset
@@ -85,17 +38,6 @@ html, body, #root {
   background: var(--color-bg);
 }
 
-.main-layout__sidebar {
-  width: var(--layout-sidebar-w);
-  min-width: var(--layout-sidebar-w);
-  background: var(--color-bg);
-  border-right: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  z-index: 10;
-}
-
 .main-layout__chat {
   flex: 1;
   display: flex;
@@ -117,152 +59,43 @@ html, body, #root {
 }
 
 /* ============================================================
-   Sidebar Section & Lists (Threads / Sessions)
+   Sidebar empty state reused by Codex project tree
    ============================================================ */
-.sidebar-section {
-  padding: 18px 12px 10px 12px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.sidebar-section__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4px 10px 4px;
-}
-
-.sidebar-section__title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-text-muted);
-}
-
-.sidebar-section__action {
-  background: #ffffff;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: var(--shadow-sm);
-}
-.sidebar-section__action:hover {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-  box-shadow: 0 2px 6px rgba(9, 105, 218, 0.25);
-}
-
 .sidebar-section__empty {
   padding: 12px;
   font-size: 12px;
   color: var(--color-text-dim);
   text-align: center;
-  background: rgba(0, 0, 0, 0.015);
+  background: var(--black-alpha-015);
   border-radius: var(--radius-md);
   border: 1px dashed var(--color-border);
 }
 
-/* Sidebar items - Session & Threads list items */
-.sidebar-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  margin: 4px 8px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--color-text-muted);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  font-weight: 600;
-}
-.sidebar-item:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text);
-}
-.sidebar-item--active {
-  background: #ffffff;
-  color: var(--color-accent);
-  box-shadow: var(--shadow-sm), inset 0 0 0 1px rgba(9, 105, 218, 0.12);
-}
-.sidebar-item--active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  background: var(--color-accent);
-  border-radius: 0 4px 4px 0;
-}
-
-.sidebar-item__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-text-dim);
-  flex-shrink: 0;
-}
-
 /* Pulsing Status Lights */
-.sidebar-item__dot[data-status="running"],
 .thread-tab__status-dot[data-status="running"] { 
   background: var(--color-success); 
   box-shadow: 0 0 6px var(--color-success);
   animation: pulse-green 1.8s infinite;
 }
-.sidebar-item__dot[data-status="blocked"],
 .thread-tab__status-dot[data-status="blocked"] { 
   background: var(--color-warning); 
   box-shadow: 0 0 6px var(--color-warning);
   animation: pulse-warning 1.8s infinite;
 }
-.sidebar-item__dot[data-status="error"],
 .thread-tab__status-dot[data-status="error"] { 
   background: var(--color-error); 
   box-shadow: 0 0 6px var(--color-error);
 }
 
 @keyframes pulse-green {
-  0% { box-shadow: 0 0 0 0 rgba(26, 127, 55, 0.4); }
+  0% { box-shadow: 0 0 0 0 var(--success-alpha-40); }
   70% { box-shadow: 0 0 0 5px rgba(26, 127, 55, 0); }
   100% { box-shadow: 0 0 0 0 rgba(26, 127, 55, 0); }
 }
 @keyframes pulse-warning {
-  0% { box-shadow: 0 0 0 0 rgba(154, 103, 0, 0.4); }
+  0% { box-shadow: 0 0 0 0 var(--warning-alpha-40); }
   70% { box-shadow: 0 0 0 5px rgba(154, 103, 0, 0); }
   100% { box-shadow: 0 0 0 0 rgba(154, 103, 0, 0); }
-}
-
-.sidebar-item__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sidebar-item__branch {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  background: var(--color-chip-bg);
-  color: var(--color-text-muted);
-  padding: 1px 5px;
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ============================================================
@@ -292,7 +125,7 @@ html, body, #root {
 .session-list__new-btn {
   -webkit-app-region: no-drag;
   background: var(--color-accent-gradient);
-  color: #fff;
+  color: var(--text-inverse);
   border: none;
   border-radius: 6px;
   width: 24px;
@@ -303,11 +136,11 @@ html, body, #root {
   align-items: center;
   justify-content: center;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 6px rgba(9, 105, 218, 0.2);
+  box-shadow: 0 2px 6px var(--accent-alpha-20);
 }
 .session-list__new-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(9, 105, 218, 0.35);
+  box-shadow: 0 4px 10px var(--accent-alpha-35);
 }
 .session-list__new-btn:active {
   transform: translateY(1px);
@@ -342,7 +175,7 @@ html, body, #root {
   background: var(--color-bg-hover);
 }
 .session-list__item--active {
-  background: #ffffff;
+  background: var(--surface-card);
   border-color: var(--color-border);
   box-shadow: var(--shadow-sm);
   color: var(--color-accent);
@@ -367,7 +200,7 @@ html, body, #root {
 
 .session-list__item-branch {
   font-family: var(--font-mono);
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--black-alpha-03);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -387,39 +220,12 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--surface-card-alpha-90);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--color-border);
   z-index: 5;
   -webkit-app-region: drag;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-
-.chat-area__header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.chat-area__title {
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--color-text);
-  -webkit-app-region: no-drag;
-}
-
-.chat-area__file-badge {
-  background: rgba(9, 105, 218, 0.08);
-  border: 1px solid rgba(9, 105, 218, 0.2);
-  padding: 3px 8px;
-  border-radius: 99px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-accent-dim);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  -webkit-app-region: no-drag;
+  box-shadow: 0 1px 2px var(--black-alpha-02);
 }
 
 .chat-area__header-controls {
@@ -429,20 +235,6 @@ html, body, #root {
   -webkit-app-region: no-drag;
 }
 
-.header-control-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.header-control-label {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  letter-spacing: 0.02em;
-}
-
 .header-control-select {
   appearance: none;
   -webkit-appearance: none;
@@ -450,7 +242,7 @@ html, body, #root {
   background-repeat: no-repeat;
   background-position: right 8px center;
   background-size: 12px;
-  background-color: #ffffff;
+  background-color: var(--surface-card);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 4px 28px 4px 10px; /* Right padding reserved for SVG arrow */
@@ -468,7 +260,7 @@ html, body, #root {
 }
 .header-control-select:focus {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
+  box-shadow: 0 0 0 2px var(--accent-alpha-15);
 }
 
 /* Message flow layout (Minimalist Block Style) */
@@ -478,32 +270,7 @@ html, body, #root {
   padding: 0;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-}
-
-.chat-area__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--color-text-muted);
-  text-align: center;
-  gap: 12px;
-  padding: 40px;
-}
-.chat-area__empty p {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-text);
-}
-.chat-area__empty-hint { 
-  font-size: 12px;
-  color: var(--color-text-muted) !important;
-  background: var(--color-bg);
-  padding: 6px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
+  background: var(--surface-card);
 }
 
 /* OpenAI/Vercel-style Message Blocks (Wide, highly legible) */
@@ -542,7 +309,7 @@ html, body, #root {
 
 /* User Message: subtle light-blue background */
 .chat-msg--user {
-  background: #f8fafd; /* Clean light blue-grey */
+  background: var(--surface-accent-subtle);
   align-self: stretch;
 }
 .chat-msg--user .chat-msg__role {
@@ -551,11 +318,11 @@ html, body, #root {
 
 /* Agent Message: pure clean white background */
 .chat-msg--agent {
-  background: #ffffff;
+  background: var(--surface-card);
   align-self: stretch;
 }
 .chat-msg--agent .chat-msg__role {
-  color: #111827;
+  color: var(--text-heading);
 }
 
 /* System Message Style */
@@ -572,22 +339,22 @@ html, body, #root {
 
 /* Error Message Style */
 .chat-msg--error {
-  background: rgba(207, 34, 46, 0.03);
+  background: var(--error-alpha-3);
   color: var(--color-error);
-  border-bottom: 1px solid rgba(207, 34, 46, 0.08);
+  border-bottom: 1px solid var(--error-alpha-8);
   align-self: stretch;
   padding: 16px 32px;
 }
 
 /* Code block markdown rendering inside agent responses */
 .chat-msg__content pre {
-  background: #1b1f26 !important; /* GitHub dark code theme */
+  background: var(--surface-code) !important; /* GitHub dark code theme */
   border-radius: var(--radius-md) !important;
-  border: 1px solid rgba(0,0,0,0.15);
+  border: 1px solid var(--black-alpha-15);
   padding: 14px 18px !important;
   margin: 12px 0;
   overflow-x: auto;
-  box-shadow: inset 0 2px 8px rgba(0,0,0,0.15);
+  box-shadow: inset 0 2px 8px var(--black-alpha-15);
 }
 .chat-msg__content code {
   font-family: var(--font-mono);
@@ -602,7 +369,7 @@ html, body, #root {
   height: 250px;
   display: flex;
   flex-direction: column;
-  background: #0f141c; /* Elegant deep space code terminal */
+  background: var(--surface-terminal); /* Elegant deep space code terminal */
   z-index: 4;
 }
 
@@ -613,9 +380,9 @@ html, body, #root {
   padding: 10px 18px;
   font-size: 11px;
   font-weight: 700;
-  color: #8b949e;
-  background: #151b24;
-  border-bottom: 1px solid #232e3c;
+  color: var(--text-terminal);
+  background: var(--surface-terminal-header);
+  border-bottom: 1px solid var(--border-terminal);
   text-transform: uppercase;
 }
 
@@ -623,7 +390,7 @@ html, body, #root {
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  color: #8b949e;
+  color: var(--text-terminal);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -634,7 +401,7 @@ html, body, #root {
   margin-left: auto;
   background: transparent;
   border: none;
-  color: #8b949e;
+  color: var(--text-terminal);
   cursor: pointer;
   font-size: 12px;
   display: flex;
@@ -646,7 +413,7 @@ html, body, #root {
   transition: all 0.2s;
 }
 .chat-area__terminal-close:hover { 
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-card-alpha-8);
   color: var(--color-error); 
 }
 
@@ -664,122 +431,6 @@ html, body, #root {
 }
 
 /* ============================================================
-   Floating-style Chat Input Area
-   ============================================================ */
-.chat-area__input-wrapper {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 18px 24px;
-  border-top: 1px solid var(--color-border);
-  background: #ffffff;
-  z-index: 5;
-}
-
-/* Terminal Toggle Button */
-.chat-area__terminal-btn {
-  background: #ffffff;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-  font-size: 15px;
-  width: 38px;
-  height: 38px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: var(--shadow-sm);
-}
-.chat-area__terminal-btn:hover { 
-  border-color: var(--color-accent); 
-  color: var(--color-accent);
-  background: rgba(9, 105, 218, 0.04);
-}
-.chat-area__terminal-btn.active { 
-  background: var(--color-accent-gradient); 
-  color: #fff; 
-  border-color: var(--color-accent-dim);
-  box-shadow: 0 2px 8px rgba(9, 105, 218, 0.3);
-}
-
-/* Input Area Textarea */
-.chat-area__textarea {
-  flex: 1;
-  resize: none;
-  background: #f6f8fa;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 10px 16px;
-  color: var(--color-text);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.55;
-  outline: none;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.chat-area__textarea:focus { 
-  border-color: var(--color-accent);
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
-}
-.chat-area__textarea::placeholder { 
-  color: var(--color-text-dim); 
-}
-
-/* Send & Plan Action Buttons */
-.chat-area__send-btn {
-  background: var(--color-accent-gradient);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-lg);
-  width: 38px;
-  height: 38px;
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 6px rgba(9, 105, 218, 0.2);
-}
-.chat-area__send-btn:hover:not(:disabled) { 
-  transform: translateY(-0.5px);
-  box-shadow: 0 4px 12px rgba(9, 105, 218, 0.35);
-}
-.chat-area__send-btn:active:not(:disabled) {
-  transform: translateY(0.5px);
-}
-.chat-area__send-btn:disabled { 
-  opacity: 0.35; 
-  cursor: not-allowed; 
-  box-shadow: none;
-}
-
-.chat-area__plan-btn {
-  background: rgba(9, 105, 218, 0.05);
-  color: var(--color-accent);
-  border: 1px solid rgba(9, 105, 218, 0.2);
-  border-radius: var(--radius-lg);
-  min-width: 64px;
-  height: 38px;
-  padding: 0 14px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.chat-area__plan-btn:hover:not(:disabled) {
-  background: rgba(9, 105, 218, 0.1);
-  border-color: var(--color-accent);
-}
-.chat-area__plan-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-/* ============================================================
    Plan Approval Dialog / Backdrop
    ============================================================ */
 .plan-approval {
@@ -794,7 +445,7 @@ html, body, #root {
 .plan-approval__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--surface-overlay);
   backdrop-filter: blur(4px);
 }
 
@@ -803,7 +454,7 @@ html, body, #root {
   width: min(680px, calc(100vw - 40px));
   max-height: calc(100vh - 80px);
   overflow: auto;
-  background: #ffffff;
+  background: var(--surface-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-lg);
@@ -815,7 +466,7 @@ html, body, #root {
   align-items: center;
   padding: 4px 12px;
   border-radius: 99px;
-  background: rgba(9, 105, 218, 0.08);
+  background: var(--accent-alpha-8);
   color: var(--color-accent-dim);
   font-size: 11px;
   font-weight: 700;
@@ -889,7 +540,7 @@ html, body, #root {
 }
 
 .plan-approval__btn--ghost {
-  background: #ffffff;
+  background: var(--surface-card);
   color: var(--color-text-muted);
   border: 1px solid var(--color-border);
 }
@@ -900,11 +551,11 @@ html, body, #root {
 
 .plan-approval__btn--primary {
   background: var(--color-accent-gradient);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(9, 105, 218, 0.25);
+  color: var(--text-inverse);
+  box-shadow: 0 2px 8px var(--accent-alpha-25);
 }
 .plan-approval__btn--primary:hover {
-  box-shadow: 0 4px 12px rgba(9, 105, 218, 0.4);
+  box-shadow: 0 4px 12px var(--accent-alpha-40);
   transform: translateY(-0.5px);
 }
 
@@ -923,7 +574,7 @@ html, body, #root {
 }
 .main-layout__resize-handle:hover,
 .main-layout__resize-handle.active {
-  background: rgba(9, 105, 218, 0.4);
+  background: var(--accent-alpha-40);
   width: 4px;
 }
 
@@ -980,7 +631,7 @@ html, body, #root {
 }
 
 .context-panel__workspace-btn {
-  background: #ffffff;
+  background: var(--surface-card);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -994,7 +645,7 @@ html, body, #root {
 }
 .context-panel__workspace-btn:hover { 
   background: var(--color-bg-hover);
-  border-color: rgba(9, 105, 218, 0.15);
+  border-color: var(--accent-alpha-15);
 }
 
 .context-panel__tree-header {
@@ -1073,8 +724,8 @@ html, body, #root {
 }
 .file-tree__file--selected { 
   color: var(--color-accent); 
-  background: rgba(9, 105, 218, 0.06); 
-  box-shadow: inset 0 0 0 1px rgba(9, 105, 218, 0.12);
+  background: var(--accent-alpha-6); 
+  box-shadow: inset 0 0 0 1px var(--accent-alpha-12);
 }
 .file-tree__file-check { 
   font-size: 11px; 
@@ -1095,15 +746,15 @@ html, body, #root {
   gap: 6px;
   max-height: 100px;
   overflow-y: auto;
-  background: #ffffff;
+  background: var(--surface-card);
 }
 
 .context-panel__chip {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(9, 105, 218, 0.05);
-  border: 1px solid rgba(9, 105, 218, 0.15);
+  background: var(--accent-alpha-5);
+  border: 1px solid var(--accent-alpha-15);
   padding: 3px 8px;
   border-radius: 6px;
   font-size: 11px;
@@ -1113,8 +764,8 @@ html, body, #root {
   font-weight: 600;
 }
 .context-panel__chip:hover { 
-  background: rgba(9, 105, 218, 0.1);
-  border-color: rgba(9, 105, 218, 0.3);
+  background: var(--accent-alpha-10);
+  border-color: var(--accent-alpha-30);
 }
 .context-panel__chip-remove { 
   font-size: 13px; 
@@ -1133,11 +784,11 @@ html, body, #root {
   background: transparent; 
 }
 ::-webkit-scrollbar-thumb { 
-  background: rgba(0, 0, 0, 0.12); 
+  background: var(--black-alpha-12); 
   border-radius: 99px; 
 }
 ::-webkit-scrollbar-thumb:hover { 
-  background: rgba(0, 0, 0, 0.25); 
+  background: var(--black-alpha-25); 
 }
 
 /* ============================================================
@@ -1176,7 +827,7 @@ html, body, #root {
 }
 .thread-tabs__toggle.active { 
   color: var(--color-accent);
-  background: #ffffff;
+  background: var(--surface-card);
 }
 
 .thread-tabs__list {
@@ -1220,7 +871,7 @@ html, body, #root {
   color: var(--color-text); 
 }
 .thread-tab--active {
-  background: #ffffff;
+  background: var(--surface-card);
   color: var(--color-accent);
 }
 .thread-tab--active::after {
@@ -1250,7 +901,7 @@ html, body, #root {
 .thread-tab__branch {
   font-size: 9px;
   font-family: var(--font-mono);
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--black-alpha-03);
   color: var(--color-text-muted);
   padding: 1px 5px;
   border-radius: 4px;
@@ -1278,7 +929,7 @@ html, body, #root {
   opacity: 1; 
 }
 .thread-tab__close:hover { 
-  background: rgba(0, 0, 0, 0.05); 
+  background: var(--black-alpha-05); 
   color: var(--color-error); 
 }
 
@@ -1325,12 +976,12 @@ html, body, #root {
 }
 .context-tab-btn:hover:not(:disabled) {
   color: var(--color-text);
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--black-alpha-02);
 }
 .context-tab-btn.active {
   color: var(--color-accent);
   border-bottom-color: var(--color-accent);
-  background: #ffffff;
+  background: var(--surface-card);
 }
 .context-tab-btn:disabled {
   opacity: 0.4;
@@ -1344,7 +995,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #0f141c; 
+  background: var(--surface-terminal); 
 }
 
 .gitdiff-header {
@@ -1352,9 +1003,9 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  background: #151b24;
-  border-bottom: 1px solid #232e3c;
-  color: #8b949e;
+  background: var(--surface-terminal-header);
+  border-bottom: 1px solid var(--border-terminal);
+  color: var(--text-terminal);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1364,13 +1015,13 @@ html, body, #root {
 .gitdiff-refresh-btn {
   background: transparent;
   border: none;
-  color: #8b949e;
+  color: var(--text-terminal);
   font-size: 14px;
   cursor: pointer;
   transition: color 0.2s;
 }
 .gitdiff-refresh-btn:hover {
-  color: #ffffff;
+  color: var(--text-inverse);
 }
 
 .gitdiff-content {
@@ -1380,7 +1031,7 @@ html, body, #root {
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.5;
-  color: #c9d1d9;
+  color: var(--text-on-dark);
   overflow: auto;
   white-space: pre;
 }
@@ -1394,7 +1045,7 @@ html, body, #root {
   height: 100%;
   padding: 18px;
   overflow-y: auto;
-  background: #ffffff;
+  background: var(--surface-card);
 }
 
 .params-header {
@@ -1453,7 +1104,7 @@ html, body, #root {
   border-radius: 50%;
   background: var(--color-accent);
   transition: transform 0.15s, background-color 0.15s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  box-shadow: 0 1px 3px var(--black-alpha-15);
 }
 .param-slider::-webkit-slider-thumb:hover {
   transform: scale(1.25);
@@ -1475,9 +1126,9 @@ html, body, #root {
   transition: all 0.2s;
 }
 .param-textarea:focus {
-  background: #ffffff;
+  background: var(--surface-card);
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.12);
+  box-shadow: 0 0 0 3px var(--accent-alpha-12);
 }
 
 /* ============================================================
@@ -1489,10 +1140,10 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: rgba(246, 248, 250, 0.78);
+  background: var(--surface-page-alpha-78);
   backdrop-filter: blur(24px) saturate(110%);
   -webkit-backdrop-filter: blur(24px) saturate(110%);
-  border-right: 1px solid rgba(0, 0, 0, 0.055);
+  border-right: 1px solid var(--black-alpha-055);
 }
 
 .codex-sidebar__header {
@@ -1514,9 +1165,9 @@ html, body, #root {
   height: 12px;
   border-radius: 50%;
 }
-.codex-sidebar__window-dot.close { background: #ff5f56; }
-.codex-sidebar__window-dot.minimize { background: #ffbd2e; }
-.codex-sidebar__window-dot.maximize { background: #27c93f; }
+.codex-sidebar__window-dot.close { background: var(--traffic-close); }
+.codex-sidebar__window-dot.minimize { background: var(--traffic-minimize); }
+.codex-sidebar__window-dot.maximize { background: var(--traffic-maximize); }
 
 .codex-sidebar__quick-actions {
   display: flex;
@@ -1530,17 +1181,17 @@ html, body, #root {
   gap: 10px;
   padding: 8px 12px;
   border-radius: 8px;
-  color: #1f2328;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s, color 0.15s;
 }
 .codex-sidebar__nav-item:hover {
-  background-color: rgba(0, 0, 0, 0.035);
+  background-color: var(--black-alpha-035);
 }
 .codex-sidebar__nav-item.active {
-  background-color: rgba(0, 0, 0, 0.055);
+  background-color: var(--black-alpha-055);
   font-weight: 600;
 }
 
@@ -1548,7 +1199,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #57606a;
+  color: var(--text-secondary);
 }
 
 .codex-sidebar__project-tree {
@@ -1564,7 +1215,7 @@ html, body, #root {
   padding: 0 12px 6px 12px;
   font-size: 11px;
   font-weight: 700;
-  color: #8c959f;
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -1583,21 +1234,21 @@ html, body, #root {
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
-  color: #1f2328;
+  color: var(--text-primary);
   cursor: pointer;
   border-radius: 8px;
   transition: background-color 0.15s;
 }
 .codex-project-node__header:hover {
-  background-color: rgba(0, 0, 0, 0.035);
+  background-color: var(--black-alpha-035);
 }
 .codex-project-node__header.active {
-  color: #0969da;
+  color: var(--accent);
 }
 
 .codex-project-node__arrow {
   font-size: 10px;
-  color: #8c959f;
+  color: var(--text-tertiary);
   transition: transform 0.2s;
 }
 .codex-project-node__arrow.open {
@@ -1607,7 +1258,7 @@ html, body, #root {
 .codex-project-node__sessions {
   margin-left: 16px;
   padding-left: 8px;
-  border-left: 1px solid rgba(0, 0, 0, 0.04);
+  border-left: 1px solid var(--black-alpha-04);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1622,19 +1273,19 @@ html, body, #root {
   border-radius: 6px;
   font-size: 12.5px;
   font-weight: 500;
-  color: #57606a;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: background-color 0.15s, color 0.15s;
 }
 .codex-session-item:hover {
-  background-color: rgba(0, 0, 0, 0.03);
-  color: #1f2328;
+  background-color: var(--black-alpha-03);
+  color: var(--text-primary);
 }
 .codex-session-item.active {
-  background-color: #ffffff;
-  color: #1f2328;
+  background-color: var(--surface-card);
+  color: var(--text-primary);
   font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), inset 0 0 0 1px rgba(9, 105, 218, 0.08);
+  box-shadow: 0 1px 3px var(--black-alpha-04), inset 0 0 0 1px var(--accent-alpha-8);
 }
 
 .codex-session-item__title {
@@ -1646,17 +1297,17 @@ html, body, #root {
 
 .codex-session-item__time {
   font-size: 10px;
-  color: #8c959f;
+  color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
 .codex-sidebar__footer {
   padding: 12px 16px;
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  border-top: 1px solid var(--black-alpha-05);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(246, 248, 250, 0.4);
+  background: var(--surface-page-alpha-40);
 }
 
 .codex-sidebar__setting-btn {
@@ -1665,14 +1316,14 @@ html, body, #root {
   gap: 8px;
   font-size: 13px;
   font-weight: 500;
-  color: #1f2328;
+  color: var(--text-primary);
   cursor: pointer;
   padding: 6px 10px;
   border-radius: 6px;
   transition: background-color 0.15s;
 }
 .codex-sidebar__setting-btn:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+  background-color: var(--black-alpha-04);
 }
 
 /* 2. Codex Chat Workspace & Welcome Screen */
@@ -1682,7 +1333,7 @@ html, body, #root {
   flex-direction: column;
   height: 100%;
   position: relative;
-  background-color: #ffffff;
+  background-color: var(--surface-card);
 }
 
 .codex-welcome-screen {
@@ -1699,7 +1350,7 @@ html, body, #root {
 .codex-welcome-title {
   font-size: 26px;
   font-weight: 550;
-  color: #111111;
+  color: var(--text-heading);
   margin-bottom: 30px;
   letter-spacing: -0.02em;
 }
@@ -1718,22 +1369,22 @@ html, body, #root {
 
 .codex-input-panel {
   width: 100%;
-  background: #ffffff;
+  background: var(--surface-card);
   border-radius: 20px;
-  border: 1px solid rgba(0, 0, 0, 0.055);
+  border: 1px solid var(--black-alpha-055);
   box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.015),
-    0 8px 24px rgba(0, 0, 0, 0.035);
+    0 1px 2px var(--black-alpha-015),
+    0 8px 24px var(--black-alpha-035);
   padding: 12px 16px 8px 16px;
   display: flex;
   flex-direction: column;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .codex-input-panel:focus-within {
-  border-color: rgba(9, 105, 218, 0.25);
+  border-color: var(--accent-alpha-25);
   box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.02),
-    0 12px 36px rgba(0, 0, 0, 0.065);
+    0 1px 2px var(--black-alpha-02),
+    0 12px 36px var(--black-alpha-065);
 }
 
 .codex-input-panel__textarea {
@@ -1744,20 +1395,20 @@ html, body, #root {
   resize: none;
   font-size: 14.5px;
   line-height: 1.5;
-  color: #111111;
+  color: var(--text-heading);
   background: transparent;
   padding: 0;
   margin-bottom: 8px;
 }
 .codex-input-panel__textarea::placeholder {
-  color: #8c959f;
+  color: var(--text-tertiary);
 }
 
 .codex-input-panel__toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid rgba(0, 0, 0, 0.025);
+  border-top: 1px solid var(--black-alpha-025);
   padding-top: 8px;
   margin-top: 4px;
 }
@@ -1775,54 +1426,54 @@ html, body, #root {
   gap: 4px;
   padding: 4px 10px;
   border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.045);
-  background: rgba(0, 0, 0, 0.015);
+  border: 1px solid var(--black-alpha-045);
+  background: var(--black-alpha-015);
   font-size: 11.5px;
   font-weight: 550;
-  color: #57606a;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s;
 }
 .codex-pill-btn:hover {
-  background: rgba(0, 0, 0, 0.035);
-  color: #1f2328;
+  background: var(--black-alpha-035);
+  color: var(--text-primary);
 }
 .codex-pill-btn.danger {
-  color: #cf222e;
-  border-color: rgba(207, 34, 46, 0.15);
-  background: rgba(207, 34, 46, 0.03);
+  color: var(--error);
+  border-color: var(--error-alpha-15);
+  background: var(--error-alpha-3);
 }
 .codex-pill-btn.success {
-  color: #1a7f37;
-  border-color: rgba(26, 127, 55, 0.15);
-  background: rgba(26, 127, 55, 0.03);
+  color: var(--success);
+  border-color: var(--success-alpha-15);
+  background: var(--success-alpha-3);
 }
 
 .codex-input-panel__add-btn {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.045);
-  background: rgba(0, 0, 0, 0.015);
+  border: 1px solid var(--black-alpha-045);
+  background: var(--black-alpha-015);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #57606a;
+  color: var(--text-secondary);
   font-size: 16px;
   cursor: pointer;
   transition: all 0.15s;
 }
 .codex-input-panel__add-btn:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: #1f2328;
+  background: var(--black-alpha-04);
+  color: var(--text-primary);
 }
 
 .codex-input-panel__send-btn {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background-color: #2f363d;
-  color: #ffffff;
+  background-color: var(--surface-inverse);
+  color: var(--text-inverse);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1832,22 +1483,22 @@ html, body, #root {
   font-weight: bold;
 }
 .codex-input-panel__send-btn:hover:not(:disabled) {
-  background-color: #1f2328;
+  background-color: var(--text-primary);
   transform: scale(1.05);
 }
 .codex-input-panel__send-btn:active:not(:disabled) {
   transform: scale(0.95);
 }
 .codex-input-panel__send-btn:disabled {
-  background-color: #e1e4e6;
-  color: #959da5;
+  background-color: var(--surface-disabled);
+  color: var(--text-disabled);
   cursor: not-allowed;
 }
 
 .codex-path-hanger {
   margin-top: 10px;
-  background: rgba(246, 248, 250, 0.85);
-  border: 1px solid rgba(0, 0, 0, 0.045);
+  background: var(--surface-page-alpha-85);
+  border: 1px solid var(--black-alpha-045);
   border-radius: 12px;
   padding: 5px 12px;
   display: flex;
@@ -1855,14 +1506,14 @@ html, body, #root {
   gap: 6px;
   font-size: 11px;
   font-weight: 550;
-  color: #57606a;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s;
   user-select: none;
 }
 .codex-path-hanger:hover {
-  background: rgba(246, 248, 250, 1);
-  color: #1f2328;
+  background: var(--surface-page);
+  color: var(--text-primary);
 }
 
 /* 4. Codex Quick Suggestions */
@@ -1880,26 +1531,26 @@ html, body, #root {
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.035);
+  background: var(--surface-card);
+  border: 1px solid var(--black-alpha-035);
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.15s;
 }
 .codex-suggestion-item:hover {
-  background: rgba(0, 0, 0, 0.015);
-  border-color: rgba(0, 0, 0, 0.065);
+  background: var(--black-alpha-015);
+  border-color: var(--black-alpha-065);
 }
 
 .codex-suggestion-item__icon {
-  color: #57606a;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
 }
 
 .codex-suggestion-item__text {
   font-size: 12.5px;
-  color: #24292f;
+  color: var(--text-primary);
   font-weight: 500;
   text-align: left;
 }
@@ -1910,13 +1561,23 @@ html, body, #root {
 }
 
 /* ============================================================
+   Accessibility: visible focus indicator fallback
+   Uses :where() so component-level focus rings (e.g. Tailwind
+   focus:ring-* / focus:outline-none) keep higher specificity.
+   ============================================================ */
+:where(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ============================================================
    Settings Overlay Blur & Animation (Premium Apple Style)
    ============================================================ */
 .settings-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--surface-backdrop);
   backdrop-filter: blur(28px) saturate(210%);
   animation: settingsFadeIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -1930,5 +1591,117 @@ html, body, #root {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+/* ============================================================
+   Splash Screen
+   ============================================================ */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-page);
+  animation: splashFadeIn 0.35s ease-out;
+}
+
+.splash-screen--ready {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+.splash-screen__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px;
+  border-radius: var(--radius-xl);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-lg);
+  min-width: 280px;
+}
+
+.splash-screen__logo {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  border-radius: var(--radius-lg);
+  background: var(--accent-alpha-8);
+}
+
+.splash-screen__title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--text-heading);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.splash-screen__version {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  margin: 0;
+}
+
+.splash-screen__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.splash-screen__spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes splashFadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   macOS Traffic Light & Drag Region Adjustments
+   ============================================================ */
+.kd-sidebar {
+  padding-top: 44px;
+  -webkit-app-region: drag;
+}
+
+.kd-sidebar button,
+.kd-sidebar input,
+.kd-sidebar .kd-nav-item,
+.kd-sidebar .kd-import-action,
+.kd-sidebar .kd-user-card,
+.kd-sidebar .kd-command-search,
+.kd-sidebar .kd-mobile-nav-item {
+  -webkit-app-region: no-drag;
+}
+
+.kd-topbar {
+  -webkit-app-region: drag;
+}
+
+.kd-topbar button,
+.kd-topbar .kd-command-search,
+.kd-topbar .kd-refresh-button,
+.kd-topbar .kd-mobile-nav,
+.kd-topbar .kd-topbar-actions {
+  -webkit-app-region: no-drag;
 }
 

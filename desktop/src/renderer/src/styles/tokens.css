@@ -1,0 +1,466 @@
+:root {
+  /* ============================================================
+     Global Design Tokens
+     Neutral-first light theme for the AI Agent desktop app.
+     Tailwind 4 / Vite compatible: reference these via var(--*)
+     or register them in tailwind.config / @theme.
+     ============================================================ */
+
+  /* Layout */
+  --layout-sidebar-w: 240px;
+  --layout-context-w: 290px;
+
+  /* Fonts */
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+
+  /* Surfaces (backgrounds) */
+  --surface-page: #f6f8fa;
+  --surface-card: #ffffff;
+  --surface-page-alpha-40: rgba(246, 248, 250, 0.4);
+  --surface-page-alpha-78: rgba(246, 248, 250, 0.78);
+  --surface-page-alpha-85: rgba(246, 248, 250, 0.85);
+  --surface-card-alpha-8: rgba(255, 255, 255, 0.08);
+  --surface-card-alpha-90: rgba(255, 255, 255, 0.9);
+  --surface-secondary: #f6f8fa;
+  --surface-tertiary: #eff1f3;
+  --surface-accent-subtle: #f8fafd;
+  --surface-hover: rgba(0, 0, 0, 0.035);
+  --surface-active: rgba(0, 0, 0, 0.055);
+  --surface-disabled: #e1e4e6;
+  --surface-backdrop: rgba(255, 255, 255, 0.7);
+  --surface-overlay: rgba(0, 0, 0, 0.4);
+  --surface-inverse: #1f2328;
+  --surface-code: #1b1f26;
+  --surface-terminal: #0f141c;
+  --surface-terminal-header: #151b24;
+
+  /* Text */
+  --text-primary: #1f2328;
+  --text-secondary: #57606a;
+  --text-tertiary: #8c959f;
+  --text-disabled: #959da5;
+  --text-heading: #111111;
+  --text-inverse: #ffffff;
+  --text-on-dark: #c9d1d9;
+  --text-terminal: #8b949e;
+
+  /* Borders / dividers */
+  --border-default: rgba(31, 35, 40, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.055);
+  --border-hover: rgba(9, 105, 218, 0.35);
+  --border-accent: rgba(9, 105, 218, 0.15);
+  --border-error: rgba(207, 34, 46, 0.15);
+  --border-warning: rgba(227, 98, 9, 0.15);
+  --border-success: rgba(26, 127, 55, 0.15);
+  --border-terminal: #232e3c;
+
+  /* Accent (primary brand / action blue) */
+  --accent: #0969da;
+  --accent-hover: #0550ae;
+  --accent-light: #1f85ff;
+  --accent-gradient: linear-gradient(135deg, #0969da 0%, #1f85ff 100%);
+
+  --accent-alpha-4: rgba(9, 105, 218, 0.04);
+  --accent-alpha-5: rgba(9, 105, 218, 0.05);
+  --accent-alpha-6: rgba(9, 105, 218, 0.06);
+  --accent-alpha-8: rgba(9, 105, 218, 0.08);
+  --accent-alpha-10: rgba(9, 105, 218, 0.10);
+  --accent-alpha-12: rgba(9, 105, 218, 0.12);
+  --accent-alpha-15: rgba(9, 105, 218, 0.15);
+  --accent-alpha-20: rgba(9, 105, 218, 0.20);
+  --accent-alpha-25: rgba(9, 105, 218, 0.25);
+  --accent-alpha-30: rgba(9, 105, 218, 0.30);
+  --accent-alpha-35: rgba(9, 105, 218, 0.35);
+  --accent-alpha-40: rgba(9, 105, 218, 0.40);
+  --accent-glow: 0 0 12px rgba(9, 105, 218, 0.08);
+
+  /* Status colors */
+  --success: #1a7f37;
+  --success-alpha-3: rgba(26, 127, 55, 0.03);
+  --success-alpha-8: rgba(26, 127, 55, 0.08);
+  --success-alpha-15: rgba(26, 127, 55, 0.15);
+  --success-alpha-20: rgba(26, 127, 55, 0.20);
+  --success-alpha-40: rgba(26, 127, 55, 0.40);
+
+  --warning: #9a6700;
+  --warning-alpha-5: rgba(154, 103, 0, 0.05);
+  --warning-alpha-15: rgba(154, 103, 0, 0.15);
+  --warning-alpha-40: rgba(154, 103, 0, 0.40);
+
+  --error: #cf222e;
+  --error-alpha-3: rgba(207, 34, 46, 0.03);
+  --error-alpha-8: rgba(207, 34, 46, 0.08);
+  --error-alpha-15: rgba(207, 34, 46, 0.15);
+  --error-alpha-20: rgba(207, 34, 46, 0.20);
+
+  --info: #0969da; /* alias to accent */
+
+  /* Misc status (renamed files / skills) */
+  --status-renamed: #a855f7;
+  --status-renamed-alpha-10: rgba(168, 85, 247, 0.10);
+  --status-renamed-alpha-20: rgba(168, 85, 247, 0.20);
+
+  /* Window traffic lights (macOS) */
+  --traffic-close: #ff5f56;
+  --traffic-minimize: #ffbd2e;
+  --traffic-maximize: #27c93f;
+
+  /* Border radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.04);
+  --shadow-md: 0 3px 6px rgba(140, 149, 159, 0.12);
+  --shadow-lg: 0 8px 24px rgba(140, 149, 159, 0.15);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+  --shadow-accent-sm: 0 2px 6px rgba(9, 105, 218, 0.20);
+  --shadow-accent-md: 0 2px 8px rgba(9, 105, 218, 0.25);
+  --shadow-accent-lg: 0 4px 10px rgba(9, 105, 218, 0.35);
+  --shadow-accent-xl: 0 4px 12px rgba(9, 105, 218, 0.40);
+
+  /* Neutral alpha scale (subtle overlays, hover states) */
+  --black-alpha-015: rgba(0, 0, 0, 0.015);
+  --black-alpha-02: rgba(0, 0, 0, 0.02);
+  --black-alpha-025: rgba(0, 0, 0, 0.025);
+  --black-alpha-03: rgba(0, 0, 0, 0.03);
+  --black-alpha-035: rgba(0, 0, 0, 0.035);
+  --black-alpha-04: rgba(0, 0, 0, 0.04);
+  --black-alpha-045: rgba(0, 0, 0, 0.045);
+  --black-alpha-05: rgba(0, 0, 0, 0.05);
+  --black-alpha-055: rgba(0, 0, 0, 0.055);
+  --black-alpha-065: rgba(0, 0, 0, 0.065);
+  --black-alpha-08: rgba(0, 0, 0, 0.08);
+  --black-alpha-12: rgba(0, 0, 0, 0.12);
+  --black-alpha-15: rgba(0, 0, 0, 0.15);
+  --black-alpha-25: rgba(0, 0, 0, 0.25);
+
+  /* Spacing scale (matches Tailwind default 4px base) */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Typography scale */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+
+  /* Legacy aliases (kept for backwards compatibility in existing components) */
+  --color-bg: var(--surface-page);
+  --color-bg-secondary: var(--surface-card);
+  --color-bg-hover: var(--surface-hover);
+  --color-bg-active: var(--surface-active);
+  --color-border: var(--border-default);
+  --color-border-hover: var(--border-hover);
+  --color-text: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+  --color-text-dim: var(--text-tertiary);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-hover);
+  --color-accent-gradient: var(--accent-gradient);
+  --color-accent-glow: var(--accent-glow);
+  --color-error: var(--error);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-chip-bg: var(--surface-tertiary);
+
+  /* Z-index scale for overlays */
+  --z-dropdown: 6000;
+  --z-tooltip: 7000;
+  --z-dialog: 8000;
+  --z-toast: 9000;
+}
+
+body {
+  /* Default light-mode surface / text applied to the document body.
+     index.css overrides these with the same tokens, so this keeps
+     the file self-contained for Tailwind / @theme consumption. */
+  background-color: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* ============================================================
+   Dark Mode Tokens
+   - Follows system `prefers-color-scheme` by default.
+   - Manual override via `html.dark` or `body.dark` class.
+   ============================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Surfaces */
+    --surface-page: #0d1117;
+    --surface-card: #161b22;
+    --surface-page-alpha-40: rgba(13, 17, 23, 0.4);
+    --surface-page-alpha-78: rgba(13, 17, 23, 0.78);
+    --surface-page-alpha-85: rgba(13, 17, 23, 0.85);
+    --surface-card-alpha-8: rgba(22, 27, 34, 0.08);
+    --surface-card-alpha-90: rgba(22, 27, 34, 0.9);
+    --surface-secondary: #0d1117;
+    --surface-tertiary: #21262d;
+    --surface-accent-subtle: rgba(56, 139, 253, 0.1);
+    --surface-hover: rgba(255, 255, 255, 0.05);
+    --surface-active: rgba(255, 255, 255, 0.08);
+    --surface-disabled: #30363d;
+    --surface-backdrop: rgba(0, 0, 0, 0.7);
+    --surface-overlay: rgba(0, 0, 0, 0.6);
+    --surface-inverse: #ffffff;
+    --surface-code: #161b22;
+    --surface-terminal: #010409;
+    --surface-terminal-header: #161b22;
+
+    /* Text */
+    --text-primary: #c9d1d9;
+    --text-secondary: #8b949e;
+    --text-tertiary: #6e7681;
+    --text-disabled: #484f58;
+    --text-heading: #e6edf3;
+    --text-inverse: #0d1117;
+    --text-on-dark: #c9d1d9;
+    --text-terminal: #8b949e;
+
+    /* Borders */
+    --border-default: rgba(201, 209, 217, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.08);
+    --border-hover: rgba(56, 139, 253, 0.5);
+    --border-accent: rgba(56, 139, 253, 0.2);
+    --border-error: rgba(248, 81, 73, 0.2);
+    --border-warning: rgba(210, 153, 34, 0.2);
+    --border-success: rgba(35, 197, 94, 0.2);
+    --border-terminal: #30363d;
+
+    /* Accent (GitHub dark blue family) */
+    --accent: #58a6ff;
+    --accent-hover: #79c0ff;
+    --accent-light: #79c0ff;
+    --accent-gradient: linear-gradient(135deg, #58a6ff 0%, #79c0ff 100%);
+
+    --accent-alpha-4: rgba(56, 139, 253, 0.04);
+    --accent-alpha-5: rgba(56, 139, 253, 0.05);
+    --accent-alpha-6: rgba(56, 139, 253, 0.06);
+    --accent-alpha-8: rgba(56, 139, 253, 0.08);
+    --accent-alpha-10: rgba(56, 139, 253, 0.10);
+    --accent-alpha-12: rgba(56, 139, 253, 0.12);
+    --accent-alpha-15: rgba(56, 139, 253, 0.15);
+    --accent-alpha-20: rgba(56, 139, 253, 0.20);
+    --accent-alpha-25: rgba(56, 139, 253, 0.25);
+    --accent-alpha-30: rgba(56, 139, 253, 0.30);
+    --accent-alpha-35: rgba(56, 139, 253, 0.35);
+    --accent-alpha-40: rgba(56, 139, 253, 0.40);
+    --accent-glow: 0 0 12px rgba(56, 139, 253, 0.15);
+
+    /* Status */
+    --success: #3fb950;
+    --success-alpha-3: rgba(63, 185, 80, 0.03);
+    --success-alpha-8: rgba(63, 185, 80, 0.08);
+    --success-alpha-15: rgba(63, 185, 80, 0.15);
+    --success-alpha-20: rgba(63, 185, 80, 0.20);
+    --success-alpha-40: rgba(63, 185, 80, 0.40);
+
+    --warning: #d29922;
+    --warning-alpha-5: rgba(210, 153, 34, 0.05);
+    --warning-alpha-15: rgba(210, 153, 34, 0.15);
+    --warning-alpha-40: rgba(210, 153, 34, 0.40);
+
+    --error: #f85149;
+    --error-alpha-3: rgba(248, 81, 73, 0.03);
+    --error-alpha-8: rgba(248, 81, 73, 0.08);
+    --error-alpha-15: rgba(248, 81, 73, 0.15);
+    --error-alpha-20: rgba(248, 81, 73, 0.20);
+
+    --info: #58a6ff;
+
+    /* Misc status */
+    --status-renamed: #bc8cff;
+    --status-renamed-alpha-10: rgba(188, 140, 255, 0.10);
+    --status-renamed-alpha-20: rgba(188, 140, 255, 0.20);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 3px 6px rgba(0, 0, 0, 0.25);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.6);
+
+    --shadow-accent-sm: 0 2px 6px rgba(56, 139, 253, 0.25);
+    --shadow-accent-md: 0 2px 8px rgba(56, 139, 253, 0.30);
+    --shadow-accent-lg: 0 4px 10px rgba(56, 139, 253, 0.40);
+    --shadow-accent-xl: 0 4px 12px rgba(56, 139, 253, 0.45);
+
+    /* Neutral alpha scale inverted for dark surfaces */
+    --black-alpha-015: rgba(255, 255, 255, 0.015);
+    --black-alpha-02: rgba(255, 255, 255, 0.02);
+    --black-alpha-025: rgba(255, 255, 255, 0.025);
+    --black-alpha-03: rgba(255, 255, 255, 0.03);
+    --black-alpha-035: rgba(255, 255, 255, 0.035);
+    --black-alpha-04: rgba(255, 255, 255, 0.04);
+    --black-alpha-045: rgba(255, 255, 255, 0.045);
+    --black-alpha-05: rgba(255, 255, 255, 0.05);
+    --black-alpha-055: rgba(255, 255, 255, 0.055);
+    --black-alpha-065: rgba(255, 255, 255, 0.065);
+    --black-alpha-08: rgba(255, 255, 255, 0.08);
+    --black-alpha-12: rgba(255, 255, 255, 0.12);
+    --black-alpha-15: rgba(255, 255, 255, 0.15);
+    --black-alpha-25: rgba(255, 255, 255, 0.25);
+  }
+}
+
+html.dark,
+body.dark {
+  /* Surfaces */
+  --surface-page: #0d1117;
+  --surface-card: #161b22;
+  --surface-page-alpha-40: rgba(13, 17, 23, 0.4);
+  --surface-page-alpha-78: rgba(13, 17, 23, 0.78);
+  --surface-page-alpha-85: rgba(13, 17, 23, 0.85);
+  --surface-card-alpha-8: rgba(22, 27, 34, 0.08);
+  --surface-card-alpha-90: rgba(22, 27, 34, 0.9);
+  --surface-secondary: #0d1117;
+  --surface-tertiary: #21262d;
+  --surface-accent-subtle: rgba(56, 139, 253, 0.1);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-active: rgba(255, 255, 255, 0.08);
+  --surface-disabled: #30363d;
+  --surface-backdrop: rgba(0, 0, 0, 0.7);
+  --surface-overlay: rgba(0, 0, 0, 0.6);
+  --surface-inverse: #ffffff;
+  --surface-code: #161b22;
+  --surface-terminal: #010409;
+  --surface-terminal-header: #161b22;
+
+  /* Text */
+  --text-primary: #c9d1d9;
+  --text-secondary: #8b949e;
+  --text-tertiary: #6e7681;
+  --text-disabled: #484f58;
+  --text-heading: #e6edf3;
+  --text-inverse: #0d1117;
+  --text-on-dark: #c9d1d9;
+  --text-terminal: #8b949e;
+
+  /* Borders */
+  --border-default: rgba(201, 209, 217, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(56, 139, 253, 0.5);
+  --border-accent: rgba(56, 139, 253, 0.2);
+  --border-error: rgba(248, 81, 73, 0.2);
+  --border-warning: rgba(210, 153, 34, 0.2);
+  --border-success: rgba(35, 197, 94, 0.2);
+  --border-terminal: #30363d;
+
+  /* Accent (GitHub dark blue family) */
+  --accent: #58a6ff;
+  --accent-hover: #79c0ff;
+  --accent-light: #79c0ff;
+  --accent-gradient: linear-gradient(135deg, #58a6ff 0%, #79c0ff 100%);
+
+  --accent-alpha-4: rgba(56, 139, 253, 0.04);
+  --accent-alpha-5: rgba(56, 139, 253, 0.05);
+  --accent-alpha-6: rgba(56, 139, 253, 0.06);
+  --accent-alpha-8: rgba(56, 139, 253, 0.08);
+  --accent-alpha-10: rgba(56, 139, 253, 0.10);
+  --accent-alpha-12: rgba(56, 139, 253, 0.12);
+  --accent-alpha-15: rgba(56, 139, 253, 0.15);
+  --accent-alpha-20: rgba(56, 139, 253, 0.20);
+  --accent-alpha-25: rgba(56, 139, 253, 0.25);
+  --accent-alpha-30: rgba(56, 139, 253, 0.30);
+  --accent-alpha-35: rgba(56, 139, 253, 0.35);
+  --accent-alpha-40: rgba(56, 139, 253, 0.40);
+  --accent-glow: 0 0 12px rgba(56, 139, 253, 0.15);
+
+  /* Status */
+  --success: #3fb950;
+  --success-alpha-3: rgba(63, 185, 80, 0.03);
+  --success-alpha-8: rgba(63, 185, 80, 0.08);
+  --success-alpha-15: rgba(63, 185, 80, 0.15);
+  --success-alpha-20: rgba(63, 185, 80, 0.20);
+  --success-alpha-40: rgba(63, 185, 80, 0.40);
+
+  --warning: #d29922;
+  --warning-alpha-5: rgba(210, 153, 34, 0.05);
+  --warning-alpha-15: rgba(210, 153, 34, 0.15);
+  --warning-alpha-40: rgba(210, 153, 34, 0.40);
+
+  --error: #f85149;
+  --error-alpha-3: rgba(248, 81, 73, 0.03);
+  --error-alpha-8: rgba(248, 81, 73, 0.08);
+  --error-alpha-15: rgba(248, 81, 73, 0.15);
+  --error-alpha-20: rgba(248, 81, 73, 0.20);
+
+  --info: #58a6ff;
+
+  /* Misc status */
+  --status-renamed: #bc8cff;
+  --status-renamed-alpha-10: rgba(188, 140, 255, 0.10);
+  --status-renamed-alpha-20: rgba(188, 140, 255, 0.20);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 3px 6px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.6);
+
+  --shadow-accent-sm: 0 2px 6px rgba(56, 139, 253, 0.25);
+  --shadow-accent-md: 0 2px 8px rgba(56, 139, 253, 0.30);
+  --shadow-accent-lg: 0 4px 10px rgba(56, 139, 253, 0.40);
+  --shadow-accent-xl: 0 4px 12px rgba(56, 139, 253, 0.45);
+
+  /* Neutral alpha scale inverted for dark surfaces */
+  --black-alpha-015: rgba(255, 255, 255, 0.015);
+  --black-alpha-02: rgba(255, 255, 255, 0.02);
+  --black-alpha-025: rgba(255, 255, 255, 0.025);
+  --black-alpha-03: rgba(255, 255, 255, 0.03);
+  --black-alpha-035: rgba(255, 255, 255, 0.035);
+  --black-alpha-04: rgba(255, 255, 255, 0.04);
+  --black-alpha-045: rgba(255, 255, 255, 0.045);
+  --black-alpha-05: rgba(255, 255, 255, 0.05);
+  --black-alpha-055: rgba(255, 255, 255, 0.055);
+  --black-alpha-065: rgba(255, 255, 255, 0.065);
+  --black-alpha-08: rgba(255, 255, 255, 0.08);
+  --black-alpha-12: rgba(255, 255, 255, 0.12);
+  --black-alpha-15: rgba(255, 255, 255, 0.15);
+  --black-alpha-25: rgba(255, 255, 255, 0.25);
+}
+
+/* ============================================================
+   UI Micro Animations
+   ============================================================ */
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ui-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
