@@ -28,6 +28,10 @@ resolve_env_file() {
     echo "${exact}"
     return
   fi
+  if [[ "${ENV_NAME}" == "prod" ]]; then
+    echo ""
+    return
+  fi
   if [[ -f "${example}" ]]; then
     echo "${example}"
     return
@@ -37,7 +41,11 @@ resolve_env_file() {
 
 ENV_FILE="$(resolve_env_file)"
 if [[ -z "${ENV_FILE}" ]]; then
-  echo "[deploy] missing env file: env/${ENV_NAME}.env (or .env.example)" >&2
+  if [[ "${ENV_NAME}" == "prod" ]]; then
+    echo "[deploy] prod release requires env/prod.env; refusing to use env/prod.env.example" >&2
+  else
+    echo "[deploy] missing env file: env/${ENV_NAME}.env (or .env.example)" >&2
+  fi
   exit 1
 fi
 

@@ -12,5 +12,6 @@ export {
   DetailSkeleton,
 } from './PageSkeletons';
 export { HighlightText } from './HighlightText';
-export { VirtualList, useShouldVirtualize } from './VirtualList';
+export { VirtualList } from './VirtualList';
+export { useShouldVirtualize } from './useShouldVirtualize';
 export type { VirtualListProps } from './VirtualList';

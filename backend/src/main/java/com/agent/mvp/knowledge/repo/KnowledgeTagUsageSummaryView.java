@@ -4,9 +4,13 @@ import java.util.UUID;
 import lombok.Data;
 
 @Data
-public class KnowledgeTagUsageCountView {
+public class KnowledgeTagUsageSummaryView {
 
     private UUID tagId;
+
+    private String name;
+
+    private String color;
 
     private Long usageCount;
 }

@@ -9,22 +9,43 @@ on:
       - main
 
 jobs:
-  backend-test:
+  release-preflight:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 25
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '25'
           cache: 'maven'
 
-      - name: Run Maven Tests
-        working-directory: ./backend
-        run: mvn test
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            desktop/package-lock.json
+            desktop/src/renderer/package-lock.json
+            ts-cli/package-lock.json
+            local-service/package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: ./desktop
+        run: npm ci
+
+      - name: Install renderer dependencies
+        working-directory: ./desktop/src/renderer
+        run: npm ci
+
+      - name: Run release preflight
+        env:
+          RELEASE_CHECK_PACKAGE_DESKTOP: 'true'
+          RELEASE_CHECK_PREPARE_DESKTOP_BACKEND: 'true'
+        run: ./scripts/release-check.sh dev
 
   python-service-test:
     runs-on: ubuntu-latest
@@ -51,7 +72,7 @@ jobs:
 
 
   sentinel-alert:
-    needs: [backend-test, python-service-test]
+    needs: [release-preflight, python-service-test]
     if: failure()
     runs-on: ubuntu-latest
     steps:

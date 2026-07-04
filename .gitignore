@@ -23,6 +23,8 @@ env/*.env
 # Logs
 *.log
 .playwright-mcp/
+.serena/
+.superpowers/
 
 # Python local runtime artifacts
 **/__pycache__/

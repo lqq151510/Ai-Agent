@@ -7,7 +7,6 @@ import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.ingestion.IngestionJobType;
 import com.agent.mvp.ingestion.IngestionJobStatus;
-import com.agent.mvp.ingestion.dto.IngestionJobResponse;
 import com.agent.mvp.ingestion.entity.IngestionJob;
 import com.agent.mvp.ingestion.service.IngestionJobService;
 import com.agent.mvp.knowledge.KnowledgeItemSourceType;
@@ -28,9 +27,9 @@ import com.agent.mvp.knowledge.entity.KnowledgeItem;
 import com.agent.mvp.knowledge.entity.KnowledgeItemTag;
 import com.agent.mvp.knowledge.entity.KnowledgeTag;
 import com.agent.mvp.knowledge.repo.KnowledgeItemRepository;
+import com.agent.mvp.knowledge.repo.KnowledgeItemStatusCountView;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
-import com.agent.mvp.knowledge.repo.KnowledgeTagUsageCountView;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
 import com.agent.mvp.settings.OrganizeMode;
 import com.agent.mvp.settings.entity.UserProfile;
@@ -40,13 +39,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -481,28 +478,23 @@ public class KnowledgeItemService {
                                 .orderByDesc("updated_at")
                                 .last("LIMIT 5"));
 
-        List<KnowledgeTag> tags =
-                knowledgeTagRepository.selectList(
-                        new LambdaQueryWrapper<KnowledgeTag>().eq(KnowledgeTag::getUserId, userId));
-        Map<UUID, Long> tagUsageCounts =
-                getTagUsageCounts(tags.stream().map(KnowledgeTag::getId).toList());
-        List<DashboardTagSummaryResponse> topTags = tags.stream()
+        Map<String, Long> statusCounts = getStatusCounts(userId);
+        List<DashboardTagSummaryResponse> topTags = knowledgeItemTagRepository.findTopTagUsageByUserId(userId, 5).stream()
                 .map(
                         tag ->
                                 new DashboardTagSummaryResponse(
-                                        tag.getId(),
+                                        tag.getTagId(),
                                         tag.getName(),
                                         tag.getColor(),
-                                        tagUsageCounts.getOrDefault(tag.getId(), 0L)))
-                .sorted(Comparator.comparingLong(DashboardTagSummaryResponse::usageCount).reversed())
-                .limit(5)
+                                        tag.getUsageCount() == null ? 0L : tag.getUsageCount()))
                 .toList();
+        long totalItems = statusCounts.values().stream().mapToLong(Long::longValue).sum();
 
         return new DashboardSummaryResponse(
-                countItems(userId, null),
-                countItems(userId, KnowledgeItemStatus.INBOX.value()),
-                countItems(userId, KnowledgeItemStatus.READY.value()),
-                countItems(userId, KnowledgeItemStatus.FAILED.value()),
+                totalItems,
+                statusCounts.getOrDefault(KnowledgeItemStatus.INBOX.value(), 0L),
+                statusCounts.getOrDefault(KnowledgeItemStatus.READY.value(), 0L),
+                statusCounts.getOrDefault(KnowledgeItemStatus.FAILED.value(), 0L),
                 recentItems.stream()
                         .map(
                                 item ->
@@ -517,12 +509,12 @@ public class KnowledgeItemService {
                 Instant.now());
     }
 
-    private Map<UUID, Long> getTagUsageCounts(List<UUID> tagIds) {
-        if (tagIds == null || tagIds.isEmpty()) {
-            return Map.of();
-        }
-        return knowledgeItemTagRepository.findUsageCountsByTagIds(tagIds).stream()
-                .collect(Collectors.toMap(KnowledgeTagUsageCountView::getTagId, KnowledgeTagUsageCountView::getUsageCount));
+    private Map<String, Long> getStatusCounts(UUID userId) {
+        return knowledgeItemRepository.findStatusCountsByUserId(userId).stream()
+                .collect(
+                        Collectors.toMap(
+                                KnowledgeItemStatusCountView::getStatus,
+                                count -> count.getItemCount() == null ? 0L : count.getItemCount()));
     }
 
     private KnowledgeItem createItem(
@@ -750,15 +742,6 @@ public class KnowledgeItemService {
             return normalized;
         }
         return normalized.substring(0, maxLength) + "...";
-    }
-
-    private long countItems(UUID userId, String status) {
-        LambdaQueryWrapper<KnowledgeItem> wrapper =
-                new LambdaQueryWrapper<KnowledgeItem>().eq(KnowledgeItem::getUserId, userId);
-        if (status != null) {
-            wrapper.eq(KnowledgeItem::getStatus, status);
-        }
-        return knowledgeItemRepository.selectCount(wrapper);
     }
 
     private String fallbackTitle(String title, String fallback) {

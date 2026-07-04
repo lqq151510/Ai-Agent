@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 
 export type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
 
@@ -23,14 +23,15 @@ export default function Tooltip({
   delay = 200,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false);
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const show = () => {
-    timer = setTimeout(() => setVisible(true), delay);
+    timerRef.current = setTimeout(() => setVisible(true), delay);
   };
 
   const hide = () => {
-    if (timer) clearTimeout(timer);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
     setVisible(false);
   };
 

@@ -11,6 +11,10 @@ PREVIOUS_TAG_FILE="${STATE_DIR}/previous.tag"
 ENV_FILE="${ROOT_DIR}/env/${ENV_NAME}.env"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
+  if [[ "${ENV_NAME}" == "prod" ]]; then
+    echo "[rollback] prod rollback requires env/prod.env; refusing to use env/prod.env.example" >&2
+    exit 1
+  fi
   ENV_FILE="${ROOT_DIR}/env/${ENV_NAME}.env.example"
 fi
 if [[ ! -f "${ENV_FILE}" ]]; then

@@ -7,13 +7,12 @@
 #   会在打包时清空该目录，导致编译产物丢失。`release/` 为独立目录，安全。
 # - macOS 公证通过环境变量 APPLE_TEAM_ID 启用，未设置时 build-all.sh 会
 #   跳过公证并输出警告。
-# - 图标文件暂未提供，使用占位路径；构建前需放入 resources/icons/。
+# - 图标文件位于 resources/icons/codejoy-icon.*。
 # ============================================================================
 
 appId: com.agent.aiagent
 productName: AI Agent
 copyright: Copyright 2025 AI Agent
-author: AI Agent Team
 
 directories:
   output: release
@@ -42,6 +41,7 @@ extraResources:
 asar: true
 asarUnpack:
   - "**/*.{node,dylib,so,dll}"
+npmRebuild: false
 
 # ---------------------------------------------------------------------------
 # macOS 配置（首要目标：Apple Silicon / Intel）
@@ -49,16 +49,9 @@ asarUnpack:
 mac:
   category: public.app-category.developer-tools
   target:
-    - target: dmg
-      arch:
-        - arm64
-        - x64
-    - target: zip
-      arch:
-        - arm64
-        - x64
-  # 图标占位：构建前需将 icon.icns 放入 resources/icons/
-  icon: resources/icons/icon.icns
+    - dmg
+    - zip
+  icon: resources/icons/codejoy-icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
@@ -75,7 +68,7 @@ mac:
 
 dmg:
   title: "${productName} ${version}"
-  artifactName: "${productName}-${version}-mac.${ext}"
+  artifactName: "${productName}-${version}-mac-${arch}.${ext}"
   contents:
     - x: 130
       y: 220
@@ -92,8 +85,7 @@ win:
     - target: nsis
       arch:
         - x64
-  # 图标占位：构建前需将 icon.ico 放入 resources/icons/
-  icon: resources/icons/icon.ico
+  icon: resources/icons/codejoy-icon.ico
   artifactName: "${productName}-${version}-win-${arch}.${ext}"
 
 nsis:
@@ -113,14 +105,14 @@ linux:
     - AppImage
     - deb
   category: Development
-  icon: resources/icons
+  icon: resources/icons/codejoy-icon.png
   artifactName: "${productName}-${version}-linux-${arch}.${ext}"
   maintainer: "AI Agent Team"
   vendor: "AI Agent"
   synopsis: "AI Agent Desktop Client"
   description: "AI Agent 桌面客户端，集成后端服务与前端界面。"
 
-AppImage:
+appImage:
   artifactName: "${productName}-${version}-${arch}.AppImage"
 
 deb:

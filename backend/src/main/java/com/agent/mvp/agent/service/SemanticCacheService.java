@@ -8,6 +8,7 @@ import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
+import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
@@ -110,8 +111,12 @@ public class SemanticCacheService {
             if (queryEmbedding == null) {
                 return Optional.empty();
             }
-            List<EmbeddingMatch<TextSegment>> matches =
-                    embeddingStore.findRelevant(queryEmbedding, 1, CACHE_HIT_MIN_SCORE);
+            EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
+                    .queryEmbedding(queryEmbedding)
+                    .maxResults(1)
+                    .minScore(CACHE_HIT_MIN_SCORE)
+                    .build();
+            List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(request).matches();
             if (matches != null && !matches.isEmpty()) {
                 EmbeddingMatch<TextSegment> match = matches.get(0);
                 String cachedResponse = match.embedded().metadata().getString("response");

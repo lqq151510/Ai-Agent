@@ -1,8 +1,6 @@
-import { useRef, useMemo } from 'react';
+import { useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ReactNode } from 'react';
-
-const VIRTUALIZATION_THRESHOLD = 50;
 
 export interface VirtualListProps<T> {
   items: T[];
@@ -22,6 +20,7 @@ export function VirtualList<T>({
   overscan = 5,
 }: VirtualListProps<T>) {
   const parentRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual exposes imperative measurement helpers here.
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,
@@ -57,8 +56,4 @@ export function VirtualList<T>({
       </div>
     </div>
   );
-}
-
-export function useShouldVirtualize(count: number, threshold = VIRTUALIZATION_THRESHOLD) {
-  return useMemo(() => count > threshold, [count, threshold]);
 }

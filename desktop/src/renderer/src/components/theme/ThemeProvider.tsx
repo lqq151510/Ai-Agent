@@ -1,16 +1,5 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
-
-export type Theme = 'light' | 'dark' | 'system';
-export type ResolvedTheme = 'light' | 'dark';
-
-export interface ThemeContextValue {
-  theme: Theme;
-  resolvedTheme: ResolvedTheme;
-  setTheme: (theme: Theme) => void;
-  systemTheme: ResolvedTheme;
-}
-
-export const ThemeContext = createContext<ThemeContextValue | null>(null);
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ThemeContext, type ResolvedTheme, type Theme, type ThemeContextValue } from './ThemeContext';
 
 const STORAGE_KEY = 'ai-agent-theme';
 
@@ -115,15 +104,12 @@ export function ThemeProvider({
     };
   }, []);
 
-  const value = useMemo<ThemeContextValue>(
-    () => ({
-      theme,
-      resolvedTheme,
-      setTheme,
-      systemTheme,
-    }),
-    [theme, resolvedTheme, setTheme, systemTheme]
-  );
+  const value: ThemeContextValue = {
+    theme,
+    resolvedTheme,
+    setTheme,
+    systemTheme,
+  };
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

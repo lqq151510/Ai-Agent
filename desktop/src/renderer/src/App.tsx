@@ -5,20 +5,32 @@ import { SplashScreen, type BackendStatus } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ThemeProvider } from './components/theme';
 
+type BackendStatusPayload = { status: BackendStatus };
+
+interface DesktopElectronApi {
+  backendStatus?: () => Promise<BackendStatusPayload>;
+  onBackendStatusChanged?: (callback: (status: BackendStatusPayload) => void) => (() => void) | void;
+  onShortcut?: (callback: (payload: { action: string }) => void) => () => void;
+  invoke?: <T>(channel: string, ...args: unknown[]) => Promise<T>;
+}
+
+const getElectronApi = () =>
+  (window as unknown as { electronAPI?: DesktopElectronApi }).electronAPI;
+
 export const App = () => {
-  const [backendStatus, setBackendStatus] = useState<{ status: BackendStatus } | null>(null);
+  const [backendStatus, setBackendStatus] = useState<BackendStatusPayload | null>(null);
   const [isBackendReady, setIsBackendReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
 
   // Track backend readiness so the splash screen can hide once the local service is connectable.
   useEffect(() => {
-    const api = (window as unknown as { electronAPI?: any }).electronAPI;
+    const api = getElectronApi();
     if (!api) return;
 
     if (api.backendStatus) {
       api
         .backendStatus()
-        .then((status: { status: BackendStatus }) => {
+        .then((status) => {
           setBackendStatus(status);
           if (status.status === 'running' || status.status === 'error') {
             setIsBackendReady(true);
@@ -29,7 +41,7 @@ export const App = () => {
         });
     }
 
-    const unsubscribe = api.onBackendStatusChanged?.((status: { status: BackendStatus }) => {
+    const unsubscribe = api.onBackendStatusChanged?.((status) => {
       setBackendStatus(status);
       if (status.status === 'running' || status.status === 'error') {
         setIsBackendReady(true);
@@ -40,7 +52,7 @@ export const App = () => {
     const fallbackTimer = window.setTimeout(() => setIsBackendReady(true), 30000);
 
     return () => {
-      unsubscribe?.();
+      if (typeof unsubscribe === 'function') unsubscribe();
       window.clearTimeout(fallbackTimer);
     };
   }, []);
@@ -54,7 +66,7 @@ export const App = () => {
 
   // Handle global shortcuts pushed from the main process.
   useEffect(() => {
-    const api = (window as unknown as { electronAPI?: any }).electronAPI;
+    const api = getElectronApi();
     if (!api?.onShortcut) return;
 
     const unsubscribe = api.onShortcut((payload: { action: string }) => {

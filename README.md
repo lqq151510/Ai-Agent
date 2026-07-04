@@ -33,10 +33,67 @@ cp env/dev.env.example env/dev.env
 Edit `env/dev.env` and fill secrets (`JWT_SECRET`, `OPENAI_API_KEY`, database password, etc.).
 
 ### 2) Deploy
+Run the local release gate before starting a deployment:
+
+```bash
+./scripts/release-check.sh dev
+```
+
+For `prod`, create `env/prod.env` with real secrets first. Production deploy/rollback refuses to use `env/prod.env.example`.
+
+```bash
+./scripts/release-check.sh prod
+```
+
+Then deploy:
+
 ```bash
 ./scripts/deploy.sh dev
 ```
 `deploy.sh` runs `scripts/check-consistency.sh` before building so API path drift is caught early. When `SMOKE_USE_OPENAI_MOCK=true`, it also overrides backend OpenAI endpoint to the local mock URL.
+
+CI runs the same `scripts/release-check.sh dev` gate, so pull requests and local release checks fail on the same class of runtime dependency audit, build, desktop, Compose, and config regressions.
+
+To include Electron directory packaging in the local gate:
+
+```bash
+RELEASE_CHECK_PACKAGE_DESKTOP=true ./scripts/release-check.sh dev
+```
+
+Desktop packaging requires Node.js 18-22. The packaged app is checked for `app.asar`, embedded `backend-jre`, `ts-cli`, `local-service`, and accidental build-time dependencies.
+
+To generate and verify the current macOS architecture distributables (`.dmg` and `.zip`):
+
+```bash
+RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true ./scripts/release-check.sh dev
+```
+
+This also writes release evidence under `desktop/release/`:
+- `release-manifest.json`: version, git commit, artifact sizes/checksums, and macOS app trust status
+- `SHA256SUMS`: publishable SHA-256 checksums for generated installers
+
+Local unsigned builds only emit signing/Gatekeeper warnings. For a real macOS release, enforce trust checks explicitly:
+
+```bash
+RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true \
+RELEASE_CHECK_REQUIRE_MAC_SIGNING=true \
+RELEASE_CHECK_REQUIRE_MAC_GATEKEEPER=true \
+./scripts/release-check.sh prod
+```
+
+To regenerate evidence for existing artifacts without rebuilding:
+
+```bash
+./scripts/release-manifest.sh
+```
+
+To run the release gate against existing distributables without rebuilding DMG/ZIP:
+
+```bash
+RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true \
+RELEASE_CHECK_REUSE_DESKTOP_DISTRIBUTABLE=true \
+./scripts/release-check.sh dev
+```
 
 ### 3) Smoke test
 ```bash

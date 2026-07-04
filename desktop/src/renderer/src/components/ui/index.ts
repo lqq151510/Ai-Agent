@@ -17,8 +17,10 @@ export {
 } from './Dialog';
 export type { DialogProps } from './Dialog';
 
-export { default as Toaster, toast } from './Toast';
-export type { ToasterProps, ToastType, ToastPosition, ToastItem } from './Toast';
+export { default as Toaster } from './Toast';
+export { toast } from './Toast/toastStore';
+export type { ToasterProps, ToastPosition } from './Toast';
+export type { ToastType, ToastItem } from './Toast/toastStore';
 
 export { default as Skeleton } from './Skeleton';
 export type { SkeletonProps, SkeletonVariant } from './Skeleton';

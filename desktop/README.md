@@ -107,6 +107,8 @@ npm run dist
 
 # 指定平台
 npm run dist:mac
+npm run dist:mac:arm64
+npm run dist:mac:x64
 npm run dist:win
 npm run dist:linux
 ```
@@ -168,15 +170,49 @@ desktop/release/
 └── AI Agent-0.1.0-linux-x64.deb      # Linux deb 包
 ```
 
+生成 macOS DMG/ZIP 后，仓库根目录的发布门禁会自动产出发布证据：
+
+```bash
+RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true ./scripts/release-check.sh dev
+```
+
+输出文件：
+
+- `desktop/release/release-manifest.json`：记录版本、Git commit、产物大小、SHA-256、`.app` 签名与 Gatekeeper 评估状态。
+- `desktop/release/SHA256SUMS`：可随安装包一起发布的校验和文件。
+
+本地未签名构建默认只给出 warning。正式 macOS 发布应开启强校验：
+
+```bash
+RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true \
+RELEASE_CHECK_REQUIRE_MAC_SIGNING=true \
+RELEASE_CHECK_REQUIRE_MAC_GATEKEEPER=true \
+./scripts/release-check.sh prod
+```
+
+如果只需要给已有产物补清单，不重新打包：
+
+```bash
+./scripts/release-manifest.sh
+```
+
+如果需要用发布门禁复查已有安装包，但不重新生成 DMG/ZIP：
+
+```bash
+RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true \
+RELEASE_CHECK_REUSE_DESKTOP_DISTRIBUTABLE=true \
+./scripts/release-check.sh dev
+```
+
 ## 图标资源
 
 构建前需准备图标文件并放入 `resources/icons/`：
 
 | 平台 | 文件 | 格式 | 推荐尺寸 |
 | --- | --- | --- | --- |
-| macOS | `icon.icns` | ICNS | 512x512 / 1024x1024 |
-| Windows | `icon.ico` | ICO | 256x256（多尺寸） |
-| Linux | `icon.png` | PNG | 512x512 |
+| macOS | `codejoy-icon.icns` | ICNS | 512x512 / 1024x1024 |
+| Windows | `codejoy-icon.ico` | ICO | 256x256（多尺寸） |
+| Linux | `codejoy-icon.png` | PNG | 512x512 |
 
 > 若图标缺失，electron-builder 会使用默认图标并输出警告。
 

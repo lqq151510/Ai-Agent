@@ -78,6 +78,20 @@ app:
   openai:
     base-url: ${OPENAI_BASE_URL:http://localhost:1234/v1}
     api-key: ${OPENAI_API_KEY:sk-placeholder}
+  search:
+    default-mode: ${SEARCH_DEFAULT_MODE:ADAPTIVE}
+    confidence-threshold: ${SEARCH_CONFIDENCE_THRESHOLD:0.5}
+    max-strategies: ${SEARCH_MAX_STRATEGIES:2}
+    fusion:
+      algorithm: ${SEARCH_FUSION_ALGORITHM:RRF}
+      rrf-k: ${SEARCH_RRF_K:60}
+    strategies:
+      fts:
+        enabled: ${SEARCH_FTS_ENABLED:true}
+        weight: ${SEARCH_FTS_WEIGHT:1.0}
+      vector:
+        enabled: ${SEARCH_VECTOR_ENABLED:true}
+        weight: ${SEARCH_VECTOR_WEIGHT:1.0}
 
 # Bug Sentinel 配置：全局异常自动上报到 webhook，默认开启
 bug:

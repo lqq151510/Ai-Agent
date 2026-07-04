@@ -71,25 +71,32 @@ public interface KnowledgeItemTagRepository {
     List<KnowledgeItemTagView> findTagsByKnowledgeItemIds(@Param("knowledgeItemIds") List<UUID> knowledgeItemIds);
 
     @Results(
-            id = "knowledgeTagUsageCountViewMap",
+            id = "knowledgeTagUsageSummaryViewMap",
             value = {
                 @Result(
                         column = "tag_id",
                         property = "tagId",
                         typeHandler = com.agent.mvp.config.UuidTypeHandler.class),
+                @Result(column = "name", property = "name"),
+                @Result(column = "color", property = "color"),
                 @Result(column = "usage_count", property = "usageCount")
             })
     @Select(
             """
             <script>
-            SELECT tag_id, COUNT(*) AS usage_count
-            FROM knowledge_item_tags
-            WHERE tag_id IN
-            <foreach collection="tagIds" item="tagId" open="(" separator="," close=")">
-                #{tagId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
-            </foreach>
-            GROUP BY tag_id
+            SELECT
+                kt.id AS tag_id,
+                kt.name,
+                kt.color,
+                COUNT(kit.knowledge_item_id) AS usage_count
+            FROM knowledge_tags kt
+            LEFT JOIN knowledge_item_tags kit ON kit.tag_id = kt.id
+            WHERE kt.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
+            GROUP BY kt.id, kt.name, kt.color
+            ORDER BY usage_count DESC, kt.name ASC
+            LIMIT #{limit}
             </script>
             """)
-    List<KnowledgeTagUsageCountView> findUsageCountsByTagIds(@Param("tagIds") List<UUID> tagIds);
+    List<KnowledgeTagUsageSummaryView> findTopTagUsageByUserId(
+            @Param("userId") UUID userId, @Param("limit") int limit);
 }

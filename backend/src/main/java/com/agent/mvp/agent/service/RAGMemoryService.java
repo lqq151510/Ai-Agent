@@ -1,8 +1,11 @@
 package com.agent.mvp.agent.service;
 
-import com.agent.mvp.config.AppProperties;
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
+import static com.agent.mvp.agent.search.SearchQueryUtils.MAX_VECTOR_CANDIDATES;
+import static com.agent.mvp.agent.search.SearchQueryUtils.normalizeMaxResults;
+import static com.agent.mvp.agent.search.SearchQueryUtils.normalizeQuery;
+
+import com.agent.mvp.agent.search.EmbeddingStoreProvider;
+import com.agent.mvp.agent.search.SearchOrchestrator;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentSplitter;
 import dev.langchain4j.data.document.Metadata;
@@ -12,22 +15,15 @@ import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.output.Response;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
+import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingStore;
-import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
-import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
-import jakarta.annotation.PostConstruct;
 import java.io.File;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -35,91 +31,18 @@ import org.springframework.stereotype.Service;
 @Service
 public class RAGMemoryService {
     private static final Logger log = LoggerFactory.getLogger(RAGMemoryService.class);
-    private static final int MAX_RETRIEVAL_RESULTS = 20;
-    private static final int MAX_VECTOR_CANDIDATES = 50;
-    private static final Duration EMBEDDING_FAILURE_BACKOFF = Duration.ofMinutes(2);
 
-    private final AppProperties appProperties;
-    private final EmbeddingModel embeddingModel;
-    private final JdbcTemplate jdbcTemplate;
-    private final Cache<String, Embedding> queryEmbeddingCache;
-    private EmbeddingStore<TextSegment> embeddingStore;
-    private volatile boolean pgVectorAvailable;
-    private volatile boolean ftsAvailable;
-    private volatile Instant embeddingDisabledUntil = Instant.EPOCH;
-
-    @Value("${PG_HOST:localhost}")
-    private String pgHost;
-
-    @Value("${PG_PORT:5432}")
-    private int pgPort;
-
-    @Value("${PG_DATABASE:ai_agent}")
-    private String pgDatabase;
-
-    @Value("${PG_USERNAME:postgres}")
-    private String pgUsername;
-
-    @Value("${PG_PASSWORD:change-me}")
-    private String pgPassword;
-
+    private final EmbeddingStoreProvider storeProvider;
+    private final SearchOrchestrator searchOrchestrator;
     private final MarkItDownService markItDownService;
 
-    public RAGMemoryService(AppProperties appProperties, MarkItDownService markItDownService, JdbcTemplate jdbcTemplate) {
-        this.appProperties = appProperties;
+    public RAGMemoryService(
+            EmbeddingStoreProvider storeProvider,
+            SearchOrchestrator searchOrchestrator,
+            MarkItDownService markItDownService) {
+        this.storeProvider = storeProvider;
+        this.searchOrchestrator = searchOrchestrator;
         this.markItDownService = markItDownService;
-        this.jdbcTemplate = jdbcTemplate;
-        this.queryEmbeddingCache =
-                Caffeine.newBuilder()
-                        .maximumSize(512)
-                        .expireAfterWrite(Duration.ofMinutes(15))
-                        .build();
-        this.embeddingModel =
-                dev.langchain4j.model.openai.OpenAiEmbeddingModel.builder()
-                        .apiKey(
-                                appProperties.getOpenai().getApiKey() != null
-                                                && !appProperties.getOpenai().getApiKey().isBlank()
-                                        ? appProperties.getOpenai().getApiKey()
-                                        : "demo")
-                        .baseUrl(appProperties.getOpenai().getBaseUrl())
-                        .modelName("text-embedding-3-small")
-                        .dimensions(384)
-                        .timeout(
-                                Duration.ofMillis(
-                                        Math.max(1_000, appProperties.getModelRuntime().getReadTimeoutMs())))
-                        .maxRetries(Math.max(0, appProperties.getModelRuntime().getIdempotentRetries()))
-                        .build();
-    }
-
-    @PostConstruct
-    public void init() {
-        try {
-            log.info(
-                    "Initializing PgVectorEmbeddingStore with host: {}, port: {}",
-                    pgHost,
-                    pgPort);
-            this.embeddingStore =
-                    PgVectorEmbeddingStore.builder()
-                            .host(pgHost)
-                            .port(pgPort)
-                            .database(pgDatabase)
-                            .user(pgUsername)
-                            .password(pgPassword)
-                            .table("engineering_memory")
-                            .dimension(384)
-                            .build();
-            this.pgVectorAvailable = true;
-            this.ftsAvailable = initializeFtsIndex();
-            log.info("PgVectorEmbeddingStore initialized successfully.");
-        } catch (Exception ex) {
-            log.warn(
-                    "Failed to initialize PgVectorEmbeddingStore. Falling back to"
-                            + " InMemoryEmbeddingStore. Error: {}",
-                    ex.getMessage());
-            this.embeddingStore = new InMemoryEmbeddingStore<>();
-            this.pgVectorAvailable = false;
-            this.ftsAvailable = false;
-        }
     }
 
     /** 将诊断记录添加到向量数据库中 */
@@ -139,6 +62,8 @@ public class RAGMemoryService {
                                             userId.toString(),
                                             "runId",
                                             runId.toString())));
+            EmbeddingModel embeddingModel = storeProvider.getEmbeddingModel();
+            EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
             Embedding embedding = embeddingModel.embed(segment).content();
             embeddingStore.add(embedding, segment);
             log.info("Stored diagnosis vector for runId: {} in embedding store", runId);
@@ -156,14 +81,16 @@ public class RAGMemoryService {
             return results;
         }
         try {
-            Embedding queryEmbedding = tryEmbedQuery(normalizedQuery);
+            Embedding queryEmbedding = storeProvider.tryEmbedQuery(normalizedQuery);
             if (queryEmbedding == null) {
                 return results;
             }
-            List<EmbeddingMatch<TextSegment>> matches =
-                    embeddingStore.findRelevant(
-                            queryEmbedding,
-                            Math.min(safeMaxResults * 4, MAX_VECTOR_CANDIDATES));
+            EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
+            EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
+                    .queryEmbedding(queryEmbedding)
+                    .maxResults(Math.min(safeMaxResults * 4, MAX_VECTOR_CANDIDATES))
+                    .build();
+            List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(request).matches();
             for (EmbeddingMatch<TextSegment> match : matches) {
                 String matchUserId = match.embedded().metadata().getString("userId");
                 if (matchUserId == null || userId == null || matchUserId.equals(userId.toString())) {
@@ -181,175 +108,11 @@ public class RAGMemoryService {
         return results;
     }
 
+    /**
+     * 搜索代码上下文，委托给 {@link SearchOrchestrator} 根据配置的搜索模式执行策略编排和结果融合。
+     */
     public List<String> searchCodeContext(String queryText, int maxResults) {
-        String normalizedQuery = normalizeQuery(queryText);
-        int safeMaxResults = normalizeMaxResults(maxResults);
-        if (normalizedQuery.isBlank()) {
-            return List.of();
-        }
-
-        List<String> ftsResults = searchCodeContextFTS(normalizedQuery, safeMaxResults * 2);
-        if (ftsResults.size() >= safeMaxResults && looksLikeExactLookup(normalizedQuery)) {
-            return firstResults(ftsResults, safeMaxResults);
-        }
-
-        List<String> vectorResults = searchCodeContextVector(normalizedQuery, safeMaxResults * 2);
-        return rrfCombine(vectorResults, ftsResults, safeMaxResults);
-    }
-
-    private List<String> searchCodeContextVector(String queryText, int maxResults) {
-        List<String> results = new ArrayList<>();
-        String normalizedQuery = normalizeQuery(queryText);
-        int safeMaxResults = normalizeMaxResults(maxResults);
-        if (normalizedQuery.isBlank()) {
-            return results;
-        }
-        try {
-            Embedding queryEmbedding = tryEmbedQuery(normalizedQuery);
-            if (queryEmbedding == null) {
-                return results;
-            }
-            List<EmbeddingMatch<TextSegment>> matches =
-                    embeddingStore.findRelevant(queryEmbedding, safeMaxResults);
-            for (EmbeddingMatch<TextSegment> match : matches) {
-                results.add(match.embedded().text());
-            }
-        } catch (Exception ex) {
-            log.error("Failed to search code context from vector store. Error: {}", ex.getMessage());
-        }
-        return results;
-    }
-
-    public List<String> searchCodeContextFTS(String queryText, int maxResults) {
-        if (!ftsAvailable) {
-            return List.of();
-        }
-        List<String> results = new ArrayList<>();
-        String normalizedQuery = normalizeQuery(queryText);
-        int safeMaxResults = normalizeMaxResults(maxResults);
-        if (normalizedQuery.isBlank()) {
-            return results;
-        }
-        try {
-            String likePattern = "%" + normalizedQuery + "%";
-            String sql = "SELECT text FROM engineering_memory " +
-                         "WHERE to_tsvector('english', COALESCE(text, '')) @@ plainto_tsquery('english', ?) " +
-                         "   OR text ILIKE ? " +
-                         "LIMIT ?";
-            results =
-                    jdbcTemplate.query(
-                            sql,
-                            (rs, rowNum) -> rs.getString("text"),
-                            normalizedQuery,
-                            likePattern,
-                            safeMaxResults);
-            log.info("FTS search returned {} results for query: {}", results.size(), normalizedQuery);
-        } catch (Exception e) {
-            ftsAvailable = false;
-            log.warn("Failed to perform FTS search. Falling back. Error: {}", e.getMessage());
-        }
-        return results;
-    }
-
-    private List<String> rrfCombine(List<String> vectorList, List<String> ftsList, int maxResults) {
-        Map<String, Double> rrfScores = new HashMap<>();
-        int k = 60;
-
-        for (int i = 0; i < vectorList.size(); i++) {
-            String doc = vectorList.get(i);
-            double score = 1.0 / (k + (i + 1));
-            rrfScores.put(doc, rrfScores.getOrDefault(doc, 0.0) + score);
-        }
-
-        for (int i = 0; i < ftsList.size(); i++) {
-            String doc = ftsList.get(i);
-            double score = 1.0 / (k + (i + 1));
-            rrfScores.put(doc, rrfScores.getOrDefault(doc, 0.0) + score);
-        }
-
-        List<Map.Entry<String, Double>> sorted = new ArrayList<>(rrfScores.entrySet());
-        sorted.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
-
-        List<String> finalResults = new ArrayList<>();
-        for (int i = 0; i < Math.min(maxResults, sorted.size()); i++) {
-            finalResults.add(sorted.get(i).getKey());
-        }
-        return finalResults;
-    }
-
-    private boolean initializeFtsIndex() {
-        if (!pgVectorAvailable) {
-            return false;
-        }
-        try {
-            jdbcTemplate.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_engineering_memory_text_fts "
-                            + "ON engineering_memory USING GIN "
-                            + "(to_tsvector('english', COALESCE(text, '')))");
-            return true;
-        } catch (Exception ex) {
-            log.warn("FTS index initialization skipped: {}", ex.getMessage());
-            return false;
-        }
-    }
-
-    private Embedding tryEmbedQuery(String queryText) {
-        String normalizedQuery = normalizeQuery(queryText);
-        if (normalizedQuery.isBlank()) {
-            return null;
-        }
-        Instant now = Instant.now();
-        if (now.isBefore(embeddingDisabledUntil)) {
-            return null;
-        }
-
-        String cacheKey = normalizedQuery.toLowerCase(Locale.ROOT);
-        Embedding cached = queryEmbeddingCache.getIfPresent(cacheKey);
-        if (cached != null) {
-            return cached;
-        }
-
-        try {
-            Embedding embedding = embeddingModel.embed(normalizedQuery).content();
-            queryEmbeddingCache.put(cacheKey, embedding);
-            return embedding;
-        } catch (RuntimeException ex) {
-            embeddingDisabledUntil = now.plus(EMBEDDING_FAILURE_BACKOFF);
-            log.warn(
-                    "Embedding model unavailable; vector retrieval is disabled until {}. Error: {}",
-                    embeddingDisabledUntil,
-                    ex.getMessage());
-            return null;
-        }
-    }
-
-    private int normalizeMaxResults(int maxResults) {
-        if (maxResults <= 0) {
-            return 1;
-        }
-        return Math.min(maxResults, MAX_RETRIEVAL_RESULTS);
-    }
-
-    private String normalizeQuery(String queryText) {
-        if (queryText == null) {
-            return "";
-        }
-        return queryText.replaceAll("\\s+", " ").trim();
-    }
-
-    private boolean looksLikeExactLookup(String queryText) {
-        return queryText.contains("/")
-                || queryText.contains(".")
-                || queryText.contains("#")
-                || queryText.contains("::")
-                || queryText.matches(".*\\b[A-Za-z]+(Service|Controller|Repository|Config|Entity|Test|DTO)\\b.*");
-    }
-
-    private List<String> firstResults(List<String> results, int maxResults) {
-        if (results.size() <= maxResults) {
-            return results;
-        }
-        return List.copyOf(results.subList(0, maxResults));
+        return searchOrchestrator.search(queryText, maxResults);
     }
 
     @Async
@@ -364,6 +127,8 @@ public class RAGMemoryService {
             List<TextSegment> segments = splitter.split(document);
 
             if (!segments.isEmpty()) {
+                EmbeddingModel embeddingModel = storeProvider.getEmbeddingModel();
+                EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
                 Response<List<Embedding>> embeddingResponse = embeddingModel.embedAll(segments);
                 embeddingStore.addAll(embeddingResponse.content(), segments);
             }
@@ -389,6 +154,8 @@ public class RAGMemoryService {
                 allSegments.addAll(splitter.split(doc));
             }
             if (!allSegments.isEmpty()) {
+                EmbeddingModel embeddingModel = storeProvider.getEmbeddingModel();
+                EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
                 Response<List<Embedding>> embeddingResponse = embeddingModel.embedAll(allSegments);
                 embeddingStore.addAll(embeddingResponse.content(), allSegments);
             }
@@ -400,25 +167,25 @@ public class RAGMemoryService {
     }
 
     /** 列出用户的记忆片段（如果是 pgvector 存储） */
-    public List<java.util.Map<String, Object>> listAllMemories(UUID userId) {
-        List<java.util.Map<String, Object>> list = new ArrayList<>();
+    public List<Map<String, Object>> listAllMemories(UUID userId) {
+        List<Map<String, Object>> list = new ArrayList<>();
         try {
+            JdbcTemplate jdbcTemplate = storeProvider.getJdbcTemplate();
             String sql = "SELECT embedding_id, text, metadata FROM engineering_memory";
-            List<java.util.Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
-            for (java.util.Map<String, Object> row : rows) {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+            for (Map<String, Object> row : rows) {
                 String id = String.valueOf(row.get("embedding_id"));
                 String text = (String) row.get("text");
                 String metadataStr = (String) row.get("metadata");
 
                 boolean matches = true;
                 if (metadataStr != null) {
-                    // 如果元数据里包含 userId，则做基于 userId 的隔离过滤
                     if (metadataStr.contains("\"userId\"")) {
                         matches = metadataStr.contains(userId.toString());
                     }
                 }
                 if (matches) {
-                    list.add(java.util.Map.of(
+                    list.add(Map.of(
                         "id", id,
                         "text", text != null ? text : "",
                         "metadata", metadataStr != null ? metadataStr : "{}"
@@ -434,12 +201,13 @@ public class RAGMemoryService {
     /** 更新特定记忆片段的内容，并重新计算嵌入向量存回 DB */
     public void updateMemory(String id, String text) {
         try {
-            // 1. 调用 embedding model 计算新文本的向量
+            EmbeddingModel embeddingModel = storeProvider.getEmbeddingModel();
+            JdbcTemplate jdbcTemplate = storeProvider.getJdbcTemplate();
+
             TextSegment segment = TextSegment.from(text);
             Embedding newEmbedding = embeddingModel.embed(segment).content();
             float[] vector = newEmbedding.vector();
 
-            // 2. 将 float[] 转换为 pgvector 接受的 [v1, v2, ...] 格式字符串
             StringBuilder sb = new StringBuilder();
             sb.append("[");
             for (int i = 0; i < vector.length; i++) {
@@ -450,7 +218,6 @@ public class RAGMemoryService {
             }
             sb.append("]");
 
-            // 3. 更新数据库记录
             String sql = "UPDATE engineering_memory SET text = ?, embedding = ?::vector WHERE embedding_id = ?::uuid";
             jdbcTemplate.update(sql, text, sb.toString(), id);
             log.info("Successfully updated memory embedding for id: {}", id);
@@ -463,6 +230,7 @@ public class RAGMemoryService {
     /** 从向量库中删除特定记忆片段 */
     public void deleteMemory(String id) {
         try {
+            JdbcTemplate jdbcTemplate = storeProvider.getJdbcTemplate();
             String sql = "DELETE FROM engineering_memory WHERE embedding_id = ?::uuid";
             jdbcTemplate.update(sql, id);
             log.info("Successfully deleted memory for id: {}", id);

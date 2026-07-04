@@ -21,10 +21,11 @@ import com.agent.mvp.knowledge.dto.ImportSnippetKnowledgeItemRequest;
 import com.agent.mvp.knowledge.entity.KnowledgeItem;
 import com.agent.mvp.knowledge.entity.KnowledgeTag;
 import com.agent.mvp.knowledge.repo.KnowledgeItemRepository;
+import com.agent.mvp.knowledge.repo.KnowledgeItemStatusCountView;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
-import com.agent.mvp.knowledge.repo.KnowledgeTagUsageCountView;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
+import com.agent.mvp.knowledge.repo.KnowledgeTagUsageSummaryView;
 import com.agent.mvp.settings.entity.UserProfile;
 import com.agent.mvp.settings.service.UserProfileService;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -538,8 +539,6 @@ class KnowledgeItemServiceTest {
                         objectMapper);
 
         UUID userId = UUID.randomUUID();
-        UUID ragTagId = UUID.randomUUID();
-        UUID searchTagId = UUID.randomUUID();
         KnowledgeItem recentItem =
                 KnowledgeItem.builder()
                         .id(UUID.randomUUID())
@@ -551,17 +550,13 @@ class KnowledgeItemServiceTest {
                         .status("ready")
                         .updatedAt(Instant.now())
                         .build();
-        KnowledgeTag ragTag =
-                KnowledgeTag.builder().id(ragTagId).userId(userId).name("rag").color("#7a8a84").build();
-        KnowledgeTag searchTag =
-                KnowledgeTag.builder().id(searchTagId).userId(userId).name("search").color("#a97751").build();
-
         when(userProfileService.requireUser(userId))
                 .thenReturn(User.builder().id(userId).email("ze@example.com").build());
         when(itemRepository.selectList(any())).thenReturn(List.of(recentItem));
-        when(tagRepository.selectList(any())).thenReturn(List.of(ragTag, searchTag));
-        when(itemTagRepository.findUsageCountsByTagIds(argThat(ids -> ids.contains(ragTagId) && ids.contains(searchTagId))))
-                .thenReturn(List.of(tagUsage(ragTagId, 7), tagUsage(searchTagId, 3)));
+        when(itemRepository.findStatusCountsByUserId(userId))
+                .thenReturn(List.of(statusCount("ready", 4), statusCount("failed", 2), statusCount("archived", 1)));
+        when(itemTagRepository.findTopTagUsageByUserId(userId, 5))
+                .thenReturn(List.of(tagSummary("rag", "#7a8a84", 7), tagSummary("search", "#a97751", 3)));
 
         var response = service.dashboardSummary(userId);
 
@@ -570,11 +565,16 @@ class KnowledgeItemServiceTest {
         String sqlSelect = itemWrapperCaptor.getValue().getSqlSelect();
 
         assertEquals(1, response.recentItems().size());
+        assertEquals(7, response.totalItems());
+        assertEquals(4, response.readyItems());
+        assertEquals(2, response.failedItems());
         assertEquals("rag", response.topTags().get(0).name());
         assertEquals(7, response.topTags().get(0).usageCount());
         assertTrue(sqlSelect.contains("title"));
         assertFalse(sqlSelect.contains("raw_content"));
         assertFalse(sqlSelect.contains("cleaned_content"));
+        verify(tagRepository, never()).selectList(any());
+        verify(itemTagRepository, never()).findTagsByKnowledgeItemIds(any());
         verify(itemTagRepository, never()).findKnowledgeItemIdsByTagId(any(UUID.class));
     }
 
@@ -588,9 +588,18 @@ class KnowledgeItemServiceTest {
         return view;
     }
 
-    private KnowledgeTagUsageCountView tagUsage(UUID tagId, long usageCount) {
-        KnowledgeTagUsageCountView view = new KnowledgeTagUsageCountView();
-        view.setTagId(tagId);
+    private KnowledgeItemStatusCountView statusCount(String status, long itemCount) {
+        KnowledgeItemStatusCountView view = new KnowledgeItemStatusCountView();
+        view.setStatus(status);
+        view.setItemCount(itemCount);
+        return view;
+    }
+
+    private KnowledgeTagUsageSummaryView tagSummary(String name, String color, long usageCount) {
+        KnowledgeTagUsageSummaryView view = new KnowledgeTagUsageSummaryView();
+        view.setTagId(UUID.randomUUID());
+        view.setName(name);
+        view.setColor(color);
         view.setUsageCount(usageCount);
         return view;
     }
