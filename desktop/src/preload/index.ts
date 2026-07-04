@@ -11,7 +11,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cliExecute: (args: string[]) => ipcRenderer.invoke('cli:execute', args),
   cliInput: (input: string) => ipcRenderer.send('cli:input', input),
   onBackendStatusChanged: (callback: (status: any) => void) => {
-    ipcRenderer.on('backend:status-changed', (_event, status) => callback(status));
+    const listener = (_event: Electron.IpcRendererEvent, status: any) => callback(status);
+    ipcRenderer.on('backend:status-changed', listener);
+    return () => ipcRenderer.removeListener('backend:status-changed', listener);
   },
   onTerminalData: (callback: (data: string) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: string) => callback(data);
@@ -24,6 +26,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Generic invoke — allows renderer to call any IPC handler by channel name.
   // Used by new layout components (MainLayout, SessionList, ChatArea, ContextPanel).
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+
+  // Global shortcuts pushed from the main process.
+  onShortcut: (callback: (payload: { action: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { action: string }) => callback(payload);
+    ipcRenderer.on('app:shortcut', listener);
+    return () => ipcRenderer.removeListener('app:shortcut', listener);
+  },
 
   // Workspace API
   workspace: {

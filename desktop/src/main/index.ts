@@ -1,4 +1,4 @@
-import { app, globalShortcut } from 'electron';
+import { app, globalShortcut, Notification } from 'electron';
 import { BackendManager } from './backend-manager';
 import { CliManager } from './cli-manager';
 import { WindowManager } from './window-manager';
@@ -87,6 +87,17 @@ if (!gotTheLock) {
   app.on('second-instance', () => {
     if (windowManager) {
       windowManager.showAndFocus();
+      if (process.platform === 'darwin') {
+        if (app.dock?.isVisible()) {
+          app.dock.bounce('informational');
+        } else if (Notification.isSupported()) {
+          try {
+            new Notification({ title: 'AI Agent', body: '已切换到运行中的窗口' }).show();
+          } catch (err) {
+            console.error('[desktop] Failed to show second-instance notification:', err);
+          }
+        }
+      }
     }
   });
 
@@ -96,6 +107,26 @@ if (!gotTheLock) {
 
       globalShortcut.register('CommandOrControl+Shift+Space', () => {
         windowManager?.toggleVisibility();
+      });
+
+      globalShortcut.register('CommandOrControl+Shift+N', () => {
+        windowManager?.showAndFocus();
+        windowManager?.mainWindow?.webContents.send('app:shortcut', { action: 'new-chat' });
+      });
+
+      globalShortcut.register('CommandOrControl+K', () => {
+        windowManager?.showAndFocus();
+        windowManager?.mainWindow?.webContents.send('app:shortcut', { action: 'focus-search' });
+      });
+
+      globalShortcut.register('CommandOrControl+,', () => {
+        windowManager?.showAndFocus();
+        windowManager?.mainWindow?.webContents.send('app:shortcut', { action: 'open-settings' });
+      });
+
+      globalShortcut.register('CommandOrControl+Shift+F', () => {
+        windowManager?.showAndFocus();
+        windowManager?.mainWindow?.webContents.send('app:shortcut', { action: 'focus-input' });
       });
 
       try {
