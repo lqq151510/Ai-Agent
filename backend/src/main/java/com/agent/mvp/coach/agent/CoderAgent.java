@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
+@org.springframework.context.annotation.Profile("legacy")
 @Component
 public class CoderAgent {
 

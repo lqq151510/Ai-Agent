@@ -171,7 +171,6 @@ type KnowledgeElectronApi = {
     request: <T>(payload: { method?: string; path: string; body?: unknown }) => Promise<T>;
     importLocalFile?: (payload?: { title?: string }) => Promise<BackendLocalFileImportResponse>;
   };
-  invoke?: <T>(channel: string, ...args: unknown[]) => Promise<T>;
 };
 
 const DIRECT_API_BASE_URL = import.meta.env.VITE_KNOWLEDGE_API_BASE_URL || 'http://127.0.0.1:18080';
@@ -181,12 +180,12 @@ const getElectronApi = () => (window as unknown as { electronAPI?: KnowledgeElec
 
 const hasKnowledgeBridge = () => {
   const electronApi = getElectronApi();
-  return Boolean(electronApi?.knowledge?.request || electronApi?.invoke);
+  return Boolean(electronApi?.knowledge?.request);
 };
 
 export const canUseDesktopFilePicker = () => {
   const electronApi = getElectronApi();
-  return Boolean(electronApi?.knowledge?.importLocalFile || electronApi?.invoke);
+  return Boolean(electronApi?.knowledge?.importLocalFile);
 };
 
 const canUseDirectBackend = () => (
@@ -203,10 +202,6 @@ const request = async <T>(path: string, method = 'GET', body?: unknown): Promise
   const knowledgeRequest = electronApi?.knowledge?.request;
   if (knowledgeRequest) {
     return knowledgeRequest<T>({ method, path, body });
-  }
-  const genericInvoke = electronApi?.invoke;
-  if (genericInvoke) {
-    return genericInvoke<T>('knowledge:request', { method, path, body });
   }
   if (canUseDirectBackend()) {
     return directBackendRequest<T>(path, method, body);
@@ -286,87 +281,96 @@ const requestLocalFileImport = async (title?: string): Promise<BackendLocalFileI
     return importLocalFile(payload);
   }
 
-  const genericInvoke = electronApi?.invoke;
-  if (genericInvoke) {
-    return genericInvoke<BackendLocalFileImportResponse>('knowledge:import-local-file', payload);
-  }
-
   throw new Error('桌面文件选择桥不可用，请在桌面端重启后重试。');
 };
 
 export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot> => {
-  try {
-    const [
-      dashboard,
-      inbox,
-      processing,
-      failed,
-      ready,
-      archived,
-      tags,
-      modelSources,
-      profile,
-      storage,
-    ] = await Promise.all([
-      request<BackendDashboard>('/api/v1/dashboard/summary'),
-      request<BackendKnowledgePage>('/api/v1/knowledge-items?status=inbox&page=1&pageSize=12'),
-      request<BackendKnowledgePage>('/api/v1/knowledge-items?status=processing&page=1&pageSize=12'),
-      request<BackendKnowledgePage>('/api/v1/knowledge-items?status=failed&page=1&pageSize=12'),
-      request<BackendKnowledgePage>('/api/v1/knowledge-items?status=ready&page=1&pageSize=16'),
-      request<BackendKnowledgePage>('/api/v1/knowledge-items?status=archived&page=1&pageSize=12'),
-      request<BackendTag[]>('/api/v1/tags'),
-      request<BackendModelSource[]>('/api/v1/model-sources'),
-      request<BackendProfile>('/api/v1/settings/profile'),
-      request<BackendStorage>('/api/v1/settings/storage'),
-    ]);
+  const results = await Promise.allSettled([
+    request<BackendDashboard>('/api/v1/dashboard/summary'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=inbox&page=1&pageSize=12'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=processing&page=1&pageSize=12'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=failed&page=1&pageSize=12'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=ready&page=1&pageSize=16'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=archived&page=1&pageSize=12'),
+    request<BackendTag[]>('/api/v1/tags'),
+    request<BackendModelSource[]>('/api/v1/model-sources'),
+    request<BackendProfile>('/api/v1/settings/profile'),
+    request<BackendStorage>('/api/v1/settings/storage'),
+  ]);
 
-    const inboxItems = [...inbox.items, ...processing.items, ...failed.items]
-      .sort(compareWorkflowItems)
-      .map(toKnowledgeItem);
-    const libraryItems = ready.items.map(toKnowledgeItem);
-    return {
-      source: 'api',
-      dashboard: {
-        totalItems: dashboard.totalItems,
-        inboxItems: dashboard.inboxItems,
-        readyItems: dashboard.readyItems,
-        failedItems: dashboard.failedItems,
-        recentItems: (dashboard.recentItems ?? []).map(toKnowledgeItem),
-        topTags: (dashboard.topTags ?? []).map((tag) => ({
-          name: tag.name,
-          count: tag.count ?? 0,
-          color: tag.color,
-        })),
-      },
-      inboxItems,
-      libraryItems,
-      archivedItems: archived.items.map(toKnowledgeItem),
-      tags: tags.map((tag) => tag.name),
-      modelProviders: modelSources.map(toModelProvider),
-      profile: {
-        displayName: profile.displayName || '泽宝',
-        email: profile.email || 'desktop@example.com',
-        organizeMode: profile.organizeMode || 'manual',
-        privacyMode: profile.privacyMode || 'local_first',
-      },
-      storage: {
-        totalItems: storage.totalItems ?? dashboard.totalItems,
-        inboxItems: storage.inboxItems ?? dashboard.inboxItems,
-        readyItems: storage.readyItems ?? dashboard.readyItems,
-        failedItems: storage.failedItems ?? dashboard.failedItems,
-        archivedItems: storage.archivedItems ?? 0,
-        totalTags: storage.totalTags ?? tags.length,
-        totalModelSources: storage.totalModelSources ?? modelSources.length,
-      },
-    };
-  } catch (error) {
+  const [
+    dashboardResult, inboxResult, processingResult, failedResult,
+    readyResult, archivedResult, tagsResult, modelSourcesResult,
+    profileResult, storageResult,
+  ] = results;
+
+  const emptyPage: BackendKnowledgePage = { items: [], total: 0, page: 1, pageSize: 1 };
+  const fulfilled = <T>(r: PromiseSettledResult<T>, fallback: T): T =>
+    r.status === 'fulfilled' ? r.value : fallback;
+
+  const dashboard = fulfilled(dashboardResult, { totalItems: 0, inboxItems: 0, readyItems: 0, failedItems: 0 } as BackendDashboard);
+  const inbox = fulfilled(inboxResult, emptyPage);
+  const processing = fulfilled(processingResult, emptyPage);
+  const failed = fulfilled(failedResult, emptyPage);
+  const ready = fulfilled(readyResult, emptyPage);
+  const archived = fulfilled(archivedResult, emptyPage);
+  const tags = fulfilled(tagsResult, [] as BackendTag[]);
+  const modelSources = fulfilled(modelSourcesResult, [] as BackendModelSource[]);
+  const profile = fulfilled(profileResult, {} as BackendProfile);
+  const storage = fulfilled(storageResult, {} as BackendStorage);
+
+  const errors = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+
+  if (errors.length === results.length) {
+    const firstError = errors[0];
     const snapshot = isPreviewOnlyMode() ? withPreviewItems(fallbackSnapshot) : fallbackSnapshot;
     return {
       ...snapshot,
       source: 'fallback',
-      error: error instanceof Error ? error.message : String(error),
+      error: firstError.reason instanceof Error ? firstError.reason.message : String(firstError.reason),
     };
   }
+
+  const inboxItems = [...inbox.items, ...processing.items, ...failed.items]
+    .sort(compareWorkflowItems)
+    .map(toKnowledgeItem);
+  const libraryItems = ready.items.map(toKnowledgeItem);
+  return {
+    source: 'api',
+    ...(errors.length > 0 ? { error: `${errors.length} 个接口请求失败` } : {}),
+    dashboard: {
+      totalItems: dashboard.totalItems,
+      inboxItems: dashboard.inboxItems,
+      readyItems: dashboard.readyItems,
+      failedItems: dashboard.failedItems,
+      recentItems: (dashboard.recentItems ?? []).map(toKnowledgeItem),
+      topTags: (dashboard.topTags ?? []).map((tag) => ({
+        name: tag.name,
+        count: tag.count ?? 0,
+        color: tag.color,
+      })),
+    },
+    inboxItems,
+    libraryItems,
+    archivedItems: archived.items.map(toKnowledgeItem),
+    tags: tags.map((tag) => tag.name),
+    modelProviders: modelSources.map(toModelProvider),
+    profile: {
+      displayName: profile.displayName || '泽宝',
+      email: profile.email || 'desktop@example.com',
+      organizeMode: profile.organizeMode || 'manual',
+      privacyMode: profile.privacyMode || 'local_first',
+    },
+    storage: {
+      totalItems: storage.totalItems ?? dashboard.totalItems,
+      inboxItems: storage.inboxItems ?? dashboard.inboxItems,
+      readyItems: storage.readyItems ?? dashboard.readyItems,
+      failedItems: storage.failedItems ?? dashboard.failedItems,
+      archivedItems: storage.archivedItems ?? 0,
+      totalTags: storage.totalTags ?? tags.length,
+      totalModelSources: storage.totalModelSources ?? modelSources.length,
+    },
+  };
 };
 
 export const searchKnowledgeItems = async (query: string): Promise<KnowledgeItem[]> => {

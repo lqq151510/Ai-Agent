@@ -20,7 +20,7 @@ public class StringCryptoConverter {
     private final byte[] key;
 
     public StringCryptoConverter(
-            @Value("${security.db.encryption-key:12345678901234567890123456789012}")
+            @Value("${security.db.encryption-key}")
                     String configuredKey) {
         // Pad or truncate to 32 bytes for AES-256
         String padded = String.format("%-32s", configuredKey).substring(0, 32);

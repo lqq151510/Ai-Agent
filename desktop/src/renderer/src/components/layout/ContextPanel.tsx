@@ -54,7 +54,7 @@ export function ContextPanel({
   }, [workspacePath, serviceReady]);
 
   const handleSelectWorkspace = async () => {
-    const path = await window.electronAPI?.invoke('workspace:add');
+    const path = await window.electronAPI?.workspace.add();
     if (path) {
       onSelectWorkspace(path.path ?? path);
     }

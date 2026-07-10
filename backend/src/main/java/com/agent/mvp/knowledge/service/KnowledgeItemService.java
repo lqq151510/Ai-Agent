@@ -36,6 +36,7 @@ import com.agent.mvp.settings.entity.UserProfile;
 import com.agent.mvp.settings.service.UserProfileService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,7 +55,9 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -74,6 +77,7 @@ public class KnowledgeItemService {
     private final UserProfileService userProfileService;
     private final ObjectMapper objectMapper;
     private final boolean postgresFullTextSearch;
+    private final TransactionTemplate transactionTemplate;
 
     @Autowired
     public KnowledgeItemService(
@@ -85,7 +89,8 @@ public class KnowledgeItemService {
             MarkItDownService markItDownService,
             UserProfileService userProfileService,
             ObjectMapper objectMapper,
-            @Value("${spring.datasource.url:}") String datasourceUrl) {
+            @Value("${spring.datasource.url:}") String datasourceUrl,
+            PlatformTransactionManager transactionManager) {
         this(
                 knowledgeItemRepository,
                 knowledgeTagRepository,
@@ -95,7 +100,8 @@ public class KnowledgeItemService {
                 markItDownService,
                 userProfileService,
                 objectMapper,
-                isPostgresDatasource(datasourceUrl));
+                isPostgresDatasource(datasourceUrl),
+                new TransactionTemplate(transactionManager));
     }
 
     public KnowledgeItemService(
@@ -116,7 +122,8 @@ public class KnowledgeItemService {
                 markItDownService,
                 userProfileService,
                 objectMapper,
-                false);
+                false,
+                null);
     }
 
     KnowledgeItemService(
@@ -128,7 +135,8 @@ public class KnowledgeItemService {
             MarkItDownService markItDownService,
             UserProfileService userProfileService,
             ObjectMapper objectMapper,
-            boolean postgresFullTextSearch) {
+            boolean postgresFullTextSearch,
+            TransactionTemplate transactionTemplate) {
         this.knowledgeItemRepository = knowledgeItemRepository;
         this.knowledgeTagRepository = knowledgeTagRepository;
         this.knowledgeItemTagRepository = knowledgeItemTagRepository;
@@ -138,6 +146,7 @@ public class KnowledgeItemService {
         this.userProfileService = userProfileService;
         this.objectMapper = objectMapper;
         this.postgresFullTextSearch = postgresFullTextSearch;
+        this.transactionTemplate = transactionTemplate;
     }
 
     private static boolean isPostgresDatasource(String datasourceUrl) {
@@ -297,31 +306,22 @@ public class KnowledgeItemService {
         return toPageResponse(itemPage, page, pageSize);
     }
 
-    @Transactional
     public KnowledgeItemResponse organize(UUID userId, UUID itemId) {
         KnowledgeItem item = requireOwnedItem(userId, itemId);
         if (KnowledgeItemStatus.ARCHIVED.value().equals(item.getStatus())) {
             throw new BadRequestException("Archived item cannot be organized");
         }
-        if (KnowledgeItemStatus.PROCESSING.value().equals(item.getStatus())) {
-            throw new BadRequestException("Processing item cannot be organized again");
-        }
         return runOrganize(userId, item, true, IngestionJobType.ORGANIZE.value());
     }
 
-    @Transactional
     public KnowledgeItemResponse reprocess(UUID userId, UUID itemId) {
         KnowledgeItem item = requireOwnedItem(userId, itemId);
         if (KnowledgeItemStatus.ARCHIVED.value().equals(item.getStatus())) {
             throw new BadRequestException("Archived item cannot be reprocessed");
         }
-        if (KnowledgeItemStatus.PROCESSING.value().equals(item.getStatus())) {
-            throw new BadRequestException("Processing item cannot be reprocessed");
-        }
         return runOrganize(userId, item, true, IngestionJobType.REPROCESS.value());
     }
 
-    @Transactional
     public BatchOrganizeResponse organizeBatch(UUID userId, int limit, boolean includeFailed) {
         userProfileService.requireUser(userId);
         int safeLimit = Math.min(Math.max(limit, 1), 100);
@@ -362,9 +362,14 @@ public class KnowledgeItemService {
 
     private KnowledgeItemResponse runOrganize(
             UUID userId, KnowledgeItem item, boolean rethrowOnFailure, String jobType) {
+        // CAS atomic claim: prevents concurrent organize/reprocess from duplicating work.
+        if (!claimForProcessing(userId, item.getId())) {
+            if (rethrowOnFailure) {
+                throw new BadRequestException("Item is already being processed");
+            }
+            return toResponse(item);
+        }
         item.setStatus(KnowledgeItemStatus.PROCESSING.value());
-        item.touch();
-        knowledgeItemRepository.updateById(item);
 
         IngestionJob job =
                 ingestionJobService.createRunning(
@@ -373,15 +378,19 @@ public class KnowledgeItemService {
                         jobType,
                         toJson(Map.of("knowledgeItemId", item.getId(), "title", item.getTitle())));
         try {
+            // AI call is outside any DB transaction to avoid holding connections during long operations.
             KnowledgeOrganizerService.OrganizeResult result = knowledgeOrganizerService.organize(item);
-            item.setCleanedContent(result.cleanedContent());
-            item.setSummary(result.summary());
-            item.setLanguage(result.language());
-            item.setWordCount(result.wordCount());
-            item.setStatus(KnowledgeItemStatus.READY.value());
-            item.touch();
-            knowledgeItemRepository.updateById(item);
-            replaceTags(userId, item.getId(), result.tags());
+            // Commit success in a short transaction.
+            txWrite(() -> {
+                item.setCleanedContent(result.cleanedContent());
+                item.setSummary(result.summary());
+                item.setLanguage(result.language());
+                item.setWordCount(result.wordCount());
+                item.setStatus(KnowledgeItemStatus.READY.value());
+                item.touch();
+                knowledgeItemRepository.updateById(item);
+                replaceTags(userId, item.getId(), result.tags());
+            });
             ingestionJobService.markSucceeded(
                     job,
                     toJson(
@@ -392,14 +401,45 @@ public class KnowledgeItemService {
                                     "status", IngestionJobStatus.SUCCEEDED.value())));
             return toResponse(item);
         } catch (RuntimeException ex) {
-            item.setStatus(KnowledgeItemStatus.FAILED.value());
-            item.touch();
-            knowledgeItemRepository.updateById(item);
+            txWrite(() -> {
+                item.setStatus(KnowledgeItemStatus.FAILED.value());
+                item.touch();
+                knowledgeItemRepository.updateById(item);
+            });
             ingestionJobService.markFailed(job, ex.getMessage());
             if (rethrowOnFailure) {
                 throw ex;
             }
             return toResponse(item);
+        }
+    }
+
+    /**
+     * Atomically claim an item for processing using a CAS (compare-and-swap) update.
+     * Only transitions from non-PROCESSING, non-ARCHIVED states to PROCESSING.
+     * Returns false if another request already claimed the item.
+     */
+    private boolean claimForProcessing(UUID userId, UUID itemId) {
+        UpdateWrapper<KnowledgeItem> wrapper =
+                new UpdateWrapper<KnowledgeItem>()
+                        .eq("id", itemId)
+                        .eq("user_id", userId)
+                        .ne("status", KnowledgeItemStatus.PROCESSING.value())
+                        .ne("status", KnowledgeItemStatus.ARCHIVED.value())
+                        .set("status", KnowledgeItemStatus.PROCESSING.value())
+                        .set("updated_at", Instant.now());
+        return knowledgeItemRepository.update(null, wrapper) > 0;
+    }
+
+    /**
+     * Execute a write operation in a short transaction. Falls back to direct execution
+     * when no TransactionTemplate is configured (e.g. unit tests with mocks).
+     */
+    private void txWrite(Runnable action) {
+        if (transactionTemplate == null) {
+            action.run();
+        } else {
+            transactionTemplate.executeWithoutResult(status -> action.run());
         }
     }
 

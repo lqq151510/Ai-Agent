@@ -49,7 +49,7 @@ import org.springframework.test.context.DynamicPropertySource;
 @DisplayName("端到端错误路径测试：401/403/400 等异常场景")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
-@ActiveProfiles({"desktop", "test"})
+@ActiveProfiles({"desktop", "test", "legacy"})
 class EndToEndErrorFlowTest {
 
     // 内置 mock 服务器，模拟 OpenAI 兼容接口

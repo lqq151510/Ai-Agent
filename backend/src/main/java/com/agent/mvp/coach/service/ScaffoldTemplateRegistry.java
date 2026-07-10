@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 
+@org.springframework.context.annotation.Profile("legacy")
 @Service
 public class ScaffoldTemplateRegistry {
 
@@ -218,6 +219,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@org.springframework.context.annotation.Profile("legacy")
 @RestController
 @RequestMapping("/api/dev-coach")
 public class DevCoachController {

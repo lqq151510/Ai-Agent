@@ -16,6 +16,7 @@ import { SkillManager } from './skill-manager';
 import { ComputerUseManager } from './computer-use-manager';
 import { findFreePort } from './utils/network';
 import { getDataDir, getJrePath, getBackendJarPath, getBackendStartupTimeoutMs } from './utils/env';
+import { ensureDesktopSecrets } from './utils/secrets';
 
 // Unhandled Promise Rejection Handling
 process.on('unhandledRejection', (reason, promise) => {
@@ -138,9 +139,11 @@ if (!gotTheLock) {
       const dataDir = getDataDir();
       const jrePath = getJrePath();
       const jarPath = getBackendJarPath();
+      const secrets = ensureDesktopSecrets(dataDir);
 
       backendManager = new BackendManager(jrePath, jarPath, dataDir, activePort, {
         startupTimeoutMs: getBackendStartupTimeoutMs(),
+        secrets,
       });
       cliManager = new CliManager();
       ptyPool = new PtyPool();
@@ -157,6 +160,7 @@ if (!gotTheLock) {
         ptyPool,
         approvalEngine,
         () => localServiceManager.isReady() ? localServiceManager.getPort() : 8765,
+        () => localServiceManager.getToken(),
         () => activePort,
         () => ipcRegistry.getDesktopAccessToken(),
         () => approvalMode,

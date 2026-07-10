@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
+import type { DesktopSecrets } from './utils/secrets';
 
 export type BackendStatus = 'starting' | 'running' | 'stopped' | 'error';
 
@@ -26,6 +27,7 @@ type BackendManagerOptions = {
   startupTimeoutMs?: number;
   healthCheckIntervalMs?: number;
   logTailSize?: number;
+  secrets: DesktopSecrets;
 };
 
 export class BackendManager {
@@ -40,6 +42,7 @@ export class BackendManager {
   private readonly startupTimeoutMs: number;
   private readonly healthCheckIntervalMs: number;
   private readonly maxLogSize: number;
+  private readonly secrets: DesktopSecrets;
   private logBuffer: string[] = [];
   private startedAt: string | null = null;
   private lastReadyAt: string | null = null;
@@ -49,7 +52,7 @@ export class BackendManager {
   private restartCount = 0;
   private readonly listeners = new Set<(status: BackendStatusSnapshot) => void>();
 
-  constructor(jrePath: string, jarPath: string, dataDir: string, port: number, options: BackendManagerOptions = {}) {
+  constructor(jrePath: string, jarPath: string, dataDir: string, port: number, options: BackendManagerOptions) {
     this.jrePath = jrePath;
     this.jarPath = jarPath;
     this.dataDir = dataDir;
@@ -59,6 +62,7 @@ export class BackendManager {
     this.startupTimeoutMs = options.startupTimeoutMs ?? 60_000;
     this.healthCheckIntervalMs = options.healthCheckIntervalMs ?? 1_000;
     this.maxLogSize = options.logTailSize ?? 500;
+    this.secrets = options.secrets;
   }
 
   onStatusChange(listener: (status: BackendStatusSnapshot) => void): () => void {
@@ -87,6 +91,7 @@ export class BackendManager {
       '-jar', this.jarPath,
       '--spring.profiles.active=desktop',
       `--server.port=${this.port}`,
+      `--server.address=127.0.0.1`,
       `--app.data-dir=${this.dataDir}`,
     ];
 
@@ -96,6 +101,8 @@ export class BackendManager {
         ...process.env,
         SPRING_OUTPUT_ANSI_ENABLED: 'never',
         APP_DESKTOP_MODE: 'true',
+        JWT_SECRET: this.secrets.jwtSecret,
+        SECURITY_DB_ENCRYPTION_KEY: this.secrets.dbEncryptionKey,
       },
     });
 

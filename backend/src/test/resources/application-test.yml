@@ -35,12 +35,14 @@ mybatis-plus:
     # H2 在 PostgreSQL 模式下将 UUID 列报告为 OTHER 类型
     jdbc-type-for-null: OTHER
 
-# JWT 密钥（测试专用，满足 32 字符最小长度要求）
+# JWT 密钥与数据库加密密钥（测试专用，满足 32 字符最小长度要求）
 security:
   jwt:
     secret: e2e-test-secret-key-for-jwt-signing-must-be-long-enough
     access-exp-seconds: 3600
     refresh-exp-seconds: 2592000
+  db:
+    encryption-key: e2e-test-db-encryption-key-32-bytes!
 
 # SandboxManager 通过 @Value("${WORKSPACE_ROOT:/app/workspace}") 读取此属性
 WORKSPACE_ROOT: ${user.dir}

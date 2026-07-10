@@ -124,6 +124,7 @@ class KnowledgeItemServiceTest {
         AtomicReference<KnowledgeItem> stored = new AtomicReference<>();
         when(userProfileService.getOrCreate(userId))
                 .thenReturn(UserProfile.builder().userId(userId).organizeMode("auto").build());
+        when(itemRepository.update(any(), any())).thenReturn(1);
         Mockito.doAnswer(
                         invocation -> {
                             KnowledgeItem item = invocation.getArgument(0);
@@ -210,6 +211,7 @@ class KnowledgeItemServiceTest {
                         .build();
 
         when(itemRepository.selectById(itemId)).thenReturn(item);
+        when(itemRepository.update(any(), any())).thenReturn(1);
         Mockito.doAnswer(
                         invocation -> {
                             KnowledgeItem updated = invocation.getArgument(0);
@@ -293,6 +295,7 @@ class KnowledgeItemServiceTest {
                         .build();
 
         when(itemRepository.selectList(any())).thenReturn(List.of(inboxItem, failedItem));
+        when(itemRepository.update(any(), any())).thenReturn(1);
         when(itemTagRepository.findTagIdsByKnowledgeItemId(any())).thenReturn(List.of());
         when(tagRepository.selectOne(any())).thenReturn(null);
         when(organizerService.organize(any()))
@@ -432,7 +435,8 @@ class KnowledgeItemServiceTest {
                         markItDownService,
                         userProfileService,
                         objectMapper,
-                        true);
+                        true,
+                        null);
 
         UUID userId = UUID.randomUUID();
         Mockito.doAnswer(

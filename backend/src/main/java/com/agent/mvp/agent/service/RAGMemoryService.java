@@ -199,7 +199,7 @@ public class RAGMemoryService {
     }
 
     /** 更新特定记忆片段的内容，并重新计算嵌入向量存回 DB */
-    public void updateMemory(String id, String text) {
+    public void updateMemory(String id, String text, UUID userId) {
         try {
             EmbeddingModel embeddingModel = storeProvider.getEmbeddingModel();
             JdbcTemplate jdbcTemplate = storeProvider.getJdbcTemplate();
@@ -218,8 +218,11 @@ public class RAGMemoryService {
             }
             sb.append("]");
 
-            String sql = "UPDATE engineering_memory SET text = ?, embedding = ?::vector WHERE embedding_id = ?::uuid";
-            jdbcTemplate.update(sql, text, sb.toString(), id);
+            String sql = "UPDATE engineering_memory SET text = ?, embedding = ?::vector WHERE embedding_id = ?::uuid AND metadata::jsonb ->> 'userId' = ?";
+            int affected = jdbcTemplate.update(sql, text, sb.toString(), id, userId.toString());
+            if (affected == 0) {
+                throw new RuntimeException("Memory not found or not owned by user: " + id);
+            }
             log.info("Successfully updated memory embedding for id: {}", id);
         } catch (Exception ex) {
             log.error("Failed to update memory. Error: {}", ex.getMessage());
@@ -228,11 +231,14 @@ public class RAGMemoryService {
     }
 
     /** 从向量库中删除特定记忆片段 */
-    public void deleteMemory(String id) {
+    public void deleteMemory(String id, UUID userId) {
         try {
             JdbcTemplate jdbcTemplate = storeProvider.getJdbcTemplate();
-            String sql = "DELETE FROM engineering_memory WHERE embedding_id = ?::uuid";
-            jdbcTemplate.update(sql, id);
+            String sql = "DELETE FROM engineering_memory WHERE embedding_id = ?::uuid AND metadata::jsonb ->> 'userId' = ?";
+            int affected = jdbcTemplate.update(sql, id, userId.toString());
+            if (affected == 0) {
+                throw new RuntimeException("Memory not found or not owned by user: " + id);
+            }
             log.info("Successfully deleted memory for id: {}", id);
         } catch (Exception ex) {
             log.error("Failed to delete memory. Error: {}", ex.getMessage());

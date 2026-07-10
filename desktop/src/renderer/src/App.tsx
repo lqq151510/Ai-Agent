@@ -11,7 +11,9 @@ interface DesktopElectronApi {
   backendStatus?: () => Promise<BackendStatusPayload>;
   onBackendStatusChanged?: (callback: (status: BackendStatusPayload) => void) => (() => void) | void;
   onShortcut?: (callback: (payload: { action: string }) => void) => () => void;
-  invoke?: <T>(channel: string, ...args: unknown[]) => Promise<T>;
+  chat?: {
+    createSession: (branch?: string) => Promise<unknown>;
+  };
 }
 
 const getElectronApi = () =>
@@ -88,7 +90,7 @@ export const App = () => {
         case 'new-chat': {
           // Create a backend session via IPC; the Knowledge Desk UI does not expose a chat surface,
           // so this shortcut is wired for future layouts and broadcasts a custom event.
-          api.invoke?.('chat:create-session', 'main').catch(() => {
+          api.chat?.createSession('main').catch(() => {
             // Non-fatal if chat is not available in the current layout.
           });
           break;

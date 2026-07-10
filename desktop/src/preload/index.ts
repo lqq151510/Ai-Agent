@@ -23,10 +23,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   terminalKeystroke: (data: string) => ipcRenderer.send('terminal:keystroke', data),
   terminalResize: (cols: number, rows: number) => ipcRenderer.send('terminal:resize', cols, rows),
 
-  // Generic invoke — allows renderer to call any IPC handler by channel name.
-  // Used by new layout components (MainLayout, SessionList, ChatArea, ContextPanel).
-  invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
-
   // Global shortcuts pushed from the main process.
   onShortcut: (callback: (payload: { action: string }) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: { action: string }) => callback(payload);

@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+@org.springframework.context.annotation.Profile("legacy")
 @Service
 public class SentinelAlertBroadcaster {
     private final CopyOnWriteArrayList<SseEmitter> emitters = new CopyOnWriteArrayList<>();

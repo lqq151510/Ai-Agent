@@ -57,7 +57,7 @@ import org.springframework.test.context.DynamicPropertySource;
 @DisplayName("端到端完整用户旅程测试：注册 -> 登录 -> 会话 -> 对话 -> 流式 -> 导出 -> Coach -> 系统检查")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
-@ActiveProfiles({"desktop", "test"})
+@ActiveProfiles({"desktop", "test", "legacy"})
 class EndToEndFlowTest {
 
     // 内置 mock 服务器，模拟 OpenAI 兼容接口

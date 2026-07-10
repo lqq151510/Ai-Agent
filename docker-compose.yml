@@ -49,6 +49,7 @@ services:
   kafka:
     image: bitnami/kafka:3.5
     container_name: ai-agent-kafka
+    profiles: ["kafka"]
     ports:
       - "9092:9092"
     environment:
@@ -166,6 +167,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.55.0
     container_name: ai-agent-prometheus
+    profiles: ["monitoring"]
     depends_on:
       backend:
         condition: service_healthy
@@ -200,6 +202,7 @@ services:
   grafana:
     image: grafana/grafana:11.3.0
     container_name: ai-agent-grafana
+    profiles: ["monitoring"]
     depends_on:
       prometheus:
         condition: service_healthy
@@ -233,6 +236,7 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.8.2
     container_name: ai-agent-node-exporter
+    profiles: ["monitoring"]
     command:
       - "--path.rootfs=/host"
     volumes:

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+@org.springframework.context.annotation.Profile("legacy")
 @Component
 public class ReviewerAgent {
 

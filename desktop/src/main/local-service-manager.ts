@@ -1,4 +1,5 @@
 import { fork, ChildProcess } from 'child_process';
+import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
 import { app } from 'electron';
@@ -9,6 +10,12 @@ export class LocalServiceManager {
   private process: ChildProcess | null = null;
   private port: number = DEFAULT_PORT;
   private ready: boolean = false;
+  private readonly token: string;
+
+  constructor() {
+    // 每次启动生成随机令牌，local-service 会校验请求头 Authorization: Bearer <token>
+    this.token = crypto.randomBytes(32).toString('hex');
+  }
 
   /**
    * Start the local-service HTTP server.
@@ -27,6 +34,7 @@ export class LocalServiceManager {
       const env = {
         ...process.env,
         LOCAL_SERVICE_PORT: String(this.port),
+        LOCAL_SERVICE_TOKEN: this.token,
         NODE_ENV: process.env.NODE_ENV || 'production',
       };
 
@@ -83,6 +91,10 @@ export class LocalServiceManager {
 
   public getPort(): number {
     return this.port;
+  }
+
+  public getToken(): string {
+    return this.token;
   }
 
   public isReady(): boolean {

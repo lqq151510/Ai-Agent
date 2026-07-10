@@ -52,6 +52,8 @@ security:
     secret: ${JWT_SECRET}
     access-exp-seconds: ${JWT_ACCESS_EXP_SECONDS:3600}
     refresh-exp-seconds: ${JWT_REFRESH_EXP_SECONDS:2592000}
+  db:
+    encryption-key: ${SECURITY_DB_ENCRYPTION_KEY}
 
 app:
   workspace-root: ${WORKSPACE_ROOT:.}

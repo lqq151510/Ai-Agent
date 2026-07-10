@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@org.springframework.context.annotation.Profile("legacy")
 @RestController
 @RequestMapping("/api/v1/sentinel")
 public class SentinelController {

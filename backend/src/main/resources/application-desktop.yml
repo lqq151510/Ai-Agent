@@ -56,9 +56,11 @@ spring:
 
 security:
   jwt:
-    secret: ${JWT_SECRET:desktop-local-secret-change-me-in-production}
+    secret: ${JWT_SECRET}
     access-exp-seconds: ${JWT_ACCESS_EXP_SECONDS:86400}
     refresh-exp-seconds: ${JWT_REFRESH_EXP_SECONDS:2592000}
+  db:
+    encryption-key: ${SECURITY_DB_ENCRYPTION_KEY}
 
 app:
   data-dir: ${APP_DATA_DIR:${user.home}/.ai-agent-desktop}

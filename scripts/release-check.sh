@@ -365,6 +365,7 @@ if [[ "$(normalize_bool "${SKIP_DESKTOP_BUILD}")" != "true" ]]; then
   check_node_modules "${ROOT_DIR}/desktop"
   check_node_modules "${ROOT_DIR}/desktop/src/renderer"
   run_in "${ROOT_DIR}/desktop/src/renderer" npm run lint
+  run_in "${ROOT_DIR}/desktop/src/renderer" npm run test
   run_in "${ROOT_DIR}/desktop/src/renderer" npm run build
   run_in "${ROOT_DIR}/desktop" npm run build
   if [[ "$(normalize_bool "${PACKAGE_DESKTOP}")" == "true" ]]; then

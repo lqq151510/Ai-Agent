@@ -14,7 +14,7 @@ export function SessionList({
 }: SessionListProps) {
 
   useEffect(() => {
-    window.electronAPI?.invoke('chat:get-sessions').then((data: ChatSession[]) => {
+    window.electronAPI?.chat.getSessions().then((data: ChatSession[]) => {
       if (Array.isArray(data)) setSessions(data);
     }).catch(() => {});
   }, [setSessions]);

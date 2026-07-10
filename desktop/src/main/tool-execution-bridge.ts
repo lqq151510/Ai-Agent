@@ -59,6 +59,7 @@ export class ToolExecutionBridge {
     private ptyPool: PtyPool,
     private approvalEngine: ApprovalEngine,
     private localServicePort: () => number,
+    private localServiceToken: () => string,
     private backendPort: () => number,
     private authToken: () => string | Promise<string>,
     private currentMode: () => ApprovalMode,
@@ -280,7 +281,10 @@ export class ToolExecutionBridge {
     if (!filePath) throw new Error('No file path provided');
 
     const port = this.localServicePort();
-    const resp = await fetch(`http://127.0.0.1:${port}/file?path=${encodeURIComponent(filePath)}`);
+    const token = this.localServiceToken();
+    const resp = await fetch(`http://127.0.0.1:${port}/file?path=${encodeURIComponent(filePath)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (!resp.ok) throw new Error(`readFile failed: ${resp.status} ${await resp.text()}`);
     const data = await resp.json() as { content?: string; error?: string };
     if (data.error) throw new Error(data.error);
@@ -316,7 +320,10 @@ export class ToolExecutionBridge {
     const depth = Number(args.depth) || 2;
 
     const port = this.localServicePort();
-    const resp = await fetch(`http://127.0.0.1:${port}/workspace/tree?path=${encodeURIComponent(dirPath)}&depth=${depth}`);
+    const token = this.localServiceToken();
+    const resp = await fetch(`http://127.0.0.1:${port}/workspace/tree?path=${encodeURIComponent(dirPath)}&depth=${depth}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (!resp.ok) throw new Error(`listRepoTree failed: ${resp.status}`);
     const data = await resp.json() as { tree?: unknown };
     return JSON.stringify(data.tree ?? [], null, 2);

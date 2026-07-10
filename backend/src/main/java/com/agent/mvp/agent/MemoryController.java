@@ -42,7 +42,7 @@ public class MemoryController {
             if (text == null || text.trim().isEmpty()) {
                 return ResponseEntity.badRequest().build();
             }
-            ragMemoryService.updateMemory(id, text.trim());
+            ragMemoryService.updateMemory(id, text.trim(), user.userId());
             return ResponseEntity.ok().build();
         }
     }
@@ -51,7 +51,7 @@ public class MemoryController {
     public ResponseEntity<Void> delete(@PathVariable("id") String id, Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
-            ragMemoryService.deleteMemory(id);
+            ragMemoryService.deleteMemory(id, user.userId());
             return ResponseEntity.ok().build();
         }
     }

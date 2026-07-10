@@ -67,7 +67,7 @@ const KnowledgeDeskApp = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [itemActionState, setItemActionState] = useState<{ itemId: string; action: KnowledgeWorkflowAction } | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const detailRequestRef = useRef(0);
   const desktopFilePickerAvailable = canUseDesktopFilePicker();
 
@@ -110,8 +110,8 @@ const KnowledgeDeskApp = () => {
     return nextSnapshot;
   }, []);
 
-  const showNotice = (message: string) => {
-    setNotice(message);
+  const showNotice = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setNotice({ message, type });
     window.setTimeout(() => setNotice(null), 3200);
   };
 
@@ -125,7 +125,8 @@ const KnowledgeDeskApp = () => {
       await refreshSnapshot();
       showNotice(`已收集：${item.title}`);
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : String(error));
+      setImportMode(null);
+      showNotice(error instanceof Error ? error.message : String(error), 'error');
     } finally {
       setIsImporting(false);
     }
@@ -136,7 +137,8 @@ const KnowledgeDeskApp = () => {
     try {
       const item = await importLocalKnowledgeFile(title);
       if (!item) {
-        showNotice('已取消文件选择');
+        setImportMode(null);
+        showNotice('已取消文件选择', 'info');
         return;
       }
       setSelectedItem(item);
@@ -145,7 +147,8 @@ const KnowledgeDeskApp = () => {
       await refreshSnapshot();
       showNotice(`已导入：${item.title}`);
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : String(error));
+      setImportMode(null);
+      showNotice(error instanceof Error ? error.message : String(error), 'error');
     } finally {
       setIsImporting(false);
     }
@@ -161,7 +164,8 @@ const KnowledgeDeskApp = () => {
       await refreshSnapshot();
       showNotice(`已导入：${item.title}`);
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : String(error));
+      setImportMode(null);
+      showNotice(error instanceof Error ? error.message : String(error), 'error');
     } finally {
       setIsImporting(false);
     }
@@ -174,7 +178,7 @@ const KnowledgeDeskApp = () => {
       await refreshSnapshot();
       showNotice(`整理完成：成功 ${result.succeeded} 条，失败 ${result.failed} 条`);
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : String(error));
+      showNotice(error instanceof Error ? error.message : String(error), 'error');
     } finally {
       setIsOrganizing(false);
     }
@@ -199,7 +203,7 @@ const KnowledgeDeskApp = () => {
 
       showNotice(workflowNotice(action, nextItem.title));
     } catch (error) {
-      showNotice(error instanceof Error ? error.message : String(error));
+      showNotice(error instanceof Error ? error.message : String(error), 'error');
     } finally {
       setItemActionState(null);
     }
@@ -446,8 +450,8 @@ const KnowledgeDeskApp = () => {
         />
       ) : null}
       {notice ? (
-        <div className="kd-toast" role="status" aria-live="polite">
-          {notice}
+        <div className={`kd-toast kd-toast-${notice.type}`} role="status" aria-live="polite">
+          {notice.message}
         </div>
       ) : null}
     </div>

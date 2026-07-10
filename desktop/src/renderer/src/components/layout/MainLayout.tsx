@@ -135,7 +135,7 @@ export function MainLayout() {
   }, []);
 
   const refreshSessions = useCallback(async () => {
-    const data = await window.electronAPI?.invoke('chat:get-sessions');
+    const data = await window.electronAPI?.chat.getSessions();
     if (Array.isArray(data)) {
       setSessions(data);
     }
@@ -514,14 +514,14 @@ export function MainLayout() {
 
   const handleSelectSession = useCallback(async (id: string) => {
     setActiveSessionId(id);
-    const session = await window.electronAPI?.invoke('chat:get-session', id);
+    const session = await window.electronAPI?.chat.getSession(id);
     if (session) {
       setMessages(session.messages || []);
     }
   }, []);
 
   const handleNewSession = useCallback(async () => {
-    const session = await window.electronAPI?.invoke('chat:create-session', 'main');
+    const session = await window.electronAPI?.chat.createSession('main');
     if (session) {
       setSessions(prev => [session, ...prev]);
       setActiveSessionId(session.id);
@@ -551,7 +551,7 @@ export function MainLayout() {
       if (thread?.id) {
         setActiveThreadId(thread.id);
         // Create a backend session for the thread
-        const session = await window.electronAPI?.invoke('chat:create-session', thread.branch);
+        const session = await window.electronAPI?.chat.createSession(thread.branch);
         if (session) {
           setSessions(prev => [session, ...prev]);
           setActiveSessionId(session.id);
@@ -576,7 +576,7 @@ export function MainLayout() {
       setWorkspacePath(threadDetail.projectPath);
     }
     if (threadDetail?.backendSession?.id) {
-      const session = await window.electronAPI?.invoke('chat:get-session', threadDetail.backendSession.id);
+      const session = await window.electronAPI?.chat.getSession(threadDetail.backendSession.id);
       if (session) {
         setActiveSessionId(session.id);
         setMessages(session.messages || []);

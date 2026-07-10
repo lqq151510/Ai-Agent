@@ -4,6 +4,7 @@ import com.agent.mvp.agent.dto.ModelChatMessage;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
+@org.springframework.context.annotation.Profile("legacy")
 @Service
 public class CoachPromptService {
 

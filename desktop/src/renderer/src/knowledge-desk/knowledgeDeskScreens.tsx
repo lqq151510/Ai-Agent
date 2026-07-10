@@ -926,6 +926,7 @@ export const SearchPage = ({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchHistory, setSearchHistory] = useState<string[]>(loadSearchHistory);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchRequestIdRef = useRef(0);
   const deferredQuery = useDeferredValue(query);
   const searchCorpus = useMemo(() => buildSearchCorpus(searchableItems), [searchableItems]);
   const localResults = useMemo(() => filterLocalItems(searchCorpus, deferredQuery), [searchCorpus, deferredQuery]);
@@ -952,22 +953,27 @@ export const SearchPage = ({
   const runSearch = useCallback(async () => {
     const nextQuery = query.trim();
     const fallbackResults = filterLocalItems(searchCorpus, nextQuery);
+    const requestId = ++searchRequestIdRef.current;
     setIsSearching(true);
     setSearchError(null);
     try {
       if (apiEnabled && nextQuery) {
         const apiResults = await searchKnowledgeItems(nextQuery);
+        if (searchRequestIdRef.current !== requestId) return;
         setResults(mergeSearchResults(apiResults, fallbackResults));
       } else {
         setResults(fallbackResults);
       }
       addToHistory(nextQuery);
     } catch (error) {
+      if (searchRequestIdRef.current !== requestId) return;
       setResults(fallbackResults);
       setSearchError(error instanceof Error ? error.message : String(error));
       addToHistory(nextQuery);
     } finally {
-      setIsSearching(false);
+      if (searchRequestIdRef.current === requestId) {
+        setIsSearching(false);
+      }
     }
   }, [query, searchCorpus, apiEnabled, addToHistory]);
 

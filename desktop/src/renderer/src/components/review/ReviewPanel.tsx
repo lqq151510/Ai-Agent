@@ -49,7 +49,7 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
     setLoading(true);
     setError(null);
     try {
-      const raw: StructuredDiff[] = await window.electronAPI?.invoke('review:get-diff', projectPath) ?? [];
+      const raw: StructuredDiff[] = await window.electronAPI?.review.getDiff(projectPath) ?? [];
       setDiffs(raw);
 
       // Build file list
@@ -91,9 +91,10 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
 
   // Handle hunk action
   const handleHunkAction = useCallback(async (action: HunkAction, file: string, hunkIndex: number) => {
-    const channel = action === 'stage' ? 'review:stage-hunk' : 'review:revert-hunk';
     try {
-      const ok: boolean = await window.electronAPI?.invoke(channel, projectPath, file, hunkIndex);
+      const ok: boolean = action === 'stage'
+        ? await window.electronAPI?.review.stageHunk(projectPath, file, hunkIndex)
+        : await window.electronAPI?.review.revertHunk(projectPath, file, hunkIndex);
       if (ok) {
         setActionMsg(`${action === 'stage' ? '已暂存' : '已还原'} ${file} 的块 #${hunkIndex + 1}`);
         setTimeout(() => setActionMsg(null), 2000);
@@ -112,7 +113,7 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
   // Handle stage file
   const handleStageFile = useCallback(async (file: string) => {
     try {
-      const ok: boolean = await window.electronAPI?.invoke('review:stage-file', projectPath, file);
+      const ok: boolean = await window.electronAPI?.review.stageFile(projectPath, file);
       if (ok) {
         setActionMsg(`已暂存 ${file}`);
         setTimeout(() => setActionMsg(null), 2000);
@@ -128,7 +129,7 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
   const handleRevertFile = useCallback(async (file: string) => {
     if (!confirm(`确认还原 ${file} 的所有更改？此操作不可撤销。`)) return;
     try {
-      const ok: boolean = await window.electronAPI?.invoke('review:revert-file', projectPath, file);
+      const ok: boolean = await window.electronAPI?.review.revertFile(projectPath, file);
       if (ok) {
         setActionMsg(`已还原 ${file}`);
         setTimeout(() => setActionMsg(null), 2000);
@@ -144,7 +145,7 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
   const handleCommit = useCallback(async () => {
     if (!commitMsg.trim()) return;
     try {
-      const result = await window.electronAPI?.invoke('review:commit', projectPath, commitMsg.trim());
+      const result = await window.electronAPI?.review.commit(projectPath, commitMsg.trim());
       if (result?.success) {
         setActionMsg(`已提交: ${result.commitHash || ''}`);
         setShowCommitDialog(false);
@@ -164,7 +165,7 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
   // Push
   const handlePush = useCallback(async () => {
     try {
-      const result = await window.electronAPI?.invoke('review:push', projectPath);
+      const result = await window.electronAPI?.review.push(projectPath);
       if (result?.success) {
         setActionMsg('推送成功');
       } else {
@@ -210,10 +211,10 @@ export function ReviewPanel({ projectPath, onClose }: ReviewPanelProps) {
             className="review-panel__action-btn"
             onClick={async () => {
               try {
-                const currentBranch = await window.electronAPI?.invoke('git:get-current-branch', projectPath);
+                const currentBranch = await window.electronAPI?.git.getCurrentBranch(projectPath);
                 const title = prompt('PR 标题:', `[codex] ${currentBranch || ''}`);
                 if (!title) return;
-                const result = await window.electronAPI?.invoke('review:create-pr', projectPath, { title });
+                const result = await window.electronAPI?.review.createPr(projectPath, { title });
                 if (result?.success && result?.url) {
                   setActionMsg(`PR 已创建: ${result.url}`);
                 } else {

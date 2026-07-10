@@ -17,6 +17,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.springframework.stereotype.Service;
 
+@org.springframework.context.annotation.Profile("legacy")
 @Service
 public class ScaffoldZipService {
 
