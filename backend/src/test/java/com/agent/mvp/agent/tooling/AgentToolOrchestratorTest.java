@@ -3,7 +3,6 @@ package com.agent.mvp.agent.tooling;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.mockito.Mockito.mock;
 
 import com.agent.mvp.tooling.service.CodeToolService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,7 +15,10 @@ class AgentToolOrchestratorTest {
     @Test
     void listToolSpecsShouldExposeStrictFunctionSchemas() {
         AgentToolOrchestrator orchestrator =
-                new AgentToolOrchestrator(java.util.Optional.of(org.mockito.Mockito.<CodeToolService>mock(CodeToolService.class)), new ObjectMapper());
+                new AgentToolOrchestrator(
+                        java.util.Optional.of(
+                                org.mockito.Mockito.<CodeToolService>mock(CodeToolService.class)),
+                        new ObjectMapper());
 
         ToolSpec searchCode =
                 orchestrator.listToolSpecs().stream()

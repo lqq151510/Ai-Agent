@@ -7,8 +7,8 @@ import com.agent.mvp.tooling.dto.ToolStatsByName;
 import com.agent.mvp.tooling.service.ToolAuditService;
 import java.time.Instant;
 import java.util.UUID;
-import org.springframework.stereotype.Service;
 import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Service;
 
 @Service
 @Profile("legacy")
