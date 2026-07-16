@@ -154,37 +154,60 @@ describe('knowledgeDeskViewModel', () => {
   });
 
   it('moves a just-organized item from inbox to library and adjusts counts', () => {
-    const previousItem = fallbackSnapshot.inboxItems[0];
+    const previousItem = makeItem({ id: 'test-inbox-1', status: 'pending', tags: ['RAG'] });
     const nextItem = {
       ...previousItem,
       status: 'done',
       time: '刚刚',
     };
+    const testSnapshot = {
+      ...fallbackSnapshot,
+      inboxItems: [previousItem],
+      dashboard: {
+        ...fallbackSnapshot.dashboard,
+        inboxItems: 1,
+      }
+    };
 
-    const nextSnapshot = applySnapshotItemUpdate(fallbackSnapshot, previousItem, nextItem);
+    const nextSnapshot = applySnapshotItemUpdate(testSnapshot, previousItem, nextItem);
 
     expect(nextSnapshot.inboxItems.some((item) => item.id === previousItem.id)).toBe(false);
     expect(nextSnapshot.libraryItems[0]?.id).toBe(previousItem.id);
-    expect(nextSnapshot.dashboard.inboxItems).toBe(fallbackSnapshot.dashboard.inboxItems - 1);
-    expect(nextSnapshot.dashboard.readyItems).toBe(fallbackSnapshot.dashboard.readyItems + 1);
-    expect(nextSnapshot.storage.archivedItems).toBe(fallbackSnapshot.storage.archivedItems);
+    expect(nextSnapshot.dashboard.inboxItems).toBe(testSnapshot.dashboard.inboxItems - 1);
+    expect(nextSnapshot.dashboard.readyItems).toBe(testSnapshot.dashboard.readyItems + 1);
+    expect(nextSnapshot.storage.archivedItems).toBe(testSnapshot.storage.archivedItems);
   });
 
   it('moves an archived item into the archive collection without changing total item count', () => {
-    const previousItem = fallbackSnapshot.libraryItems[0];
+    const previousItem = makeItem({ id: 'test-ready-1', status: 'done', tags: ['RAG'] });
     const nextItem = {
       ...previousItem,
       status: 'archived',
       time: '刚刚',
     };
+    const testSnapshot = {
+      ...fallbackSnapshot,
+      libraryItems: [previousItem],
+      dashboard: {
+        ...fallbackSnapshot.dashboard,
+        readyItems: 1,
+        totalItems: 1,
+      },
+      storage: {
+        ...fallbackSnapshot.storage,
+        readyItems: 1,
+        totalItems: 1,
+        archivedItems: 0,
+      }
+    };
 
-    const nextSnapshot = applySnapshotItemUpdate(fallbackSnapshot, previousItem, nextItem);
+    const nextSnapshot = applySnapshotItemUpdate(testSnapshot, previousItem, nextItem);
 
     expect(nextSnapshot.libraryItems.some((item) => item.id === previousItem.id)).toBe(false);
     expect(nextSnapshot.archivedItems[0]?.id).toBe(previousItem.id);
-    expect(nextSnapshot.dashboard.readyItems).toBe(fallbackSnapshot.dashboard.readyItems - 1);
-    expect(nextSnapshot.dashboard.totalItems).toBe(fallbackSnapshot.dashboard.totalItems);
-    expect(nextSnapshot.storage.archivedItems).toBe(fallbackSnapshot.storage.archivedItems + 1);
+    expect(nextSnapshot.dashboard.readyItems).toBe(testSnapshot.dashboard.readyItems - 1);
+    expect(nextSnapshot.dashboard.totalItems).toBe(testSnapshot.dashboard.totalItems);
+    expect(nextSnapshot.storage.archivedItems).toBe(testSnapshot.storage.archivedItems + 1);
   });
 });
 
