@@ -56,10 +56,9 @@ public class ScaffoldZipService {
     /**
      * 从沙箱目录打包所有文件（排除 manifest 等隐藏文件）为 ZIP。
      *
-     * <p>用于 CoderAgent 沙箱产物归档：将 {@code sandboxRoot} 下的文件按相对路径打包，ZIP 内顶层目录为
-     * {@code projectName}。
+     * <p>用于 CoderAgent 沙箱产物归档：将 {@code sandboxRoot} 下的文件按相对路径打包，ZIP 内顶层目录为 {@code projectName}。
      *
-     * @param runId       沙箱运行 ID
+     * @param runId 沙箱运行 ID
      * @param sandboxRoot 沙箱根目录（必须存在且可读）
      * @param projectName ZIP 内顶层目录名
      * @return 生成的 ZIP 文件绝对路径
@@ -92,8 +91,7 @@ public class ScaffoldZipService {
                                 if (relativeStr.startsWith(".")) {
                                     return FileVisitResult.CONTINUE;
                                 }
-                                ZipEntry entry =
-                                        new ZipEntry(projectName + "/" + relativeStr);
+                                ZipEntry entry = new ZipEntry(projectName + "/" + relativeStr);
                                 zip.putNextEntry(entry);
                                 zip.write(Files.readAllBytes(file));
                                 zip.closeEntry();
@@ -103,8 +101,7 @@ public class ScaffoldZipService {
             }
             return zipPath;
         } catch (IOException ex) {
-            throw new BadRequestException(
-                    "Failed to write sandbox zip: " + ex.getMessage());
+            throw new BadRequestException("Failed to write sandbox zip: " + ex.getMessage());
         }
     }
 

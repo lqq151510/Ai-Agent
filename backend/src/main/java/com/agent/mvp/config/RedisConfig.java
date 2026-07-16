@@ -24,9 +24,9 @@ public class RedisConfig {
     /**
      * Redis 缓存管理器：仅在存在 {@link RedisConnectionFactory} 时生效。
      *
-     * <p>测试环境（profile=test）通过 application-test.yml 排除 Redis 自动配置， 此时
-     * RedisConnectionFactory 不存在，本 Bean 不会被创建，转而使用 {@link #fallbackCacheManager()}
-     * 提供的 ConcurrentMapCacheManager，保证测试可在无 Redis 环境运行。
+     * <p>测试环境（profile=test）通过 application-test.yml 排除 Redis 自动配置， 此时 RedisConnectionFactory 不存在，本
+     * Bean 不会被创建，转而使用 {@link #fallbackCacheManager()} 提供的 ConcurrentMapCacheManager，保证测试可在无 Redis
+     * 环境运行。
      */
     @Bean
     @ConditionalOnBean(RedisConnectionFactory.class)
@@ -50,9 +50,7 @@ public class RedisConfig {
         return RedisCacheManager.builder(redisConnectionFactory).cacheDefaults(config).build();
     }
 
-    /**
-     * 降级缓存管理器：当 Redis 不可用时使用本地内存缓存。 仅在没有其他 CacheManager 时生效。
-     */
+    /** 降级缓存管理器：当 Redis 不可用时使用本地内存缓存。 仅在没有其他 CacheManager 时生效。 */
     @Bean
     @ConditionalOnMissingBean(CacheManager.class)
     public CacheManager fallbackCacheManager() {

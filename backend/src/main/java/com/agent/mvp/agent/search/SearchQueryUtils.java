@@ -37,6 +37,7 @@ public final class SearchQueryUtils {
                 || queryText.contains(".")
                 || queryText.contains("#")
                 || queryText.contains("::")
-                || queryText.matches(".*\\b[A-Za-z]+(Service|Controller|Repository|Config|Entity|Test|DTO)\\b.*");
+                || queryText.matches(
+                        ".*\\b[A-Za-z]+(Service|Controller|Repository|Config|Entity|Test|DTO)\\b.*");
     }
 }

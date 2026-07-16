@@ -51,7 +51,7 @@ export type DashboardSummary = {
 };
 
 export type KnowledgeDeskSnapshot = {
-  source: 'api' | 'fallback';
+  status: 'ok' | 'degraded' | 'error' | 'unknown';
   error?: string;
   dashboard: DashboardSummary;
   inboxItems: KnowledgeItem[];
@@ -135,6 +135,16 @@ type BackendModelSource = {
   lastCheckStatus?: string | null;
 };
 
+export type ImportModelSourceDraft = {
+  providerType: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  defaultModel: string;
+  enabled?: boolean;
+  isDefault?: boolean;
+};
+
 type BackendProfile = {
   email?: string | null;
   displayName?: string | null;
@@ -195,7 +205,7 @@ const canUseDirectBackend = () => (
   && typeof fetch === 'function'
 );
 
-const isPreviewOnlyMode = () => !hasKnowledgeBridge() && !canUseDirectBackend();
+const isPreviewOnlyMode = () => import.meta.env.DEV && !hasKnowledgeBridge() && !canUseDirectBackend();
 
 const request = async <T>(path: string, method = 'GET', body?: unknown): Promise<T> => {
   const electronApi = getElectronApi();
@@ -326,7 +336,7 @@ export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot
     const snapshot = isPreviewOnlyMode() ? withPreviewItems(fallbackSnapshot) : fallbackSnapshot;
     return {
       ...snapshot,
-      source: 'fallback',
+      status: 'error',
       error: firstError.reason instanceof Error ? firstError.reason.message : String(firstError.reason),
     };
   }
@@ -335,8 +345,9 @@ export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot
     .sort(compareWorkflowItems)
     .map(toKnowledgeItem);
   const libraryItems = ready.items.map(toKnowledgeItem);
+  const status = errors.length > 0 ? 'degraded' : 'ok';
   return {
-    source: 'api',
+    status,
     ...(errors.length > 0 ? { error: `${errors.length} 个接口请求失败` } : {}),
     dashboard: {
       totalItems: dashboard.totalItems,
@@ -443,6 +454,34 @@ export const importBrowserKnowledgeFile = async (file: File, title?: string): Pr
   }
 
   return toKnowledgeItem(await directBackendMultipartRequest<BackendKnowledgeItem>('/api/v1/knowledge-items/import/upload', formData));
+};
+
+export const createModelSource = async (draft: ImportModelSourceDraft): Promise<ModelProvider> => {
+  const result = await request<BackendModelSource>('/api/v1/model-sources', 'POST', draft);
+  return toModelProvider(result);
+};
+
+export const updateModelSource = async (id: string, draft: Partial<ImportModelSourceDraft>): Promise<ModelProvider> => {
+  const result = await request<BackendModelSource>(`/api/v1/model-sources/${id}`, 'PUT', draft);
+  return toModelProvider(result);
+};
+
+export const deleteModelSource = async (id: string): Promise<void> => {
+  await request(`/api/v1/model-sources/${id}`, 'DELETE');
+};
+
+export const enableModelSource = async (id: string): Promise<ModelProvider> => {
+  const result = await request<BackendModelSource>(`/api/v1/model-sources/${id}/enable`, 'POST');
+  return toModelProvider(result);
+};
+
+export const disableModelSource = async (id: string): Promise<ModelProvider> => {
+  const result = await request<BackendModelSource>(`/api/v1/model-sources/${id}/disable`, 'POST');
+  return toModelProvider(result);
+};
+
+export const testModelSource = async (id: string): Promise<{ success: boolean; message: string }> => {
+  return request<{ success: boolean; message: string }>(`/api/v1/model-sources/${id}/test`, 'POST');
 };
 
 export const organizeKnowledgeItems = async (includeFailed = true): Promise<BatchOrganizeResult> => {
@@ -733,169 +772,33 @@ const syncPreviewItem = (item: KnowledgeItem) => {
 };
 
 export const fallbackSnapshot: KnowledgeDeskSnapshot = {
-  source: 'fallback',
+  status: 'unknown',
   dashboard: {
-    totalItems: 1247,
-    inboxItems: 7,
-    readyItems: 1182,
-    failedItems: 1,
+    totalItems: 0,
+    inboxItems: 0,
+    readyItems: 0,
+    failedItems: 0,
     recentItems: [],
-    topTags: [
-      { name: 'RAG', count: 48 },
-      { name: 'LLM', count: 42 },
-      { name: 'Spring AI', count: 31 },
-      { name: 'Transformer', count: 29 },
-    ],
+    topTags: [],
   },
-  inboxItems: [
-    {
-      id: 'sample-inbox-1',
-      title: 'RAG 系统优化：混合检索策略对比',
-      source: 'arxiv.org',
-      type: 'web',
-      time: '10 分钟前',
-      summary: '对比 BM25、向量检索和重排序在课程资料问答中的表现，适合沉淀到检索架构主题。',
-      tags: ['RAG', '混合检索', '资料召回'],
-      status: 'pending',
-    },
-    {
-      id: 'sample-inbox-2',
-      title: '图神经网络推荐系统课程笔记',
-      source: 'course-notes.pdf',
-      type: 'pdf',
-      time: '24 分钟前',
-      summary: 'PDF 正在解析章节标题、引用和公式，摘要会在整理完成后进入知识库。',
-      tags: ['图神经网络', '推荐系统'],
-      status: 'processing',
-    },
-    {
-      id: 'sample-inbox-3',
-      title: '个人知识管理方法论：从信息到智慧',
-      source: 'notes/pkm.md',
-      type: 'markdown',
-      time: '昨天',
-      summary: '内容已经收进收集箱，等待整理成可检索的主题摘要与标签。',
-      tags: ['个人知识管理', '回顾'],
-      status: 'pending',
-    },
-    {
-      id: 'sample-inbox-4',
-      title: 'Transformer 论文摘录',
-      source: '粘贴内容',
-      type: 'paste',
-      time: '昨天',
-      summary: '粘贴内容缺少来源链接，建议补充来源后再进入知识库。',
-      tags: ['Transformer'],
-      status: 'failed',
-    },
-  ],
-  libraryItems: [
-    {
-      id: 'sample-library-1',
-      title: 'Transformer 架构详解：注意力机制与编码器设计',
-      source: '机器学习课程',
-      type: 'markdown',
-      time: '今天 09:10',
-      summary: '从 self-attention、multi-head attention 到 encoder block 的结构拆解，已关联到 RAG 和 LLM 基础主题。',
-      tags: ['Transformer', 'LLM', 'Attention'],
-      status: 'done',
-    },
-    {
-      id: 'sample-library-2',
-      title: '向量数据库选型笔记：Milvus、Qdrant 与 pgvector',
-      source: '本地 PDF',
-      type: 'pdf',
-      time: '昨天 21:30',
-      summary: '围绕索引类型、过滤能力、部署复杂度和 Java 生态集成成本做横向对比。',
-      tags: ['向量数据库', 'Milvus', '基础设施'],
-      status: 'done',
-    },
-    {
-      id: 'sample-library-3',
-      title: 'Spring AI RAG 流水线实验记录',
-      source: 'project-log.md',
-      type: 'markdown',
-      time: '周二',
-      summary: '记录文档切分、embedding、召回、重排序和答案生成的最小闭环。',
-      tags: ['Spring AI', 'RAG', 'Java'],
-      status: 'done',
-    },
-    {
-      id: 'sample-library-4',
-      title: 'Claude Code 与 Codex 工具协议差异',
-      source: '网页摘录',
-      type: 'web',
-      time: '6 月 22 日',
-      summary: '比较本地工具调用、审批机制、上下文注入和多代理协作差异。',
-      tags: ['智能体', '工具协议'],
-      status: 'done',
-    },
-  ],
-  archivedItems: [
-    {
-      id: 'sample-archived-1',
-      title: '旧版课程项目资料整理流程',
-      source: 'project-archive.md',
-      type: 'markdown',
-      time: '上周',
-      summary: '这批旧资料已经不再参与当前检索，但仍保留恢复入口。',
-      tags: ['归档', '项目流程'],
-      status: 'archived',
-    },
-    {
-      id: 'sample-archived-2',
-      title: '过期的 API 对接草稿',
-      source: 'archive-notes.pdf',
-      type: 'pdf',
-      time: '上月',
-      summary: '历史方案被替换后进入归档库，便于后续查旧决策。',
-      tags: ['归档', '接口'],
-      status: 'archived',
-    },
-  ],
-  tags: ['RAG', 'LLM', 'Spring AI', 'Transformer', 'Milvus', '智能体', 'Java', '阅读'],
-  modelProviders: [
-    {
-      id: 'openai',
-      provider: 'OpenAI',
-      baseUrl: 'https://api.openai.com/v1',
-      keyState: 'sk-...a31f',
-      model: 'gpt-4o',
-      state: 'connected',
-      isDefault: false,
-    },
-    {
-      id: 'deepseek',
-      provider: 'DeepSeek',
-      baseUrl: 'https://api.deepseek.com/v1',
-      keyState: 'sk-...d92c',
-      model: 'deepseek-v4-flash',
-      state: 'connected',
-      isDefault: true,
-    },
-    {
-      id: 'local',
-      provider: '本地 Qwen',
-      baseUrl: 'http://localhost:1234/v1',
-      keyState: '无需密钥',
-      model: 'qwen3.5-9b',
-      state: 'local',
-      isDefault: false,
-    },
-  ],
+  inboxItems: [],
+  libraryItems: [],
+  archivedItems: [],
+  tags: [],
+  modelProviders: [],
   profile: {
     displayName: '泽宝',
-    email: 'liuyongze@example.com',
+    email: 'desktop@example.com',
     organizeMode: 'manual',
     privacyMode: 'local_first',
   },
   storage: {
-    totalItems: 1247,
-    inboxItems: 7,
-    readyItems: 1182,
-    failedItems: 1,
-    archivedItems: 57,
-    totalTags: 84,
-    totalModelSources: 4,
+    totalItems: 0,
+    inboxItems: 0,
+    readyItems: 0,
+    failedItems: 0,
+    archivedItems: 0,
+    totalTags: 0,
+    totalModelSources: 0,
   },
 };

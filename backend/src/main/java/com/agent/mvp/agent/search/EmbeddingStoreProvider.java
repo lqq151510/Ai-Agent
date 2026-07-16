@@ -75,18 +75,20 @@ public class EmbeddingStoreProvider {
                         .dimensions(384)
                         .timeout(
                                 Duration.ofMillis(
-                                        Math.max(1_000, appProperties.getModelRuntime().getReadTimeoutMs())))
-                        .maxRetries(Math.max(0, appProperties.getModelRuntime().getIdempotentRetries()))
+                                        Math.max(
+                                                1_000,
+                                                appProperties
+                                                        .getModelRuntime()
+                                                        .getReadTimeoutMs())))
+                        .maxRetries(
+                                Math.max(0, appProperties.getModelRuntime().getIdempotentRetries()))
                         .build();
     }
 
     @PostConstruct
     public void init() {
         try {
-            log.info(
-                    "Initializing PgVectorEmbeddingStore with host: {}, port: {}",
-                    pgHost,
-                    pgPort);
+            log.info("Initializing PgVectorEmbeddingStore with host: {}, port: {}", pgHost, pgPort);
             this.embeddingStore =
                     PgVectorEmbeddingStore.builder()
                             .host(pgHost)
@@ -154,8 +156,7 @@ public class EmbeddingStoreProvider {
     /**
      * 尝试为查询文本生成嵌入向量，带缓存和熔断降级。
      *
-     * <p>当嵌入模型连续失败时，会在 {@link #EMBEDDING_FAILURE_BACKOFF} 时间内跳过向量检索。
-     * 返回 null 表示当前不可用，调用方应降级到其他策略。
+     * <p>当嵌入模型连续失败时，会在 {@link #EMBEDDING_FAILURE_BACKOFF} 时间内跳过向量检索。 返回 null 表示当前不可用，调用方应降级到其他策略。
      */
     public Embedding tryEmbedQuery(String normalizedQuery) {
         if (normalizedQuery == null || normalizedQuery.isBlank()) {

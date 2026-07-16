@@ -3,14 +3,12 @@ package com.agent.mvp.agent;
 import com.agent.mvp.agent.service.RAGMemoryService;
 import com.agent.mvp.auth.security.AuthenticatedUser;
 import com.agent.mvp.common.context.RequestContext;
+import java.util.List;
+import java.util.Map;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/agent/memory")
@@ -25,7 +23,8 @@ public class MemoryController {
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> list(Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+        try (MDC.MDCCloseable u =
+                MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             List<Map<String, Object>> memories = ragMemoryService.listAllMemories(user.userId());
             return ResponseEntity.ok(memories);
         }
@@ -37,7 +36,8 @@ public class MemoryController {
             @RequestBody Map<String, String> body,
             Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+        try (MDC.MDCCloseable u =
+                MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             String text = body.get("text");
             if (text == null || text.trim().isEmpty()) {
                 return ResponseEntity.badRequest().build();
@@ -48,9 +48,11 @@ public class MemoryController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable("id") String id, Authentication authentication) {
+    public ResponseEntity<Void> delete(
+            @PathVariable("id") String id, Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
-        try (MDC.MDCCloseable u = MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
+        try (MDC.MDCCloseable u =
+                MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {
             ragMemoryService.deleteMemory(id, user.userId());
             return ResponseEntity.ok().build();
         }

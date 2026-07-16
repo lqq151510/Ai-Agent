@@ -45,7 +45,7 @@ let toolBridge: ToolExecutionBridge;
 let approvalEngine: ApprovalEngine;
 let skillManager: SkillManager;
 let computerUseManager: ComputerUseManager;
-let approvalMode: ApprovalMode = 'auto-edit';
+let approvalMode: ApprovalMode = 'suggest';
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -141,44 +141,51 @@ if (!gotTheLock) {
       const jarPath = getBackendJarPath();
       const secrets = ensureDesktopSecrets(dataDir);
 
+      const isLegacyEnabled = process.env.AI_AGENT_ENABLE_LEGACY_DEVTOOLS === '1';
+
       backendManager = new BackendManager(jrePath, jarPath, dataDir, activePort, {
         startupTimeoutMs: getBackendStartupTimeoutMs(),
         secrets,
       });
-      cliManager = new CliManager();
-      ptyPool = new PtyPool();
       windowManager = new WindowManager();
-      workspaceManager = new WorkspaceManager();
-      gitManager = new GitManager();
-      chatManager = new ChatManager();
-      localServiceManager = new LocalServiceManager();
-      threadManager = new ThreadManager(ptyPool, gitManager);
-      approvalEngine = new ApprovalEngine();
-      skillManager = new SkillManager();
-      computerUseManager = new ComputerUseManager();
-      toolBridge = new ToolExecutionBridge(
-        ptyPool,
-        approvalEngine,
-        () => localServiceManager.isReady() ? localServiceManager.getPort() : 8765,
-        () => localServiceManager.getToken(),
-        () => activePort,
-        () => ipcRegistry.getDesktopAccessToken(),
-        () => approvalMode,
-        computerUseManager,
-      );
+      trayManager = new TrayManager(windowManager, backendManager);
+      
+      if (isLegacyEnabled) {
+        cliManager = new CliManager();
+        ptyPool = new PtyPool();
+        workspaceManager = new WorkspaceManager();
+        gitManager = new GitManager();
+        chatManager = new ChatManager();
+        localServiceManager = new LocalServiceManager();
+        threadManager = new ThreadManager(ptyPool, gitManager);
+        approvalEngine = new ApprovalEngine();
+        skillManager = new SkillManager();
+        computerUseManager = new ComputerUseManager();
+        toolBridge = new ToolExecutionBridge(
+          ptyPool,
+          approvalEngine,
+          () => localServiceManager.isReady() ? localServiceManager.getPort() : 8765,
+          () => localServiceManager.getToken(),
+          () => activePort,
+          () => ipcRegistry.getDesktopAccessToken(),
+          () => approvalMode,
+          () => workspaceManager.getActiveWorkspace(),
+          computerUseManager,
+        );
+      }
 
       trayManager = new TrayManager(windowManager, backendManager);
       ipcRegistry = new IpcRegistry(
-        backendManager, cliManager, ptyPool,
-        workspaceManager, gitManager, chatManager,
-        localServiceManager,
+        backendManager, cliManager!, ptyPool!,
+        workspaceManager!, gitManager!, chatManager!,
+        localServiceManager!,
         () => activePort,
-        threadManager,
-        toolBridge,
-        approvalEngine,
+        threadManager!,
+        toolBridge!,
+        approvalEngine!,
         () => windowManager.mainWindow,
-        skillManager,
-        computerUseManager,
+        skillManager!,
+        computerUseManager!,
         (mode) => { approvalMode = mode; },
         () => approvalMode,
       );
@@ -196,17 +203,21 @@ if (!gotTheLock) {
       });
 
       // Push thread events to renderer when they change
-      threadManager.onThreadEvent((thread) => {
-        const win = windowManager.mainWindow;
-        if (win && !win.isDestroyed()) {
-          win.webContents.send('thread:event', thread);
-        }
-      });
+      if (threadManager) {
+        threadManager.onThreadEvent((thread) => {
+          const win = windowManager.mainWindow;
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('thread:event', thread);
+          }
+        });
+      }
 
       // Start local-service (non-blocking — best effort)
-      localServiceManager.start().catch(err => {
-        console.warn('[desktop] local-service failed to start (non-fatal):', err);
-      });
+      if (isLegacyEnabled) {
+        localServiceManager?.start().catch(err => {
+          console.warn('[desktop] local-service failed to start (non-fatal):', err);
+        });
+      }
 
       await backendManager.start();
 

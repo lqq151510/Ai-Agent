@@ -59,11 +59,7 @@ public class ToolCallManager {
             try {
                 result = futures.get(i).join();
             } catch (Exception ex) {
-                log.error(
-                        "Tool call future failed for {}::{}",
-                        fcTool.name(),
-                        fcTool.id(),
-                        ex);
+                log.error("Tool call future failed for {}::{}", fcTool.name(), fcTool.id(), ex);
                 result =
                         new ToolResult(
                                 fcTool.id(),

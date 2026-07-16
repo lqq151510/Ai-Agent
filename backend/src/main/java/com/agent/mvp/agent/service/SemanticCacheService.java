@@ -93,8 +93,8 @@ public class SemanticCacheService {
             log.info("SemanticCacheService PgVectorEmbeddingStore initialized successfully.");
         } catch (Exception ex) {
             log.warn(
-                    "Failed to initialize PgVectorEmbeddingStore for Semantic Cache. Falling back to"
-                            + " InMemoryEmbeddingStore. Error: {}",
+                    "Failed to initialize PgVectorEmbeddingStore for Semantic Cache. Falling back"
+                            + " to InMemoryEmbeddingStore. Error: {}",
                     ex.getMessage());
             this.embeddingStore = new InMemoryEmbeddingStore<>();
         }
@@ -111,11 +111,12 @@ public class SemanticCacheService {
             if (queryEmbedding == null) {
                 return Optional.empty();
             }
-            EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
-                    .queryEmbedding(queryEmbedding)
-                    .maxResults(1)
-                    .minScore(CACHE_HIT_MIN_SCORE)
-                    .build();
+            EmbeddingSearchRequest request =
+                    EmbeddingSearchRequest.builder()
+                            .queryEmbedding(queryEmbedding)
+                            .maxResults(1)
+                            .minScore(CACHE_HIT_MIN_SCORE)
+                            .build();
             List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(request).matches();
             if (matches != null && !matches.isEmpty()) {
                 EmbeddingMatch<TextSegment> match = matches.get(0);
@@ -144,7 +145,8 @@ public class SemanticCacheService {
             if (embedding == null) {
                 return;
             }
-            TextSegment segment = TextSegment.from(normalizedPrompt, Metadata.from("response", response));
+            TextSegment segment =
+                    TextSegment.from(normalizedPrompt, Metadata.from("response", response));
             embeddingStore.add(embedding, segment);
             log.info("Successfully cached new QA pair asynchronously");
         } catch (Exception ex) {
@@ -163,7 +165,9 @@ public class SemanticCacheService {
                 .modelName("text-embedding-3-small")
                 .dimensions(384)
                 .timeout(
-                        Duration.ofMillis(Math.max(1_000, appProperties.getModelRuntime().getReadTimeoutMs())))
+                        Duration.ofMillis(
+                                Math.max(
+                                        1_000, appProperties.getModelRuntime().getReadTimeoutMs())))
                 .maxRetries(Math.max(0, appProperties.getModelRuntime().getIdempotentRetries()))
                 .build();
     }

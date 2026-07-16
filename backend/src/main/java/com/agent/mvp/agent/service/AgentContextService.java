@@ -23,7 +23,8 @@ public class AgentContextService {
         this.appProperties = appProperties;
     }
 
-    public int resolveContextTokenBudget(Integer userProvidedMaxContextTokens, ConversationSession session) {
+    public int resolveContextTokenBudget(
+            Integer userProvidedMaxContextTokens, ConversationSession session) {
         int budget;
         if (userProvidedMaxContextTokens != null) {
             budget = userProvidedMaxContextTokens;
@@ -35,8 +36,13 @@ public class AgentContextService {
         return Math.max(MIN_CONTEXT_TOKENS, Math.min(budget, MAX_CONTEXT_TOKENS));
     }
 
-    public HistoryWindow buildMessages(UUID userId, List<MessageResponse> history, int maxContextTokens, String systemContext) {
-        maxContextTokens = Math.max(MIN_CONTEXT_TOKENS, Math.min(maxContextTokens, MAX_CONTEXT_TOKENS));
+    public HistoryWindow buildMessages(
+            UUID userId,
+            List<MessageResponse> history,
+            int maxContextTokens,
+            String systemContext) {
+        maxContextTokens =
+                Math.max(MIN_CONTEXT_TOKENS, Math.min(maxContextTokens, MAX_CONTEXT_TOKENS));
         List<ModelChatMessage> messages = new ArrayList<>();
 
         String lastUserMessage = "";
@@ -52,13 +58,15 @@ public class AgentContextService {
             similarDiagnoses = ragMemoryService.searchSimilarDiagnoses(userId, lastUserMessage, 3);
         }
 
-        StringBuilder systemPrompt = new StringBuilder(
-                "You are a Java AI coding assistant. Use provided tool context as factual"
-                        + " repo grounding. If tool context is insufficient, say what extra"
-                        + " info is needed.");
+        StringBuilder systemPrompt =
+                new StringBuilder(
+                        "You are a Java AI coding assistant. Use provided tool context as factual"
+                                + " repo grounding. If tool context is insufficient, say what extra"
+                                + " info is needed.");
 
         if (!similarDiagnoses.isEmpty()) {
-            systemPrompt.append("\n\nHere are some relevant historical log diagnoses for reference:\n");
+            systemPrompt.append(
+                    "\n\nHere are some relevant historical log diagnoses for reference:\n");
             for (String diagnosis : similarDiagnoses) {
                 systemPrompt.append("---\n").append(diagnosis).append("\n");
             }
@@ -76,11 +84,13 @@ public class AgentContextService {
         String promptText = systemPrompt.toString();
         messages.add(ModelChatMessage.of("system", promptText));
 
-        int historyBudget = Math.max(0, maxContextTokens - TokenCounter.countTokens(promptText) - 8);
+        int historyBudget =
+                Math.max(0, maxContextTokens - TokenCounter.countTokens(promptText) - 8);
         HistoryWindow historyWindow = sliceByTokenBudget(history, historyBudget);
         messages.addAll(historyWindow.messages());
-        
-        return new HistoryWindow(messages, historyWindow.historyMessagesUsed(), historyWindow.historyTruncated());
+
+        return new HistoryWindow(
+                messages, historyWindow.historyMessagesUsed(), historyWindow.historyTruncated());
     }
 
     private HistoryWindow sliceByTokenBudget(List<MessageResponse> history, int maxTokens) {
@@ -98,7 +108,8 @@ public class AgentContextService {
             }
             String role = msg.role() == null ? "" : msg.role();
             String content = msg.content() == null ? "" : msg.content();
-            int messageTokens = TokenCounter.countTokens(role) + TokenCounter.countTokens(content) + 8;
+            int messageTokens =
+                    TokenCounter.countTokens(role) + TokenCounter.countTokens(content) + 8;
             if (used + messageTokens > budget && !reversed.isEmpty()) {
                 truncated = true;
                 break;
@@ -117,8 +128,9 @@ public class AgentContextService {
 
         String[] lines = systemContext.replace("\r\n", "\n").split("\n");
         StringBuilder sb = new StringBuilder();
-        java.util.regex.Pattern sensitivePattern = java.util.regex.Pattern.compile(
-                "(?i)(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie)");
+        java.util.regex.Pattern sensitivePattern =
+                java.util.regex.Pattern.compile(
+                        "(?i)(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie)");
 
         for (String line : lines) {
             if (sensitivePattern.matcher(line).find()) {
@@ -129,12 +141,13 @@ public class AgentContextService {
         }
         String sanitized = sb.toString();
 
-        sanitized = sanitized
-                .replaceAll("Bearer\\s+[A-Za-z0-9._-]+", "Bearer [redacted]")
-                .replaceAll("(?i)sk-[A-Za-z0-9]+", "sk-[redacted]")
-                .replaceAll("[^\\x09\\x0A\\x0D\\x20-\\x7E]", "")
-                .replaceAll("\\n{3,}", "\\n\\n")
-                .trim();
+        sanitized =
+                sanitized
+                        .replaceAll("Bearer\\s+[A-Za-z0-9._-]+", "Bearer [redacted]")
+                        .replaceAll("(?i)sk-[A-Za-z0-9]+", "sk-[redacted]")
+                        .replaceAll("[^\\x09\\x0A\\x0D\\x20-\\x7E]", "")
+                        .replaceAll("\\n{3,}", "\\n\\n")
+                        .trim();
 
         int currentTokens = TokenCounter.countTokens(sanitized);
         if (currentTokens > tokenBudget) {
@@ -149,5 +162,6 @@ public class AgentContextService {
         return sanitized;
     }
 
-    public record HistoryWindow(List<ModelChatMessage> messages, int historyMessagesUsed, boolean historyTruncated) {}
+    public record HistoryWindow(
+            List<ModelChatMessage> messages, int historyMessagesUsed, boolean historyTruncated) {}
 }

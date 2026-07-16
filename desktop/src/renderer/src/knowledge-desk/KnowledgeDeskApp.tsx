@@ -189,7 +189,7 @@ const KnowledgeDeskApp = () => {
     try {
       const nextItem = await runItemAction(item, action);
 
-      if (snapshot.source === 'fallback') {
+      if (snapshot.status === 'error' || snapshot.status === 'unknown') {
         const nextSnapshot = applySnapshotItemUpdate(snapshot, item, nextItem);
         startTransition(() => {
           setSnapshot(nextSnapshot);
@@ -244,7 +244,7 @@ const KnowledgeDeskApp = () => {
     detailRequestRef.current = requestId;
     setSelectedItem(item);
     setActivePage('detail');
-    if (snapshot.source !== 'api') {
+    if (snapshot.status !== 'ok' && snapshot.status !== 'degraded') {
       setDetailFetch({ isLoading: false, error: null });
       return;
     }
@@ -265,7 +265,7 @@ const KnowledgeDeskApp = () => {
           error: error instanceof Error ? error.message : String(error),
         });
       });
-  }, [snapshot.source]);
+  }, [snapshot.status]);
 
   return (
     <div className="kd-app">
@@ -302,8 +302,8 @@ const KnowledgeDeskApp = () => {
           <div className="kd-avatar">泽</div>
           <div className="kd-user-meta">
             <strong>{snapshot.profile.displayName}</strong>
-            <span className={snapshot.source === 'fallback' ? 'kd-user-meta--warning' : ''}>
-              {snapshot.source === 'api' ? '数据库已连接' : '后端连接异常，当前为预览数据'}
+            <span className={snapshot.status === 'error' || snapshot.status === 'unknown' ? 'kd-user-meta--warning' : ''}>
+              {snapshot.status === 'ok' ? '数据库已连接' : snapshot.status === 'degraded' ? '数据库已连接 (部分服务异常)' : '后端连接异常，当前为预览数据'}
             </span>
           </div>
           <Settings size={16} />
@@ -335,8 +335,8 @@ const KnowledgeDeskApp = () => {
               <Plus size={16} />
               新建资料
             </Button>
-            <span className={`kd-sync-badge kd-sync-badge--${snapshot.source}`}>
-              {isLoadingSnapshot ? '同步中' : snapshot.source === 'api' ? '数据库已连接' : '预览数据'}
+            <span className={`kd-sync-badge kd-sync-badge--${snapshot.status}`}>
+              {isLoadingSnapshot ? '同步中' : snapshot.status === 'ok' ? '数据库已连接' : snapshot.status === 'degraded' ? '部分服务异常' : '预览数据'}
             </span>
             <button
               aria-label="刷新数据"
@@ -355,10 +355,11 @@ const KnowledgeDeskApp = () => {
           <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab} snapshot={snapshot} />
         ) : (
           <div className="kd-content-grid">
-            {snapshot.source === 'fallback' ? (
+            {snapshot.status === 'error' || snapshot.status === 'unknown' || snapshot.status === 'degraded' ? (
               <ConnectionBanner
                 error={snapshot.error}
                 isLoading={isLoadingSnapshot}
+                isDegraded={snapshot.status === 'degraded'}
                 onRetry={() => void refreshSnapshot()}
               />
             ) : null}
@@ -430,7 +431,7 @@ const KnowledgeDeskApp = () => {
               ) : null}
               {activePage === 'search' ? (
                 <PageErrorBoundary label="全局搜索" onReset={() => setActivePage('search')}>
-                  <SearchPage apiEnabled={snapshot.source === 'api'} searchableItems={searchableItems} onOpenDetail={openDetail} />
+                  <SearchPage apiEnabled={snapshot.status === 'ok' || snapshot.status === 'degraded'} searchableItems={searchableItems} onOpenDetail={openDetail} />
                 </PageErrorBoundary>
               ) : null}
             </section>

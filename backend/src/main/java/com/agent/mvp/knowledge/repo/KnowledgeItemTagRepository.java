@@ -52,23 +52,24 @@ public interface KnowledgeItemTagRepository {
             })
     @Select(
             """
-            <script>
-            SELECT
-                kit.knowledge_item_id,
-                kt.id AS tag_id,
-                kt.name,
-                kt.color,
-                kt.created_at
-            FROM knowledge_item_tags kit
-            JOIN knowledge_tags kt ON kt.id = kit.tag_id
-            WHERE kit.knowledge_item_id IN
-            <foreach collection="knowledgeItemIds" item="knowledgeItemId" open="(" separator="," close=")">
-                #{knowledgeItemId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
-            </foreach>
-            ORDER BY kt.name ASC
-            </script>
-            """)
-    List<KnowledgeItemTagView> findTagsByKnowledgeItemIds(@Param("knowledgeItemIds") List<UUID> knowledgeItemIds);
+<script>
+SELECT
+    kit.knowledge_item_id,
+    kt.id AS tag_id,
+    kt.name,
+    kt.color,
+    kt.created_at
+FROM knowledge_item_tags kit
+JOIN knowledge_tags kt ON kt.id = kit.tag_id
+WHERE kit.knowledge_item_id IN
+<foreach collection="knowledgeItemIds" item="knowledgeItemId" open="(" separator="," close=")">
+    #{knowledgeItemId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
+</foreach>
+ORDER BY kt.name ASC
+</script>
+""")
+    List<KnowledgeItemTagView> findTagsByKnowledgeItemIds(
+            @Param("knowledgeItemIds") List<UUID> knowledgeItemIds);
 
     @Results(
             id = "knowledgeTagUsageSummaryViewMap",

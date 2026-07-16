@@ -8,8 +8,10 @@ import com.agent.mvp.tooling.service.ToolAuditService;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 
 @Service
+@Profile("legacy")
 public class ReleaseReportService {
 
     private final SystemDiagnosticsService diagnosticsService;

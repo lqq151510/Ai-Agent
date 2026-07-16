@@ -5,8 +5,8 @@ import com.agent.mvp.agent.service.MarkItDownService;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
-import com.agent.mvp.ingestion.IngestionJobType;
 import com.agent.mvp.ingestion.IngestionJobStatus;
+import com.agent.mvp.ingestion.IngestionJobType;
 import com.agent.mvp.ingestion.entity.IngestionJob;
 import com.agent.mvp.ingestion.service.IngestionJobService;
 import com.agent.mvp.knowledge.KnowledgeItemSourceType;
@@ -63,7 +63,8 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class KnowledgeItemService {
     private static final String LIST_SUMMARY_SQL =
-            "COALESCE(NULLIF(summary, ''), SUBSTRING(COALESCE(NULLIF(cleaned_content, ''), raw_content), 1, 280)) AS summary";
+            "COALESCE(NULLIF(summary, ''), SUBSTRING(COALESCE(NULLIF(cleaned_content, ''),"
+                    + " raw_content), 1, 280)) AS summary";
     private static final String SEARCH_VECTOR_SQL =
             "to_tsvector('simple', COALESCE(title, '') || ' ' || COALESCE(summary, '') || ' ' || "
                     + "COALESCE(NULLIF(cleaned_content, ''), raw_content, ''))";
@@ -150,26 +151,24 @@ public class KnowledgeItemService {
     }
 
     private static boolean isPostgresDatasource(String datasourceUrl) {
-        return datasourceUrl != null && datasourceUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql:");
+        return datasourceUrl != null
+                && datasourceUrl.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql:");
     }
 
-    @Transactional
     public KnowledgeItemResponse importWeb(UUID userId, ImportWebKnowledgeItemRequest request) {
         UserProfile profile = userProfileService.getOrCreate(userId);
+        String resolvedTitle = fallbackTitle(request.title(), request.url());
         KnowledgeItem item =
-                createItem(
+                createImportedItem(
                         userId,
                         KnowledgeItemSourceType.WEB.value(),
-                        fallbackTitle(request.title(), request.url()),
+                        resolvedTitle,
                         request.url(),
                         request.content(),
-                        KnowledgeItemStatus.INBOX.value());
-        ingestionJobService.createImportSucceeded(
-                userId, item.getId(), toJson(Map.of("url", request.url(), "title", item.getTitle())));
+                        toJson(Map.of("url", request.url(), "title", resolvedTitle)));
         return finalizeImportedItem(userId, item, profile);
     }
 
-    @Transactional
     public KnowledgeItemResponse importFile(UUID userId, ImportFileKnowledgeItemRequest request) {
         UserProfile profile = userProfileService.getOrCreate(userId);
         String sourceType = KnowledgeItemSourceType.from(request.sourceType()).value();
@@ -177,22 +176,22 @@ public class KnowledgeItemService {
                 || KnowledgeItemSourceType.SNIPPET.value().equals(sourceType)) {
             throw new BadRequestException("File import only supports markdown or pdf source types");
         }
+        String resolvedTitle = fallbackTitle(request.title(), request.sourceUri());
         KnowledgeItem item =
-                createItem(
+                createImportedItem(
                         userId,
                         sourceType,
-                        fallbackTitle(request.title(), request.sourceUri()),
+                        resolvedTitle,
                         request.sourceUri(),
                         request.content(),
-                        KnowledgeItemStatus.INBOX.value());
-        ingestionJobService.createImportSucceeded(
-                userId,
-                item.getId(),
-                toJson(Map.of("sourceType", sourceType, "sourceUri", request.sourceUri(), "title", item.getTitle())));
+                        toJson(
+                                Map.of(
+                                        "sourceType", sourceType,
+                                        "sourceUri", request.sourceUri(),
+                                        "title", resolvedTitle)));
         return finalizeImportedItem(userId, item, profile);
     }
 
-    @Transactional
     public KnowledgeItemResponse importUpload(UUID userId, MultipartFile file, String title) {
         UserProfile profile = userProfileService.getOrCreate(userId);
         if (file == null || file.isEmpty()) {
@@ -204,6 +203,8 @@ public class KnowledgeItemService {
             tempFile = createTempFile(originalFilename);
             file.transferTo(tempFile);
 
+            // Parse outside the transaction — markItDown may be slow and should not hold a DB
+            // connection.
             ParsedDocument parsed;
             try {
                 parsed = markItDownService.parseDocument(tempFile.toFile());
@@ -215,26 +216,26 @@ public class KnowledgeItemService {
             }
 
             String sourceType = resolveUploadSourceType(originalFilename, parsed.sourceFormat());
-            String resolvedTitle = fallbackTitle(title, resolveUploadTitle(parsed, originalFilename));
+            String resolvedTitle =
+                    fallbackTitle(title, resolveUploadTitle(parsed, originalFilename));
             String sourceUri = buildUploadSourceUri(originalFilename);
 
-            KnowledgeItem item =
-                    createItem(
-                            userId,
-                            sourceType,
-                            resolvedTitle,
-                            sourceUri,
-                            parsed.markdown(),
-                            KnowledgeItemStatus.INBOX.value());
-            ingestionJobService.createImportSucceeded(
-                    userId,
-                    item.getId(),
+            // Persist item + import-succeeded job in the same short transaction.
+            final String jobMetadata =
                     toJson(
                             Map.of(
                                     "sourceType", sourceType,
                                     "sourceUri", sourceUri,
                                     "filename", sanitizeFilename(originalFilename),
-                                    "title", item.getTitle())));
+                                    "title", resolvedTitle));
+            KnowledgeItem item =
+                    createImportedItem(
+                            userId,
+                            sourceType,
+                            resolvedTitle,
+                            sourceUri,
+                            parsed.markdown(),
+                            jobMetadata);
             return finalizeImportedItem(userId, item, profile);
         } catch (IOException ex) {
             throw new BadRequestException("Failed to read uploaded file");
@@ -243,25 +244,25 @@ public class KnowledgeItemService {
         }
     }
 
-    @Transactional
-    public KnowledgeItemResponse importSnippet(UUID userId, ImportSnippetKnowledgeItemRequest request) {
+    public KnowledgeItemResponse importSnippet(
+            UUID userId, ImportSnippetKnowledgeItemRequest request) {
         UserProfile profile = userProfileService.getOrCreate(userId);
+        String resolvedTitle = fallbackTitle(request.title(), "Snippet");
         KnowledgeItem item =
-                createItem(
+                createImportedItem(
                         userId,
                         KnowledgeItemSourceType.SNIPPET.value(),
-                        fallbackTitle(request.title(), "Snippet"),
+                        resolvedTitle,
                         null,
                         request.content(),
-                        KnowledgeItemStatus.INBOX.value());
-        ingestionJobService.createImportSucceeded(
-                userId, item.getId(), toJson(Map.of("title", item.getTitle(), "sourceType", "snippet")));
+                        toJson(Map.of("title", resolvedTitle, "sourceType", "snippet")));
         return finalizeImportedItem(userId, item, profile);
     }
 
     public KnowledgeItemPageResponse listItems(
             UUID userId, String status, String sourceType, String tag, long page, long pageSize) {
-        Page<KnowledgeItem> itemPage = queryItems(userId, null, status, sourceType, tag, null, null, page, pageSize);
+        Page<KnowledgeItem> itemPage =
+                queryItems(userId, null, status, sourceType, tag, null, null, page, pageSize);
         return toPageResponse(itemPage, page, pageSize);
     }
 
@@ -270,7 +271,8 @@ public class KnowledgeItemService {
     }
 
     @Transactional
-    public KnowledgeItemResponse updateItem(UUID userId, UUID itemId, UpdateKnowledgeItemRequest request) {
+    public KnowledgeItemResponse updateItem(
+            UUID userId, UUID itemId, UpdateKnowledgeItemRequest request) {
         KnowledgeItem item = requireOwnedItem(userId, itemId);
         if (request.title() != null) {
             item.setTitle(request.title().trim());
@@ -302,7 +304,8 @@ public class KnowledgeItemService {
             Instant to,
             long page,
             long pageSize) {
-        Page<KnowledgeItem> itemPage = queryItems(userId, query, null, sourceType, tag, from, to, page, pageSize);
+        Page<KnowledgeItem> itemPage =
+                queryItems(userId, query, null, sourceType, tag, from, to, page, pageSize);
         return toPageResponse(itemPage, page, pageSize);
     }
 
@@ -362,51 +365,83 @@ public class KnowledgeItemService {
 
     private KnowledgeItemResponse runOrganize(
             UUID userId, KnowledgeItem item, boolean rethrowOnFailure, String jobType) {
-        // CAS atomic claim: prevents concurrent organize/reprocess from duplicating work.
-        if (!claimForProcessing(userId, item.getId())) {
+        // CAS claim + RUNNING job creation in the same short transaction.
+        // This prevents orphaned PROCESSING items with no auditable job if a crash occurs between
+        // them.
+        final IngestionJob[] jobHolder = new IngestionJob[1];
+        boolean claimed =
+                txReturn(
+                        status -> {
+                            if (!claimForProcessing(userId, item.getId())) {
+                                return Boolean.FALSE;
+                            }
+                            item.setStatus(KnowledgeItemStatus.PROCESSING.value());
+                            jobHolder[0] =
+                                    ingestionJobService.createRunning(
+                                            userId,
+                                            item.getId(),
+                                            jobType,
+                                            toJson(
+                                                    Map.of(
+                                                            "knowledgeItemId",
+                                                            item.getId(),
+                                                            "title",
+                                                            item.getTitle())));
+                            return Boolean.TRUE;
+                        });
+        if (!claimed) {
             if (rethrowOnFailure) {
                 throw new BadRequestException("Item is already being processed");
             }
             return toResponse(item);
         }
-        item.setStatus(KnowledgeItemStatus.PROCESSING.value());
+        IngestionJob job = jobHolder[0];
+        String previousCleanedContent = item.getCleanedContent();
+        String previousSummary = item.getSummary();
+        String previousLanguage = item.getLanguage();
+        Integer previousWordCount = item.getWordCount();
 
-        IngestionJob job =
-                ingestionJobService.createRunning(
-                        userId,
-                        item.getId(),
-                        jobType,
-                        toJson(Map.of("knowledgeItemId", item.getId(), "title", item.getTitle())));
+        KnowledgeOrganizerService.OrganizeResult result;
         try {
-            // AI call is outside any DB transaction to avoid holding connections during long operations.
-            KnowledgeOrganizerService.OrganizeResult result = knowledgeOrganizerService.organize(item);
-            // Commit success in a short transaction.
-            txWrite(() -> {
-                item.setCleanedContent(result.cleanedContent());
-                item.setSummary(result.summary());
-                item.setLanguage(result.language());
-                item.setWordCount(result.wordCount());
-                item.setStatus(KnowledgeItemStatus.READY.value());
-                item.touch();
-                knowledgeItemRepository.updateById(item);
-                replaceTags(userId, item.getId(), result.tags());
-            });
-            ingestionJobService.markSucceeded(
-                    job,
+            // AI call is outside any DB transaction to avoid holding connections during long
+            // operations.
+            result = knowledgeOrganizerService.organize(item);
+        } catch (RuntimeException ex) {
+            markOrganizeFailed(item, job, ex);
+            if (rethrowOnFailure) {
+                throw ex;
+            }
+            return toResponse(item);
+        }
+
+        try {
+            String resultSnapshot =
                     toJson(
                             Map.of(
                                     "summary", result.summary(),
                                     "language", result.language(),
                                     "wordCount", result.wordCount(),
-                                    "status", IngestionJobStatus.SUCCEEDED.value())));
+                                    "status", IngestionJobStatus.SUCCEEDED.value()));
+            // Item, tags and job reach their success terminal state atomically.
+            txWrite(
+                    () -> {
+                        item.setCleanedContent(result.cleanedContent());
+                        item.setSummary(result.summary());
+                        item.setLanguage(result.language());
+                        item.setWordCount(result.wordCount());
+                        item.setStatus(KnowledgeItemStatus.READY.value());
+                        item.touch();
+                        knowledgeItemRepository.updateById(item);
+                        replaceTags(userId, item.getId(), result.tags());
+                        ingestionJobService.markSucceeded(job, resultSnapshot);
+                    });
             return toResponse(item);
         } catch (RuntimeException ex) {
-            txWrite(() -> {
-                item.setStatus(KnowledgeItemStatus.FAILED.value());
-                item.touch();
-                knowledgeItemRepository.updateById(item);
-            });
-            ingestionJobService.markFailed(job, ex.getMessage());
+            item.setCleanedContent(previousCleanedContent);
+            item.setSummary(previousSummary);
+            item.setLanguage(previousLanguage);
+            item.setWordCount(previousWordCount);
+            markOrganizeFailed(item, job, ex);
             if (rethrowOnFailure) {
                 throw ex;
             }
@@ -415,9 +450,9 @@ public class KnowledgeItemService {
     }
 
     /**
-     * Atomically claim an item for processing using a CAS (compare-and-swap) update.
-     * Only transitions from non-PROCESSING, non-ARCHIVED states to PROCESSING.
-     * Returns false if another request already claimed the item.
+     * Atomically claim an item for processing using a CAS (compare-and-swap) update. Only
+     * transitions from non-PROCESSING, non-ARCHIVED states to PROCESSING. Returns false if another
+     * request already claimed the item.
      */
     private boolean claimForProcessing(UUID userId, UUID itemId) {
         UpdateWrapper<KnowledgeItem> wrapper =
@@ -432,8 +467,8 @@ public class KnowledgeItemService {
     }
 
     /**
-     * Execute a write operation in a short transaction. Falls back to direct execution
-     * when no TransactionTemplate is configured (e.g. unit tests with mocks).
+     * Execute a write operation in a short transaction. Falls back to direct execution when no
+     * TransactionTemplate is configured (e.g. unit tests with mocks).
      */
     private void txWrite(Runnable action) {
         if (transactionTemplate == null) {
@@ -443,7 +478,49 @@ public class KnowledgeItemService {
         }
     }
 
-    private KnowledgeItemResponse finalizeImportedItem(UUID userId, KnowledgeItem item, UserProfile profile) {
+    /** Execute a callback in a short transaction and return its result. */
+    private <T> T txReturn(org.springframework.transaction.support.TransactionCallback<T> action) {
+        if (transactionTemplate == null) {
+            return action.doInTransaction(null);
+        }
+        return transactionTemplate.execute(action);
+    }
+
+    private KnowledgeItem createImportedItem(
+            UUID userId,
+            String sourceType,
+            String title,
+            String sourceUri,
+            String content,
+            String jobMetadata) {
+        return txReturn(
+                status -> {
+                    KnowledgeItem item =
+                            createItem(
+                                    userId,
+                                    sourceType,
+                                    title,
+                                    sourceUri,
+                                    content,
+                                    KnowledgeItemStatus.INBOX.value());
+                    ingestionJobService.createImportSucceeded(userId, item.getId(), jobMetadata);
+                    return item;
+                });
+    }
+
+    private void markOrganizeFailed(
+            KnowledgeItem item, IngestionJob job, RuntimeException failure) {
+        txWrite(
+                () -> {
+                    item.setStatus(KnowledgeItemStatus.FAILED.value());
+                    item.touch();
+                    knowledgeItemRepository.updateById(item);
+                    ingestionJobService.markFailed(job, failure.getMessage());
+                });
+    }
+
+    private KnowledgeItemResponse finalizeImportedItem(
+            UUID userId, KnowledgeItem item, UserProfile profile) {
         if (profile != null
                 && OrganizeMode.AUTO.value().equalsIgnoreCase(profile.getOrganizeMode())) {
             return runOrganize(userId, item, false, IngestionJobType.ORGANIZE.value());
@@ -519,15 +596,18 @@ public class KnowledgeItemService {
                                 .last("LIMIT 5"));
 
         Map<String, Long> statusCounts = getStatusCounts(userId);
-        List<DashboardTagSummaryResponse> topTags = knowledgeItemTagRepository.findTopTagUsageByUserId(userId, 5).stream()
-                .map(
-                        tag ->
-                                new DashboardTagSummaryResponse(
-                                        tag.getTagId(),
-                                        tag.getName(),
-                                        tag.getColor(),
-                                        tag.getUsageCount() == null ? 0L : tag.getUsageCount()))
-                .toList();
+        List<DashboardTagSummaryResponse> topTags =
+                knowledgeItemTagRepository.findTopTagUsageByUserId(userId, 5).stream()
+                        .map(
+                                tag ->
+                                        new DashboardTagSummaryResponse(
+                                                tag.getTagId(),
+                                                tag.getName(),
+                                                tag.getColor(),
+                                                tag.getUsageCount() == null
+                                                        ? 0L
+                                                        : tag.getUsageCount()))
+                        .toList();
         long totalItems = statusCounts.values().stream().mapToLong(Long::longValue).sum();
 
         return new DashboardSummaryResponse(
@@ -558,7 +638,12 @@ public class KnowledgeItemService {
     }
 
     private KnowledgeItem createItem(
-            UUID userId, String sourceType, String title, String sourceUri, String content, String status) {
+            UUID userId,
+            String sourceType,
+            String title,
+            String sourceUri,
+            String content,
+            String status) {
         String cleanedTitle = (title == null || title.isBlank()) ? "Untitled" : title.trim();
         KnowledgeItem item =
                 KnowledgeItem.builder()
@@ -586,22 +671,24 @@ public class KnowledgeItemService {
             Instant to,
             long page,
             long pageSize) {
-        Page<KnowledgeItem> pagination = new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
-        QueryWrapper<KnowledgeItem> wrapper = new QueryWrapper<KnowledgeItem>()
-                .select(
-                        "id",
-                        "user_id",
-                        "source_type",
-                        "title",
-                        "source_uri",
-                        LIST_SUMMARY_SQL,
-                        "status",
-                        "language",
-                        "word_count",
-                        "created_at",
-                        "updated_at",
-                        "archived_at")
-                .eq("user_id", userId);
+        Page<KnowledgeItem> pagination =
+                new Page<>(Math.max(page, 1), Math.min(Math.max(pageSize, 1), 100));
+        QueryWrapper<KnowledgeItem> wrapper =
+                new QueryWrapper<KnowledgeItem>()
+                        .select(
+                                "id",
+                                "user_id",
+                                "source_type",
+                                "title",
+                                "source_uri",
+                                LIST_SUMMARY_SQL,
+                                "status",
+                                "language",
+                                "word_count",
+                                "created_at",
+                                "updated_at",
+                                "archived_at")
+                        .eq("user_id", userId);
 
         if (query != null && !query.isBlank()) {
             applyKeywordSearch(wrapper, query.trim());
@@ -628,9 +715,9 @@ public class KnowledgeItemService {
                 return new Page<>(pagination.getCurrent(), pagination.getSize(), 0);
             }
             wrapper.exists(
-                    "SELECT 1 FROM knowledge_item_tags kit "
-                            + "WHERE kit.knowledge_item_id = knowledge_items.id "
-                            + "AND kit.tag_id = {0,typeHandler=com.agent.mvp.config.UuidTypeHandler}",
+                    "SELECT 1 FROM knowledge_item_tags kit WHERE kit.knowledge_item_id ="
+                            + " knowledge_items.id AND kit.tag_id ="
+                            + " {0,typeHandler=com.agent.mvp.config.UuidTypeHandler}",
                     targetTag.getId());
         }
         wrapper.orderByDesc("updated_at");
@@ -671,12 +758,7 @@ public class KnowledgeItemService {
                                     .eq(KnowledgeTag::getUserId, userId)
                                     .eq(KnowledgeTag::getName, tagName));
             if (tag == null) {
-                tag =
-                        KnowledgeTag.builder()
-                                .userId(userId)
-                                .name(tagName)
-                                .color("#7a8a84")
-                                .build();
+                tag = KnowledgeTag.builder().userId(userId).name(tagName).color("#7a8a84").build();
                 tag.onCreate();
                 knowledgeTagRepository.insert(tag);
             }
@@ -704,15 +786,22 @@ public class KnowledgeItemService {
         if (tagIds.isEmpty()) {
             return List.of();
         }
-        return knowledgeTagRepository.selectBatchIds(tagIds).stream().map(this::toTagResponse).toList();
+        return knowledgeTagRepository.selectBatchIds(tagIds).stream()
+                .map(this::toTagResponse)
+                .toList();
     }
 
-    private KnowledgeItemPageResponse toPageResponse(Page<KnowledgeItem> itemPage, long page, long pageSize) {
+    private KnowledgeItemPageResponse toPageResponse(
+            Page<KnowledgeItem> itemPage, long page, long pageSize) {
         Map<UUID, List<TagResponse>> tagsByItemId =
                 getTagsByItemIds(itemPage.getRecords().stream().map(KnowledgeItem::getId).toList());
         return new KnowledgeItemPageResponse(
                 itemPage.getRecords().stream()
-                        .map(item -> toListResponse(item, tagsByItemId.getOrDefault(item.getId(), List.of())))
+                        .map(
+                                item ->
+                                        toListResponse(
+                                                item,
+                                                tagsByItemId.getOrDefault(item.getId(), List.of())))
                         .toList(),
                 itemPage.getTotal(),
                 page,
@@ -724,10 +813,16 @@ public class KnowledgeItemService {
             return Map.of();
         }
         Map<UUID, List<TagResponse>> tagsByItemId = new HashMap<>();
-        for (KnowledgeItemTagView tag : knowledgeItemTagRepository.findTagsByKnowledgeItemIds(itemIds)) {
+        for (KnowledgeItemTagView tag :
+                knowledgeItemTagRepository.findTagsByKnowledgeItemIds(itemIds)) {
             tagsByItemId
                     .computeIfAbsent(tag.getKnowledgeItemId(), ignored -> new ArrayList<>())
-                    .add(new TagResponse(tag.getTagId(), tag.getName(), tag.getColor(), tag.getCreatedAt()));
+                    .add(
+                            new TagResponse(
+                                    tag.getTagId(),
+                                    tag.getName(),
+                                    tag.getColor(),
+                                    tag.getCreatedAt()));
         }
         return tagsByItemId;
     }
@@ -748,7 +843,8 @@ public class KnowledgeItemService {
         return toResponse(item, tags, false);
     }
 
-    private KnowledgeItemResponse toResponse(KnowledgeItem item, List<TagResponse> tags, boolean includeContent) {
+    private KnowledgeItemResponse toResponse(
+            KnowledgeItem item, List<TagResponse> tags, boolean includeContent) {
         return new KnowledgeItemResponse(
                 item.getId(),
                 item.getSourceType(),
@@ -770,9 +866,10 @@ public class KnowledgeItemService {
         if (item.getSummary() != null && !item.getSummary().isBlank()) {
             return item.getSummary();
         }
-        String content = item.getCleanedContent() != null && !item.getCleanedContent().isBlank()
-                ? item.getCleanedContent()
-                : item.getRawContent();
+        String content =
+                item.getCleanedContent() != null && !item.getCleanedContent().isBlank()
+                        ? item.getCleanedContent()
+                        : item.getRawContent();
         if (content == null || content.isBlank()) {
             return item.getSummary();
         }
@@ -799,7 +896,9 @@ public class KnowledgeItemService {
         return switch (format) {
             case "pdf" -> KnowledgeItemSourceType.PDF.value();
             case "md", "markdown", "txt", "html", "htm" -> KnowledgeItemSourceType.MARKDOWN.value();
-            default -> throw new BadRequestException("Uploaded file type is not supported yet: " + format);
+            default ->
+                    throw new BadRequestException(
+                            "Uploaded file type is not supported yet: " + format);
         };
     }
 
@@ -869,7 +968,9 @@ public class KnowledgeItemService {
     }
 
     private String detectLanguage(String text) {
-        return text != null && text.chars().anyMatch(ch -> ch >= 0x4E00 && ch <= 0x9FFF) ? "zh" : "en";
+        return text != null && text.chars().anyMatch(ch -> ch >= 0x4E00 && ch <= 0x9FFF)
+                ? "zh"
+                : "en";
     }
 
     private int countWords(String text) {

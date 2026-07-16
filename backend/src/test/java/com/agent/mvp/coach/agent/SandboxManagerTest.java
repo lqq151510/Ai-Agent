@@ -14,9 +14,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * {@link SandboxManager} 单元测试，覆盖正常写入读取、路径穿越攻击拒绝、rollback 清理彻底三类场景。
- */
+/** {@link SandboxManager} 单元测试，覆盖正常写入读取、路径穿越攻击拒绝、rollback 清理彻底三类场景。 */
 class SandboxManagerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();

@@ -46,7 +46,8 @@ public class SettingsService {
     }
 
     @Transactional
-    public SettingsProfileResponse updateProfile(UUID userId, UpdateSettingsProfileRequest request) {
+    public SettingsProfileResponse updateProfile(
+            UUID userId, UpdateSettingsProfileRequest request) {
         User user = userProfileService.requireUser(userId);
         UserProfile profile = userProfileService.getOrCreate(userId);
 
@@ -67,9 +68,18 @@ public class SettingsService {
         validateModelSourceOwnership(userId, request.summaryModelSourceId());
         validateModelSourceOwnership(userId, request.taggingModelSourceId());
 
-        validateClearFlag("defaultModelSourceId", request.defaultModelSourceId(), request.clearDefaultModelSource());
-        validateClearFlag("summaryModelSourceId", request.summaryModelSourceId(), request.clearSummaryModelSource());
-        validateClearFlag("taggingModelSourceId", request.taggingModelSourceId(), request.clearTaggingModelSource());
+        validateClearFlag(
+                "defaultModelSourceId",
+                request.defaultModelSourceId(),
+                request.clearDefaultModelSource());
+        validateClearFlag(
+                "summaryModelSourceId",
+                request.summaryModelSourceId(),
+                request.clearSummaryModelSource());
+        validateClearFlag(
+                "taggingModelSourceId",
+                request.taggingModelSourceId(),
+                request.clearTaggingModelSource());
 
         if (request.defaultModelSourceId() != null) {
             syncDefaultModelSource(userId, request.defaultModelSourceId());
@@ -103,7 +113,9 @@ public class SettingsService {
                 countItems(userId, "archived"),
                 knowledgeTagRepository.selectCount(
                         new LambdaQueryWrapper<com.agent.mvp.knowledge.entity.KnowledgeTag>()
-                                .eq(com.agent.mvp.knowledge.entity.KnowledgeTag::getUserId, userId)),
+                                .eq(
+                                        com.agent.mvp.knowledge.entity.KnowledgeTag::getUserId,
+                                        userId)),
                 modelSourceRepository.selectCount(
                         new LambdaQueryWrapper<ModelSource>().eq(ModelSource::getUserId, userId)),
                 Instant.now());
@@ -126,7 +138,8 @@ public class SettingsService {
 
     private void validateClearFlag(String fieldName, UUID modelSourceId, Boolean clearFlag) {
         if (modelSourceId != null && Boolean.TRUE.equals(clearFlag)) {
-            throw new BadRequestException("Cannot set and clear " + fieldName + " at the same time");
+            throw new BadRequestException(
+                    "Cannot set and clear " + fieldName + " at the same time");
         }
     }
 

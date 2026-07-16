@@ -136,8 +136,7 @@ public class SessionService {
     /**
      * 统计当前活跃会话数。
      *
-     * <p>活跃定义：最近 24 小时内有更新的会话数量。供 Prometheus Gauge 指标 {@code
-     * agent.sessions.active} 使用。
+     * <p>活跃定义：最近 24 小时内有更新的会话数量。供 Prometheus Gauge 指标 {@code agent.sessions.active} 使用。
      *
      * @return 活跃会话数
      */

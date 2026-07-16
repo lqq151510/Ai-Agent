@@ -26,8 +26,8 @@ import org.springframework.web.client.RestTemplate;
 /**
  * 文档转 Markdown 服务。
  *
- * <p>调用链路：优先调用 {@link PythonParseClient}（python-service，WebClient + 连接池），
- * 失败时降级到原有 RestTemplate 直连逻辑（向后兼容）。
+ * <p>调用链路：优先调用 {@link PythonParseClient}（python-service，WebClient + 连接池）， 失败时降级到原有 RestTemplate
+ * 直连逻辑（向后兼容）。
  *
  * <p>保持原有 {@link #convertDocumentToMarkdown(File)} 方法签名不变。
  */
@@ -78,8 +78,7 @@ public class MarkItDownService {
                 return parsed.markdown();
             }
         } catch (PythonParseClient.PythonServiceUnavailableException e) {
-            log.warn(
-                    "python-service 不可用，降级到本地 RestTemplate 直连: {}", e.getMessage());
+            log.warn("python-service 不可用，降级到本地 RestTemplate 直连: {}", e.getMessage());
         } catch (Exception e) {
             log.warn("调用 python-service 异常，降级到本地 RestTemplate 直连: {}", e.getMessage());
         }

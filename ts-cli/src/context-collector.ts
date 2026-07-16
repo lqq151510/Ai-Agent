@@ -9,6 +9,7 @@ const CONTEXT_CHAR_LIMIT = 50000;
 const FILE_CHAR_LIMIT = 20000;
 const REDACT_LINE = /(token|secret|password|api[_-]?key|authorization|refresh[_-]?token|cookie)/i;
 const LOCAL_SERVICE_URL = process.env.LOCAL_SERVICE_URL || `http://127.0.0.1:${process.env.LOCAL_SERVICE_PORT || '8765'}`;
+const LOCAL_SERVICE_TOKEN = process.env.LOCAL_SERVICE_TOKEN || '';
 
 function sanitizeText(input: string): string {
   let output = input.replace(/\r\n/g, '\n');
@@ -53,9 +54,13 @@ async function collectFromLocalService(): Promise<string | undefined> {
   const timeout = setTimeout(() => controller.abort(), 1200);
 
   try {
+    const headers: Record<string, string> = {};
+    if (LOCAL_SERVICE_TOKEN) {
+      headers['Authorization'] = `Bearer ${LOCAL_SERVICE_TOKEN}`;
+    }
     const response = await fetch(
       `${LOCAL_SERVICE_URL}/context?path=${encodeURIComponent(process.cwd())}`,
-      { signal: controller.signal },
+      { signal: controller.signal, headers },
     );
     if (!response.ok) {
       return undefined;

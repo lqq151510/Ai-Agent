@@ -40,8 +40,7 @@ public class IngestionJobController extends AuthenticatedControllerSupport {
 
     @GetMapping("/{id}")
     @Operation(summary = "获取单个任务详情")
-    public IngestionJobResponse detail(
-            @PathVariable("id") UUID id, Authentication authentication) {
+    public IngestionJobResponse detail(@PathVariable("id") UUID id, Authentication authentication) {
         AuthenticatedUser user = requireAuthenticatedUser(authentication);
         return ingestionJobService.get(user.userId(), id);
     }

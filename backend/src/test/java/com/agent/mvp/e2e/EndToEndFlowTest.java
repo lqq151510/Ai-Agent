@@ -17,7 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -28,7 +27,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.ParameterizedTypeReference;
@@ -45,9 +43,8 @@ import org.springframework.test.context.DynamicPropertySource;
 /**
  * 端到端完整用户旅程测试。
  *
- * <p>覆盖以下完整流程（单个测试方法串起）： 1. 注册新用户 2. 登录获取 accessToken 3. 创建会话 4. 同步对话（mock 模型） 5.
- * 流式对话（验证 SSE 事件：meta + chunk + done） 6. 获取会话消息 7. 导出会话为 Markdown 8. Coach 需求拆解（mock 模型） 9.
- * 系统就绪检查 10. 工具统计
+ * <p>覆盖以下完整流程（单个测试方法串起）： 1. 注册新用户 2. 登录获取 accessToken 3. 创建会话 4. 同步对话（mock 模型） 5. 流式对话（验证 SSE
+ * 事件：meta + chunk + done） 6. 获取会话消息 7. 导出会话为 Markdown 8. Coach 需求拆解（mock 模型） 9. 系统就绪检查 10. 工具统计
  *
  * <p>测试环境：H2 内存数据库 + Caffeine 缓存（无 Redis 依赖） + 内置 HttpServer 模拟 OpenAI 兼容接口。
  *
@@ -71,8 +68,7 @@ class EndToEndFlowTest {
     /**
      * 测试专用 Bean 配置。
      *
-     * <p>SandboxManager 有两个构造函数，Spring 无法自动选择， 此处显式定义 Bean，使用 public 构造函数
-     * 并传入工作区根路径。
+     * <p>SandboxManager 有两个构造函数，Spring 无法自动选择， 此处显式定义 Bean，使用 public 构造函数 并传入工作区根路径。
      */
     @TestConfiguration
     static class E2eTestConfiguration {
@@ -154,9 +150,7 @@ class EndToEndFlowTest {
         String accessToken = String.valueOf(login.getBody().get("accessToken"));
         assertFalse(accessToken.isBlank(), "accessToken 不应为空");
         assertNotNull(login.getBody().get("refreshToken"), "refreshToken 不应为空");
-        assertTrue(
-                ((Number) login.getBody().get("expiresInSeconds")).longValue() > 0,
-                "过期时间应大于 0");
+        assertTrue(((Number) login.getBody().get("expiresInSeconds")).longValue() > 0, "过期时间应大于 0");
 
         // 步骤 3：用 token 创建会话 POST /api/v1/sessions
         // 意图：验证已认证用户可以创建新的对话会话
@@ -184,7 +178,10 @@ class EndToEndFlowTest {
         assertNotNull(createSession.getBody(), "会话响应体不应为空");
         String sessionId = String.valueOf(createSession.getBody().get("id"));
         assertFalse(sessionId.isBlank(), "会话 ID 不应为空");
-        assertEquals("requirements", createSession.getBody().get("taskType"), "taskType 应为 requirements");
+        assertEquals(
+                "requirements",
+                createSession.getBody().get("taskType"),
+                "taskType 应为 requirements");
         assertEquals("planned", createSession.getBody().get("taskStatus"), "taskStatus 应为 planned");
         assertEquals(
                 1800,
@@ -203,7 +200,8 @@ class EndToEndFlowTest {
         assertNotNull(chat.getBody(), "对话响应体不应为空");
         // 验证 reply 字段存在（flex runtime 与 mock 模型的交互可能产生空回复，不强制断言内容）
         assertNotNull(chat.getBody().get("reply"), "reply 字段不应为 null");
-        assertEquals(sessionId, String.valueOf(chat.getBody().get("sessionId")), "回复的 sessionId 应匹配");
+        assertEquals(
+                sessionId, String.valueOf(chat.getBody().get("sessionId")), "回复的 sessionId 应匹配");
 
         // 步骤 5：流式对话 POST /api/v1/agent/chat/stream（验证 SSE 事件：meta + chunk + done）
         // 意图：验证流式对话能正确返回 SSE 事件流
@@ -211,8 +209,7 @@ class EndToEndFlowTest {
         streamHeaders.setContentType(MediaType.APPLICATION_JSON);
         streamHeaders.setAccept(List.of(MediaType.TEXT_EVENT_STREAM));
         HttpEntity<Map<String, Object>> streamRequest =
-                new HttpEntity<>(
-                        Map.of("sessionId", sessionId, "message", "请流式回复"), streamHeaders);
+                new HttpEntity<>(Map.of("sessionId", sessionId, "message", "请流式回复"), streamHeaders);
 
         ResponseEntity<String> streamResponse =
                 restTemplate.exchange(
@@ -236,8 +233,7 @@ class EndToEndFlowTest {
         assertNotNull(messagesResponse.getBody(), "消息列表不应为空");
         assertTrue(
                 messagesResponse.getBody().size() >= 2,
-                "应至少包含 user 和 assistant 两条消息，实际: "
-                        + messagesResponse.getBody().size());
+                "应至少包含 user 和 assistant 两条消息，实际: " + messagesResponse.getBody().size());
         assertTrue(
                 messagesResponse.getBody().stream()
                         .anyMatch(m -> "assistant".equals(m.get("role"))),
@@ -266,9 +262,7 @@ class EndToEndFlowTest {
         String contentDisposition =
                 exportResponse.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
         assertNotNull(contentDisposition, "Content-Disposition 头应存在");
-        assertTrue(
-                contentDisposition.contains(".md"),
-                "Content-Disposition 应包含 .md 文件扩展名");
+        assertTrue(contentDisposition.contains(".md"), "Content-Disposition 应包含 .md 文件扩展名");
 
         // 步骤 8：Coach 需求拆解 POST /api/v1/coach/requirements/breakdown（mock 模型）
         // 意图：验证 Coach 服务可以基于 mock 模型返回进行需求拆解
@@ -339,15 +333,18 @@ class EndToEndFlowTest {
             // 读取请求体，判断是否为流式请求
             String requestBody =
                     new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            boolean isStream = requestBody.contains("\"stream\":true") || requestBody.contains("\"stream\": true");
+            boolean isStream =
+                    requestBody.contains("\"stream\":true")
+                            || requestBody.contains("\"stream\": true");
 
             if (isStream) {
                 // 流式响应：返回 SSE 格式的 chunk 数据
                 String sseBody =
-                        "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"mock-\"}}]}\n\n"
-                                + "data: {\"choices\":[{\"delta\":{\"content\":\"openai-\"}}]}\n\n"
-                                + "data: {\"choices\":[{\"delta\":{\"content\":\"stream\"}}]}\n\n"
-                                + "data: [DONE]\n\n";
+                        "data:"
+                            + " {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"mock-\"}}]}\n\n"
+                            + "data: {\"choices\":[{\"delta\":{\"content\":\"openai-\"}}]}\n\n"
+                            + "data: {\"choices\":[{\"delta\":{\"content\":\"stream\"}}]}\n\n"
+                            + "data: [DONE]\n\n";
                 byte[] bytes = sseBody.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
                 exchange.sendResponseHeaders(200, bytes.length);
@@ -357,7 +354,7 @@ class EndToEndFlowTest {
             } else {
                 // 非流式响应：返回固定 JSON
                 String body =
-                        "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"mock-openai-reply\"}}],\"usage\":{\"total_tokens\":10}}";
+                        "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"mock-openai-reply\"}}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":5,\"total_tokens\":10}}";
                 byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, bytes.length);

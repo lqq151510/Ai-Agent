@@ -19,7 +19,8 @@ class SemanticCacheServiceTest {
     void shouldReusePromptEmbeddingWhenReadingCachedResponse() {
         CountingEmbeddingModel embeddingModel = new CountingEmbeddingModel(false);
         SemanticCacheService service =
-                new SemanticCacheService(new AppProperties(), embeddingModel, new InMemoryEmbeddingStore<>());
+                new SemanticCacheService(
+                        new AppProperties(), embeddingModel, new InMemoryEmbeddingStore<>());
 
         service.cacheResponseAsync("  explain   rag  ", "cached answer");
         var cached = service.findCachedResponse("explain rag");
@@ -33,7 +34,8 @@ class SemanticCacheServiceTest {
     void shouldShortCircuitEmbeddingAfterProviderFailure() {
         CountingEmbeddingModel embeddingModel = new CountingEmbeddingModel(true);
         SemanticCacheService service =
-                new SemanticCacheService(new AppProperties(), embeddingModel, new InMemoryEmbeddingStore<>());
+                new SemanticCacheService(
+                        new AppProperties(), embeddingModel, new InMemoryEmbeddingStore<>());
 
         assertTrue(service.findCachedResponse("first prompt").isEmpty());
         assertTrue(service.findCachedResponse("second prompt").isEmpty());
@@ -55,7 +57,8 @@ class SemanticCacheServiceTest {
             if (fail) {
                 throw new RuntimeException("embedding offline");
             }
-            return Response.from(textSegments.stream().map(segment -> embeddingFor(segment.text())).toList());
+            return Response.from(
+                    textSegments.stream().map(segment -> embeddingFor(segment.text())).toList());
         }
 
         private int callCount() {

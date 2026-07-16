@@ -83,7 +83,8 @@ public class ModelSourceService {
     }
 
     @Transactional
-    public ModelSourceResponse update(UUID userId, UUID sourceId, UpdateModelSourceRequest request) {
+    public ModelSourceResponse update(
+            UUID userId, UUID sourceId, UpdateModelSourceRequest request) {
         ModelSource source = requireOwnedSource(userId, sourceId);
         if (request.name() != null) {
             ensureNameAvailable(userId, request.name(), source.getId());
@@ -156,7 +157,9 @@ public class ModelSourceService {
         ModelSourceProbeService.ProbeResult result = probeService.probe(source);
         source.setLastCheckedAt(Instant.now());
         source.setLastCheckStatus(
-                result.ok() ? ModelSourceCheckStatus.OK.value() : ModelSourceCheckStatus.ERROR.value());
+                result.ok()
+                        ? ModelSourceCheckStatus.OK.value()
+                        : ModelSourceCheckStatus.ERROR.value());
         source.setLastCheckMessage(result.message());
         source.touch();
         modelSourceRepository.updateById(source);
@@ -164,7 +167,10 @@ public class ModelSourceService {
             throw new BadGatewayException(result.message());
         }
         return new ModelSourceTestResponse(
-                source.getId(), source.getLastCheckStatus(), source.getLastCheckMessage(), source.getLastCheckedAt());
+                source.getId(),
+                source.getLastCheckStatus(),
+                source.getLastCheckMessage(),
+                source.getLastCheckedAt());
     }
 
     public ModelSource requireOwnedSource(UUID userId, UUID sourceId) {

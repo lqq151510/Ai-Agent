@@ -127,6 +127,7 @@ check_prod_env() {
   reject_placeholder_value "POSTGRES_PASSWORD" "${file}"
   reject_placeholder_value "REDIS_PASSWORD" "${file}"
   reject_placeholder_value "JWT_SECRET" "${file}"
+  reject_placeholder_value "SECURITY_DB_ENCRYPTION_KEY" "${file}"
   reject_placeholder_value "OPENAI_BASE_URL" "${file}"
   reject_placeholder_value "OPENAI_API_KEY" "${file}"
   reject_placeholder_value "OPENAI_MODEL" "${file}"

@@ -77,7 +77,7 @@ public class RAGMemoryService {
         List<String> results = new ArrayList<>();
         String normalizedQuery = normalizeQuery(queryText);
         int safeMaxResults = normalizeMaxResults(maxResults);
-        if (normalizedQuery.isBlank()) {
+        if (userId == null || normalizedQuery.isBlank()) {
             return results;
         }
         try {
@@ -86,14 +86,15 @@ public class RAGMemoryService {
                 return results;
             }
             EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
-            EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
-                    .queryEmbedding(queryEmbedding)
-                    .maxResults(Math.min(safeMaxResults * 4, MAX_VECTOR_CANDIDATES))
-                    .build();
+            EmbeddingSearchRequest request =
+                    EmbeddingSearchRequest.builder()
+                            .queryEmbedding(queryEmbedding)
+                            .maxResults(Math.min(safeMaxResults * 4, MAX_VECTOR_CANDIDATES))
+                            .build();
             List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(request).matches();
             for (EmbeddingMatch<TextSegment> match : matches) {
                 String matchUserId = match.embedded().metadata().getString("userId");
-                if (matchUserId == null || userId == null || matchUserId.equals(userId.toString())) {
+                if (userId.toString().equals(matchUserId)) {
                     results.add(match.embedded().text());
                 }
                 if (results.size() >= safeMaxResults) {
@@ -108,9 +109,7 @@ public class RAGMemoryService {
         return results;
     }
 
-    /**
-     * 搜索代码上下文，委托给 {@link SearchOrchestrator} 根据配置的搜索模式执行策略编排和结果融合。
-     */
+    /** 搜索代码上下文，委托给 {@link SearchOrchestrator} 根据配置的搜索模式执行策略编排和结果融合。 */
     public List<String> searchCodeContext(String queryText, int maxResults) {
         return searchOrchestrator.search(queryText, maxResults);
     }
@@ -171,29 +170,26 @@ public class RAGMemoryService {
         List<Map<String, Object>> list = new ArrayList<>();
         try {
             JdbcTemplate jdbcTemplate = storeProvider.getJdbcTemplate();
-            String sql = "SELECT embedding_id, text, metadata FROM engineering_memory";
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
+            String sql =
+                    "SELECT embedding_id, text, metadata::text AS metadata FROM engineering_memory "
+                            + "WHERE metadata::jsonb ->> 'userId' = ?";
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, userId.toString());
             for (Map<String, Object> row : rows) {
                 String id = String.valueOf(row.get("embedding_id"));
                 String text = (String) row.get("text");
-                String metadataStr = (String) row.get("metadata");
-
-                boolean matches = true;
-                if (metadataStr != null) {
-                    if (metadataStr.contains("\"userId\"")) {
-                        matches = metadataStr.contains(userId.toString());
-                    }
-                }
-                if (matches) {
-                    list.add(Map.of(
-                        "id", id,
-                        "text", text != null ? text : "",
-                        "metadata", metadataStr != null ? metadataStr : "{}"
-                    ));
-                }
+                Object metadata = row.get("metadata");
+                String metadataStr = metadata == null ? null : metadata.toString();
+                list.add(
+                        Map.of(
+                                "id", id,
+                                "text", text != null ? text : "",
+                                "metadata", metadataStr != null ? metadataStr : "{}"));
             }
         } catch (Exception ex) {
-            log.warn("Failed to list memories from pgvector, database table may not be initialized: {}", ex.getMessage());
+            log.warn(
+                    "Failed to list memories from pgvector, database table may not be initialized:"
+                            + " {}",
+                    ex.getMessage());
         }
         return list;
     }
@@ -218,7 +214,9 @@ public class RAGMemoryService {
             }
             sb.append("]");
 
-            String sql = "UPDATE engineering_memory SET text = ?, embedding = ?::vector WHERE embedding_id = ?::uuid AND metadata::jsonb ->> 'userId' = ?";
+            String sql =
+                    "UPDATE engineering_memory SET text = ?, embedding = ?::vector WHERE"
+                            + " embedding_id = ?::uuid AND metadata::jsonb ->> 'userId' = ?";
             int affected = jdbcTemplate.update(sql, text, sb.toString(), id, userId.toString());
             if (affected == 0) {
                 throw new RuntimeException("Memory not found or not owned by user: " + id);
@@ -234,7 +232,9 @@ public class RAGMemoryService {
     public void deleteMemory(String id, UUID userId) {
         try {
             JdbcTemplate jdbcTemplate = storeProvider.getJdbcTemplate();
-            String sql = "DELETE FROM engineering_memory WHERE embedding_id = ?::uuid AND metadata::jsonb ->> 'userId' = ?";
+            String sql =
+                    "DELETE FROM engineering_memory WHERE embedding_id = ?::uuid AND"
+                            + " metadata::jsonb ->> 'userId' = ?";
             int affected = jdbcTemplate.update(sql, id, userId.toString());
             if (affected == 0) {
                 throw new RuntimeException("Memory not found or not owned by user: " + id);

@@ -3,7 +3,11 @@ import { spawn, ChildProcess } from 'child_process';
 export class CliManager {
   private activeProcess: ChildProcess | null = null;
 
-  execute(cliEntryPath: string, args: string[]): Promise<{ exitCode: number; output: string }> {
+  execute(
+    cliEntryPath: string,
+    args: string[],
+    runtimeEnv: NodeJS.ProcessEnv = {},
+  ): Promise<{ exitCode: number; output: string }> {
     if (this.activeProcess) {
       return Promise.resolve({ exitCode: 1, output: 'Another CLI command is already running' });
     }
@@ -13,6 +17,7 @@ export class CliManager {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
+          ...runtimeEnv,
           ELECTRON_RUN_AS_NODE: '1',
         },
       });

@@ -70,7 +70,8 @@ class SearchOrchestratorTest {
         private final List<String> results;
         private int calls;
 
-        private FakeStrategy(String name, boolean available, double confidence, List<String> results) {
+        private FakeStrategy(
+                String name, boolean available, double confidence, List<String> results) {
             this.name = name;
             this.available = available;
             this.confidence = confidence;

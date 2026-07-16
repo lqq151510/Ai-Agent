@@ -14,11 +14,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 
 @Service
+@Profile("legacy")
 public class CodeToolService {
 
     private static final int MAX_READ_LINES = 400;
@@ -195,13 +195,17 @@ public class CodeToolService {
 
         try {
             Path pom = resolveSafe(filePath);
-            javax.xml.parsers.DocumentBuilderFactory factory = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            javax.xml.parsers.DocumentBuilderFactory factory =
+                    javax.xml.parsers.DocumentBuilderFactory.newInstance();
             factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
             javax.xml.parsers.DocumentBuilder builder = factory.newDocumentBuilder();
             org.w3c.dom.Document doc = builder.parse(pom.toFile());
 
             org.w3c.dom.NodeList artifactNodes = doc.getElementsByTagName("artifactId");
-            String projectArtifact = artifactNodes.getLength() > 0 ? artifactNodes.item(0).getTextContent() : "unknown";
+            String projectArtifact =
+                    artifactNodes.getLength() > 0
+                            ? artifactNodes.item(0).getTextContent()
+                            : "unknown";
 
             List<String> dependencies = new ArrayList<>();
             org.w3c.dom.NodeList deps = doc.getElementsByTagName("dependency");

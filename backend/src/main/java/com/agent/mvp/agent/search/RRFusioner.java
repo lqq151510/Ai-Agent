@@ -12,8 +12,7 @@ import org.springframework.stereotype.Component;
 /**
  * Reciprocal Rank Fusion 融合器实现。
  *
- * <p>对每个策略返回的命中项按排名计算得分 {@code 1/(k + rank)}，跨策略累加后按总分降序排序。
- * 参数 {@code k} 用于抑制高排名项的得分过度主导，默认 60。
+ * <p>对每个策略返回的命中项按排名计算得分 {@code 1/(k + rank)}，跨策略累加后按总分降序排序。 参数 {@code k} 用于抑制高排名项的得分过度主导，默认 60。
  */
 @Component
 public class RRFusioner implements ResultFusioner {

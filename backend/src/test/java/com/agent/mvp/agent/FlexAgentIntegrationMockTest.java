@@ -47,12 +47,15 @@ class FlexAgentIntegrationMockTest {
 
         FlexRuntimeFactory flexRuntimeFactory = mock(FlexRuntimeFactory.class);
         AgentRuntime runtime = mock(AgentRuntime.class);
-        when(flexRuntimeFactory.createRuntime(any(), any(), any(), any(), any())).thenReturn(runtime);
+        when(flexRuntimeFactory.createRuntime(any(), any(), any(), any(), any()))
+                .thenReturn(runtime);
 
         com.agent.mvp.agent.service.AgentContextService agentContextService =
-                new com.agent.mvp.agent.service.AgentContextService(ragMemoryService, appProperties);
+                new com.agent.mvp.agent.service.AgentContextService(
+                        ragMemoryService, appProperties);
         com.agent.mvp.agent.service.MessageHistoryProcessor messageHistoryProcessor =
-                new com.agent.mvp.agent.service.MessageHistoryProcessor(sessionService, agentContextService);
+                new com.agent.mvp.agent.service.MessageHistoryProcessor(
+                        sessionService, agentContextService);
         com.agent.mvp.agent.service.ToolCallManager toolCallManager =
                 mock(com.agent.mvp.agent.service.ToolCallManager.class);
 
@@ -73,7 +76,8 @@ class FlexAgentIntegrationMockTest {
                         agentContextService,
                         new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
                         messageHistoryProcessor,
-                        toolCallManager);
+                        toolCallManager,
+                        mock(com.agent.mvp.modelsource.service.ModelSourceService.class));
 
         UUID userId = UUID.randomUUID();
         ConversationSession session = new ConversationSession();
@@ -97,6 +101,8 @@ class FlexAgentIntegrationMockTest {
         when(textStep.type()).thenReturn(StepType.TEXT_RESPONSE);
         when(textStep.contentDelta()).thenReturn("Hello from flexagent");
         when(textStep.isCompleteResponse()).thenReturn(true);
+        when(textStep.usageMetadata())
+                .thenReturn(new org.flexagent.core.model.UsageMetadata(0, 0, 0, 0, 42));
 
         when(runtime.pollStep(anyLong(), any(TimeUnit.class)))
                 .thenReturn(toolStep)
@@ -108,7 +114,8 @@ class FlexAgentIntegrationMockTest {
                                 new ToolResult("1", "searchCode", "{}", "SUCCESS", 10, "result")));
 
         // 配置 ToolCallManager mock：返回成功的工具调用结果
-        when(toolCallManager.executeToolCalls(any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean()))
+        when(toolCallManager.executeToolCalls(
+                        any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(
                         new com.agent.mvp.agent.service.ToolCallManager.ToolCallResult(
                                 java.util.List.of(
@@ -118,10 +125,13 @@ class FlexAgentIntegrationMockTest {
 
         ChatResponse response =
                 service.chat(
-                        userId, new ChatRequest(session.getId(), "hello", null, null, null, null, null, null));
+                        userId,
+                        new ChatRequest(
+                                session.getId(), "hello", null, null, null, null, null, null));
 
         assertEquals("Hello from flexagent", response.reply());
         assertEquals("completed", response.execution().stopReason());
         assertEquals(1, response.execution().toolRounds());
+        assertEquals(42, response.execution().totalTokenUsage());
     }
 }

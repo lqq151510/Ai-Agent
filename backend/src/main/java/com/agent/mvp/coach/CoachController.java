@@ -56,8 +56,7 @@ public class CoachController {
     @PostMapping("/execute-multi-agent")
     @SentinelWebhook(tag = "coach.multi-agent")
     public ResponseEntity<String> executeMultiAgent(
-            @RequestBody String requirement,
-            Authentication authentication) {
+            @RequestBody String requirement, Authentication authentication) {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         try (MDC.MDCCloseable u =
                 MDC.putCloseable(RequestContext.USER_ID_KEY, user.userId().toString())) {

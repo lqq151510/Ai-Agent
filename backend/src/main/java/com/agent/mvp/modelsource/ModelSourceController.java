@@ -89,7 +89,8 @@ public class ModelSourceController extends AuthenticatedControllerSupport {
 
     @PostMapping("/{id}/test")
     @Operation(summary = "测试模型源连通性")
-    public ModelSourceTestResponse test(@PathVariable("id") UUID id, Authentication authentication) {
+    public ModelSourceTestResponse test(
+            @PathVariable("id") UUID id, Authentication authentication) {
         AuthenticatedUser user = requireAuthenticatedUser(authentication);
         return modelSourceService.test(user.userId(), id);
     }

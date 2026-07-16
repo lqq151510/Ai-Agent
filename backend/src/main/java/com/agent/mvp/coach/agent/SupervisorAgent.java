@@ -37,7 +37,7 @@ public class SupervisorAgent {
     /**
      * 执行多智能体任务，使用指定 runId 作为代码生成沙箱隔离标识。
      *
-     * @param runId       沙箱运行 ID，CoderAgent 会将生成代码写入 {@code workspace/coach-runs/{runId}/}
+     * @param runId 沙箱运行 ID，CoderAgent 会将生成代码写入 {@code workspace/coach-runs/{runId}/}
      * @param requirement 用户需求文本
      * @return 多智能体辩论与生成结果汇总
      */
@@ -64,21 +64,24 @@ public class SupervisorAgent {
 
             // 1. 发布 PlanProposedEvent
             log.info("Supervisor: Publishing PlanProposedEvent for round {}", round);
-            eventPublisher.publishEvent(new PlanProposedEvent(this, round, requirement, currentPlan));
+            eventPublisher.publishEvent(
+                    new PlanProposedEvent(this, round, requirement, currentPlan));
 
             // 2. 调用 ReviewerAgent 对计划进行评审
             log.info("Supervisor: Calling ReviewerAgent to review the plan...");
             String reviewResult = reviewerAgent.reviewPlan(requirement, currentPlan);
-            
+
             // 解析 Review 结果
             boolean isApproved = reviewResult.contains("[APPROVED]");
-            String feedback = reviewResult.replace("[APPROVED]", "").replace("[REJECTED]", "").trim();
+            String feedback =
+                    reviewResult.replace("[APPROVED]", "").replace("[REJECTED]", "").trim();
 
-            debateLog.append("- **ReviewerAgent 审查结论**: ")
-                     .append(isApproved ? "✅ 同意 (Approved)" : "❌ 驳回 (Rejected)")
-                     .append("\n- **修改意见/反馈**: \n")
-                     .append(feedback.isEmpty() ? "计划设计合理，准予执行代码生成。" : feedback)
-                     .append("\n\n");
+            debateLog
+                    .append("- **ReviewerAgent 审查结论**: ")
+                    .append(isApproved ? "✅ 同意 (Approved)" : "❌ 驳回 (Rejected)")
+                    .append("\n- **修改意见/反馈**: \n")
+                    .append(feedback.isEmpty() ? "计划设计合理，准予执行代码生成。" : feedback)
+                    .append("\n\n");
 
             // 3. 发布 PlanReviewedEvent
             log.info("Supervisor: Publishing PlanReviewedEvent for round {}", round);
@@ -93,9 +96,13 @@ public class SupervisorAgent {
                 if (round <= maxRounds) {
                     currentPlan = plannerAgent.replan(requirement, currentPlan, feedback);
                 } else {
-                    log.warn("Supervisor: Reached maximum debate rounds ({}). Proceeding with fallback plan.", maxRounds);
-                    debateLog.append("> [!WARNING]\n")
-                             .append("> 已达最大辩论轮次上限（3轮），将使用最新版本的开发计划进行代码生成。\n\n");
+                    log.warn(
+                            "Supervisor: Reached maximum debate rounds ({}). Proceeding with"
+                                    + " fallback plan.",
+                            maxRounds);
+                    debateLog
+                            .append("> [!WARNING]\n")
+                            .append("> 已达最大辩论轮次上限（3轮），将使用最新版本的开发计划进行代码生成。\n\n");
                 }
             }
         }
@@ -108,9 +115,12 @@ public class SupervisorAgent {
         String codeReview = reviewerAgent.review(code);
         log.info("Supervisor: Code review completed.");
 
-        return debateLog.toString() + 
-               "--- \n\n### 💻 最终执行计划 (Final Approved Plan)\n\n" + currentPlan + 
-               "\n\n--- \n\n### 📦 生成的代码 (Generated Source Code)\n\n" + code + 
-               "\n\n--- \n\n### 🔍 代码质量评估 (Code Quality Review)\n\n" + codeReview;
+        return debateLog.toString()
+                + "--- \n\n### 💻 最终执行计划 (Final Approved Plan)\n\n"
+                + currentPlan
+                + "\n\n--- \n\n### 📦 生成的代码 (Generated Source Code)\n\n"
+                + code
+                + "\n\n--- \n\n### 🔍 代码质量评估 (Code Quality Review)\n\n"
+                + codeReview;
     }
 }

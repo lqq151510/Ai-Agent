@@ -61,6 +61,7 @@ security:
     refresh-exp-seconds: ${JWT_REFRESH_EXP_SECONDS:2592000}
   db:
     encryption-key: ${SECURITY_DB_ENCRYPTION_KEY}
+    legacy-encryption-key: ${SECURITY_DB_LEGACY_ENCRYPTION_KEY:}
 
 app:
   data-dir: ${APP_DATA_DIR:${user.home}/.ai-agent-desktop}

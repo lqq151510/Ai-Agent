@@ -158,6 +158,10 @@ class AgentFlowIntegrationTest {
         assertNotNull(chat.getBody());
         assertEquals("mock-openai-reply", String.valueOf(chat.getBody().get("reply")));
 
+        Map<String, Object> execution = (Map<String, Object>) chat.getBody().get("execution");
+        assertNotNull(execution);
+        assertEquals(10, ((Number) execution.get("totalTokenUsage")).intValue());
+
         ResponseEntity<List<Map<String, Object>>> messagesResponse =
                 getJson(
                         "/api/v1/sessions/" + sessionId + "/messages",
@@ -233,8 +237,12 @@ class AgentFlowIntegrationTest {
         assertStatus(streamResponse, 200);
         String body = streamResponse.getBody() == null ? "" : streamResponse.getBody();
         assertTrue(body.contains("event:meta"));
-        assertTrue(body.contains("event:chunk"));
+        assertTrue(body.contains("event:chunk\ndata: {\"text\":\"mock-\"}"));
+        assertTrue(body.contains("event:chunk\ndata: {\"text\":\"openai-\"}"));
+        assertTrue(body.contains("event:chunk\ndata: {\"text\":\"stream\"}"));
         assertTrue(body.contains("event:done"));
+        assertFalse(body.contains("event:error"));
+        assertTrue(body.contains("\"totalTokenUsage\":15"));
     }
 
     @Test
@@ -303,7 +311,13 @@ class AgentFlowIntegrationTest {
         ResponseEntity<Map<String, Object>> createSession =
                 postJson(
                         "/api/v1/sessions",
-                        Map.of("title", "Workflow Session", "provider", "OPENAI", "model", "mock-model"),
+                        Map.of(
+                                "title",
+                                "Workflow Session",
+                                "provider",
+                                "OPENAI",
+                                "model",
+                                "mock-model"),
                         accessToken,
                         new ParameterizedTypeReference<>() {});
         String sessionId = String.valueOf(createSession.getBody().get("id"));
@@ -433,6 +447,8 @@ data: {"choices":[{"delta":{"role":"assistant","content":"mock-"}}]}
 data: {"choices":[{"delta":{"content":"openai-"}}]}
 
 data: {"choices":[{"delta":{"content":"stream"}}]}
+
+data: {"choices":[],"usage":{"total_tokens":15}}
 
 data: [DONE]
 """)));

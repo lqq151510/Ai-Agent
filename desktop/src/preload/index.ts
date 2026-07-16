@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getActive: () => ipcRenderer.invoke('workspace:get-active'),
     setActive: (path: string) => ipcRenderer.invoke('workspace:set-active', path),
     add: () => ipcRenderer.invoke('workspace:add'),
+    getFileTree: (path: string, depth?: number) =>
+      ipcRenderer.invoke('workspace:get-file-tree', path, depth),
+    checkLocalService: () => ipcRenderer.invoke('workspace:check-local-service'),
   },
 
   // Git API
@@ -138,7 +141,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Tool Approval API (Phase 1 — agent tool execution bridge)
   // ================================================================
   tool: {
-    approve: (payload: { toolCallId: string; toolName: string; arguments: Record<string, unknown>; threadId: string }) =>
+    approve: (payload: { toolCallId: string }) =>
       ipcRenderer.invoke('tool:approve', payload),
     reject: (payload: { toolCallId: string }) =>
       ipcRenderer.invoke('tool:reject', payload),

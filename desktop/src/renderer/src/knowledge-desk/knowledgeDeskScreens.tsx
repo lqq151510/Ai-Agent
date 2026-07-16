@@ -81,23 +81,25 @@ import { formatCount, sourceIcon, toPercent } from './knowledgeDeskDisplay';
 export const ConnectionBanner = ({
   error,
   isLoading,
+  isDegraded,
   onRetry,
 }: {
   error?: string;
   isLoading: boolean;
+  isDegraded?: boolean;
   onRetry: () => void;
 }) => (
-  <div className="kd-connection-banner" role="alert">
+  <div className={`kd-connection-banner ${isDegraded ? 'kd-connection-banner--degraded' : ''}`} role="alert">
     <div className="kd-connection-banner__icon">
       <AlertTriangle size={18} />
     </div>
     <div>
-      <strong>后端连接异常，当前显示预览数据</strong>
-      <span>{error || '本机数据库可能未启动，或登录凭证暂不可用。请检查服务状态后重试。'}</span>
+      <strong>{isDegraded ? '部分服务异常' : '后端连接异常，当前显示预览数据'}</strong>
+      <span>{error || (isDegraded ? '某些模块加载失败。请检查服务状态后重试。' : '本机数据库可能未启动，或登录凭证暂不可用。请检查服务状态后重试。')}</span>
     </div>
     <button disabled={isLoading} onClick={onRetry} type="button">
       <RefreshCw size={15} />
-      {isLoading ? '连接中' : '重新连接'}
+      {isLoading ? '重试中' : isDegraded ? '重试失败接口' : '重新连接'}
     </button>
   </div>
 );
@@ -950,8 +952,8 @@ export const SearchPage = ({
     });
   }, []);
 
-  const runSearch = useCallback(async () => {
-    const nextQuery = query.trim();
+  const runSearch = useCallback(async (overrideQuery?: string) => {
+    const nextQuery = (overrideQuery ?? query).trim();
     const fallbackResults = filterLocalItems(searchCorpus, nextQuery);
     const requestId = ++searchRequestIdRef.current;
     setIsSearching(true);
@@ -980,7 +982,7 @@ export const SearchPage = ({
   const applySuggestion = useCallback((term: string) => {
     setQuery(term);
     setResults(null);
-    setTimeout(() => void runSearch(), 0);
+    void runSearch(term);
   }, [runSearch]);
 
   useEffect(() => {
@@ -994,8 +996,11 @@ export const SearchPage = ({
         <input
           aria-label="全局搜索"
           onChange={(event) => {
+            searchRequestIdRef.current += 1;
             setQuery(event.target.value);
-            if (event.target.value === '') setResults(null);
+            setResults(null);
+            setSearchError(null);
+            setIsSearching(false);
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') void runSearch();
@@ -1110,7 +1115,20 @@ export const SearchPage = ({
                 />
               ) : null}
               {visibleResults.map((item) => (
-                <article className="kd-search-result" key={item.id} onClick={() => onOpenDetail(item)}>
+                <article
+                  aria-label={`打开知识条目：${item.title}`}
+                  className="kd-search-result"
+                  key={item.id}
+                  onClick={() => onOpenDetail(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onOpenDetail(item);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
                   <div className="kd-result-head">
                     <span className="kd-type-badge">{typeCopy[item.type]}</span>
                     <span>{item.source}</span>

@@ -17,8 +17,8 @@ import org.springframework.context.annotation.Configuration;
  *   <li>{@link PaginationInnerInterceptor}：分页支持
  * </ul>
  *
- * <p>未注册 OptimisticLockerInnerInterceptor 会导致 {@code @Version} 字段更新时报错
- * "Parameter 'MP_OPTLOCK_VERSION_ORIGINAL' not found"。
+ * <p>未注册 OptimisticLockerInnerInterceptor 会导致 {@code @Version} 字段更新时报错 "Parameter
+ * 'MP_OPTLOCK_VERSION_ORIGINAL' not found"。
  */
 @Configuration
 public class MybatisPlusConfig {

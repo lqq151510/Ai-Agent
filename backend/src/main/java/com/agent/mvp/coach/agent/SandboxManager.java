@@ -25,9 +25,9 @@ import org.springframework.stereotype.Component;
 /**
  * 代码生成沙箱管理器。
  *
- * <p>为每次 CoderAgent 生成任务创建独立子目录 {@code workspace/coach-runs/{runId}/}，所有写入文件必须落在该
- * 子目录内（通过 {@link Path#normalize()} + {@link Path#startsWith(Path)} 防止路径穿越），并维护
- * {@code .manifest.json} 记录写入的文件清单，支持 {@link #rollback(UUID)} 回滚清理。
+ * <p>为每次 CoderAgent 生成任务创建独立子目录 {@code workspace/coach-runs/{runId}/}，所有写入文件必须落在该 子目录内（通过 {@link
+ * Path#normalize()} + {@link Path#startsWith(Path)} 防止路径穿越），并维护 {@code .manifest.json} 记录写入的文件清单，支持
+ * {@link #rollback(UUID)} 回滚清理。
  */
 @org.springframework.context.annotation.Profile("legacy")
 @Component
@@ -44,8 +44,7 @@ public class SandboxManager {
     public SandboxManager(
             @Value("${WORKSPACE_ROOT:/app/workspace}") String workspaceRoot,
             ObjectMapper objectMapper) {
-        this.runsRoot =
-                Paths.get(workspaceRoot).toAbsolutePath().normalize().resolve(RUNS_SUBDIR);
+        this.runsRoot = Paths.get(workspaceRoot).toAbsolutePath().normalize().resolve(RUNS_SUBDIR);
         this.objectMapper = objectMapper;
     }
 
@@ -154,8 +153,8 @@ public class SandboxManager {
     }
 
     /**
-     * 校验相对路径不会逃逸出 runId 子目录。 使用 normalize() 消除 {@code ..} 后用 startsWith 判定，同时
-     * 对原始路径字符串中的 {@code ..} 段做严格拦截（兼容 Windows 反斜杠场景）。
+     * 校验相对路径不会逃逸出 runId 子目录。 使用 normalize() 消除 {@code ..} 后用 startsWith 判定，同时 对原始路径字符串中的 {@code ..}
+     * 段做严格拦截（兼容 Windows 反斜杠场景）。
      */
     private Path resolveSafe(UUID runId, String relativePath) {
         if (relativePath == null || relativePath.isBlank()) {

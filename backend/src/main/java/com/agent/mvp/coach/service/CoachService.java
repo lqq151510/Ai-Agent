@@ -3,6 +3,7 @@ package com.agent.mvp.coach.service;
 import com.agent.mvp.agent.ModelProviderType;
 import com.agent.mvp.agent.dto.ModelChatRequest;
 import com.agent.mvp.agent.dto.ModelChatResponse;
+import com.agent.mvp.agent.service.CodeRAGService;
 import com.agent.mvp.agent.service.ModelGateway;
 import com.agent.mvp.agent.service.RAGMemoryService;
 import com.agent.mvp.auth.entity.User;
@@ -20,12 +21,12 @@ import com.agent.mvp.coach.dto.RequirementBreakdown;
 import com.agent.mvp.coach.dto.RequirementBreakdownRequest;
 import com.agent.mvp.coach.dto.RequirementBreakdownResponse;
 import com.agent.mvp.coach.dto.ScaffoldFilePreview;
-import com.agent.mvp.coach.dto.SentinelAlertResponse;
 import com.agent.mvp.coach.dto.ScaffoldRequest;
 import com.agent.mvp.coach.dto.ScaffoldResponse;
+import com.agent.mvp.coach.dto.SentinelAlertResponse;
+import com.agent.mvp.coach.dto.SentinelReportRequest;
 import com.agent.mvp.coach.entity.DevCoachRun;
 import com.agent.mvp.coach.repo.DevCoachRunRepository;
-import com.agent.mvp.coach.dto.SentinelReportRequest;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.config.AppProperties;
@@ -40,10 +41,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.stereotype.Service;
-import com.agent.mvp.agent.service.CodeRAGService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 @org.springframework.context.annotation.Profile("legacy")
 @Service
@@ -94,20 +94,17 @@ public class CoachService {
     }
 
     public void handleSentinelReport(SentinelReportRequest request) {
-        log.info("Received sentinel report for project {}: \n{}", request.projectName(), request.stackTrace());
+        log.info(
+                "Received sentinel report for project {}: \n{}",
+                request.projectName(),
+                request.stackTrace());
 
         List<String> codeContext = codeRAGService.searchRelatedCode(request.stackTrace(), 3);
         String contextStr = String.join("\n---\n", codeContext);
 
         try {
             LogDiagnosisAnalysis analysis =
-                    analyzeLog(
-                            request.stackTrace(),
-                            contextStr,
-                            null,
-                            null,
-                            null,
-                            null);
+                    analyzeLog(request.stackTrace(), contextStr, null, null, null, null);
             sentinelAlertBroadcaster.publish(
                     new SentinelAlertResponse(
                             analysis.diagnosis().rootCause(), analysis.diagnosis().minimalFix()));
@@ -155,14 +152,7 @@ public class CoachService {
         UUID runId = UUID.randomUUID();
         String result = supervisorAgent.executeTask(runId, requirement);
         // 记录多智能体执行 run，便于后续基于 runId 进行沙箱回滚或归档
-        saveRun(
-                userId,
-                runId,
-                "MULTI_AGENT",
-                titleFrom(requirement),
-                requirement,
-                null,
-                null);
+        saveRun(userId, runId, "MULTI_AGENT", titleFrom(requirement), requirement, null, null);
         return result;
     }
 
@@ -194,7 +184,8 @@ public class CoachService {
                     analysis.diagnosis().minimalFix());
         }
 
-        return new LogDiagnosisResponse(run.getId(), analysis.diagnosis(), analysis.rawText(), analysis.parseWarning());
+        return new LogDiagnosisResponse(
+                run.getId(), analysis.diagnosis(), analysis.rawText(), analysis.parseWarning());
     }
 
     public ScaffoldResponse generateScaffold(UUID userId, ScaffoldRequest request) {
@@ -481,5 +472,7 @@ public class CoachService {
     }
 
     private record Parsed<T>(T value, String warning) {}
-    private record LogDiagnosisAnalysis(LogDiagnosis diagnosis, String rawText, String parseWarning) {}
+
+    private record LogDiagnosisAnalysis(
+            LogDiagnosis diagnosis, String rawText, String parseWarning) {}
 }

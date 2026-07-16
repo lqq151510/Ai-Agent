@@ -1,12 +1,11 @@
 package com.agent.mvp.core.agent.event;
 
+import java.io.Serializable;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.io.Serializable;
-import java.time.LocalDateTime;
 
 @Data
 @Builder
@@ -18,7 +17,6 @@ public class AgentEvent implements Serializable {
     private String sourceAgent; // e.g., ROUTER, RETRIEVAL, GENERATOR, REFLECTOR
     private String content; // The message content or partial chunk
     private Object metadata; // Additional context
-    
-    @Builder.Default
-    private LocalDateTime timestamp = LocalDateTime.now();
+
+    @Builder.Default private LocalDateTime timestamp = LocalDateTime.now();
 }

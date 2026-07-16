@@ -25,13 +25,15 @@ public class ModelSourceProbeService {
         this.appProperties = appProperties;
         // SSRF mitigation: explicitly disable redirect following
         HttpClient httpClient = HttpClient.create().followRedirect(false);
-        this.webClient = WebClient.builder()
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .build();
+        this.webClient =
+                WebClient.builder()
+                        .clientConnector(new ReactorClientHttpConnector(httpClient))
+                        .build();
     }
 
     public ProbeResult probe(ModelSource source) {
-        ModelSourceProviderType providerType = ModelSourceProviderType.from(source.getProviderType());
+        ModelSourceProviderType providerType =
+                ModelSourceProviderType.from(source.getProviderType());
         String baseUrl = normalizeBaseUrl(source.getBaseUrl());
         String fullUrl = baseUrl + providerType.probePath();
 
@@ -43,7 +45,8 @@ public class ModelSourceProbeService {
 
         try {
             if (providerType.openAiCompatible()) {
-                webClient.get()
+                webClient
+                        .get()
                         .uri(fullUrl)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + source.getApiKey())
                         .accept(MediaType.APPLICATION_JSON)
@@ -54,7 +57,8 @@ public class ModelSourceProbeService {
                 return new ProbeResult(true, "OpenAI-compatible endpoint reachable");
             }
 
-            webClient.get()
+            webClient
+                    .get()
                     .uri(fullUrl)
                     .header("x-api-key", source.getApiKey())
                     .header("anthropic-version", "2023-06-01")
@@ -70,8 +74,8 @@ public class ModelSourceProbeService {
     }
 
     /**
-     * SSRF protection: validate URL protocol and reject hostnames that resolve to
-     * private, loopback, link-local, or carrier-grade NAT addresses.
+     * SSRF protection: validate URL protocol and reject hostnames that resolve to private,
+     * loopback, link-local, or carrier-grade NAT addresses.
      */
     private void validateUrl(String urlString) {
         URI uri;
@@ -82,7 +86,8 @@ public class ModelSourceProbeService {
         }
 
         String scheme = uri.getScheme();
-        if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
+        if (scheme == null
+                || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
             throw new IllegalArgumentException("Only http/https protocols are allowed");
         }
 
@@ -114,7 +119,9 @@ public class ModelSourceProbeService {
         }
     }
 
-    /** Check if IP is in the carrier-grade NAT range 100.64.0.0/10 (100.64.0.0 – 100.127.255.255). */
+    /**
+     * Check if IP is in the carrier-grade NAT range 100.64.0.0/10 (100.64.0.0 – 100.127.255.255).
+     */
     private boolean isCarrierGradeNat(String ip) {
         String[] parts = ip.split("\\.");
         if (parts.length < 2) return false;

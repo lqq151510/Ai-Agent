@@ -1,7 +1,6 @@
 package com.agent.mvp.config;
 
 import com.agent.mvp.session.service.SessionService;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,11 +19,9 @@ import org.springframework.context.annotation.Configuration;
  *   <li>{@code coach.requirements.broken.down} (Counter) - Coach 需求拆解总数
  * </ul>
  *
- * <p>说明：带 tag 的 Counter/Timer 由业务代码通过 {@link
- * com.agent.mvp.config.MetricsSupport#chatRequests}, {@link
- * com.agent.mvp.config.MetricsSupport#chatErrors}, {@link
- * com.agent.mvp.config.MetricsSupport#chatDuration} 等 helper 方法动态构建，以确保 tag
- * 值随实际 provider/model 变化。
+ * <p>说明：带 tag 的 Counter/Timer 由业务代码通过 {@link com.agent.mvp.config.MetricsSupport#chatRequests},
+ * {@link com.agent.mvp.config.MetricsSupport#chatErrors}, {@link
+ * com.agent.mvp.config.MetricsSupport#chatDuration} 等 helper 方法动态构建，以确保 tag 值随实际 provider/model 变化。
  */
 @Configuration
 public class MetricsConfig {

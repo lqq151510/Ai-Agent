@@ -17,8 +17,7 @@ import org.springframework.stereotype.Component;
 /**
  * 向量语义搜索策略，基于嵌入模型的相似度检索。
  *
- * <p>对自然语言语义查询有稳定的中高置信度；对精确符号查询的置信度低于 FTS。
- * 当嵌入模型不可用（熔断期间）时返回空结果，由编排器降级到其他策略。
+ * <p>对自然语言语义查询有稳定的中高置信度；对精确符号查询的置信度低于 FTS。 当嵌入模型不可用（熔断期间）时返回空结果，由编排器降级到其他策略。
  */
 @Component
 public class VectorSearchStrategy implements SearchStrategy {
@@ -53,18 +52,18 @@ public class VectorSearchStrategy implements SearchStrategy {
             if (queryEmbedding == null) {
                 return results;
             }
-            EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
-                    .queryEmbedding(queryEmbedding)
-                    .maxResults(safeMaxResults)
-                    .build();
+            EmbeddingSearchRequest request =
+                    EmbeddingSearchRequest.builder()
+                            .queryEmbedding(queryEmbedding)
+                            .maxResults(safeMaxResults)
+                            .build();
             List<EmbeddingMatch<TextSegment>> matches = store.search(request).matches();
             for (EmbeddingMatch<TextSegment> match : matches) {
                 results.add(match.embedded().text());
             }
         } catch (Exception ex) {
             log.error(
-                    "Failed to search code context from vector store. Error: {}",
-                    ex.getMessage());
+                    "Failed to search code context from vector store. Error: {}", ex.getMessage());
         }
         return results;
     }

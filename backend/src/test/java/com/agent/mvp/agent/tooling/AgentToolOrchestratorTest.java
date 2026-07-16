@@ -16,7 +16,7 @@ class AgentToolOrchestratorTest {
     @Test
     void listToolSpecsShouldExposeStrictFunctionSchemas() {
         AgentToolOrchestrator orchestrator =
-                new AgentToolOrchestrator(mock(CodeToolService.class), new ObjectMapper());
+                new AgentToolOrchestrator(java.util.Optional.of(org.mockito.Mockito.<CodeToolService>mock(CodeToolService.class)), new ObjectMapper());
 
         ToolSpec searchCode =
                 orchestrator.listToolSpecs().stream()

@@ -24,7 +24,8 @@ class ModelSourceServiceTest {
         ModelSourceRepository repository = mock(ModelSourceRepository.class);
         ModelSourceProbeService probeService = mock(ModelSourceProbeService.class);
         UserProfileService userProfileService = mock(UserProfileService.class);
-        ModelSourceService service = new ModelSourceService(repository, probeService, userProfileService);
+        ModelSourceService service =
+                new ModelSourceService(repository, probeService, userProfileService);
 
         UUID userId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();

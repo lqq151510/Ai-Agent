@@ -55,8 +55,27 @@ public class KnowledgeOrganizerService {
 
     private boolean isStopWord(String token) {
         return switch (token) {
-            case "http", "https", "www", "com", "html", "from", "with", "that", "this", "have",
-                    "will", "your", "the", "and", "for", "are", "not", "you", "pdf", "md" -> true;
+            case "http",
+                            "https",
+                            "www",
+                            "com",
+                            "html",
+                            "from",
+                            "with",
+                            "that",
+                            "this",
+                            "have",
+                            "will",
+                            "your",
+                            "the",
+                            "and",
+                            "for",
+                            "are",
+                            "not",
+                            "you",
+                            "pdf",
+                            "md" ->
+                    true;
             default -> false;
         };
     }

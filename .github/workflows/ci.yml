@@ -64,15 +64,59 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -r requirements-test.txt
 
       - name: Run Pytest
         working-directory: ./python-service
         run: pytest
 
+  backend-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'maven'
+          
+      - name: Spotless Code Formatting Check
+        working-directory: ./backend
+        run: mvn spotless:check
+        
+      - name: JaCoCo Coverage Report
+        working-directory: ./backend
+        run: mvn clean test jacoco:report
+        
+  desktop-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: ./desktop
+        run: npm ci
+
+      - name: Run Desktop Main Process Tests
+        working-directory: ./desktop
+        run: npm run test:main
+
 
 
   sentinel-alert:
-    needs: [release-preflight, python-service-test]
+    needs: [release-preflight, python-service-test, backend-quality, desktop-test]
     if: failure()
     runs-on: ubuntu-latest
     steps:

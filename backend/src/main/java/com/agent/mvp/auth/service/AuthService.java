@@ -55,6 +55,7 @@ public class AuthService {
                 }
             } catch (Exception ex) {
                 log.warn("Logout token parse failed", ex);
+                throw new UnauthorizedException("Invalid token during logout");
             }
         }
     }
@@ -95,6 +96,10 @@ public class AuthService {
             throw new UnauthorizedException("Refresh token required");
         }
 
+        if (tokenBlacklistService.isBlacklisted(refreshToken)) {
+            throw new UnauthorizedException("Refresh token has been revoked or already used");
+        }
+
         User user =
                 Optional.ofNullable(userService.getUserById(jwtService.extractUserId(refreshToken)))
                         .orElseThrow(() -> new UnauthorizedException("User not found"));
@@ -110,6 +115,8 @@ public class AuthService {
         } else {
             userService.updateUser(user);
         }
+
+        blacklistIfValid(refreshToken);
 
         JwtService.TokenPair pair = jwtService.issueTokens(user);
         return new TokenResponse(

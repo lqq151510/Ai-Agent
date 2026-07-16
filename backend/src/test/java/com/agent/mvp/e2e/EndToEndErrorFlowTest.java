@@ -41,8 +41,8 @@ import org.springframework.test.context.DynamicPropertySource;
 /**
  * 端到端错误路径测试。
  *
- * <p>覆盖以下错误场景： 1. 未带 token 访问受保护接口 → 401 2. 错误 token → 401 3. 速率限制触发 → 429（由单元测试覆盖，
- * E2E 验证认证链路正常） 4. 不存在的会话 ID → 403（注：代码实现为 ForbiddenException，详见注释） 5. 无效注册（短密码）→ 400
+ * <p>覆盖以下错误场景： 1. 未带 token 访问受保护接口 → 401 2. 错误 token → 401 3. 速率限制触发 → 429（由单元测试覆盖， E2E 验证认证链路正常）
+ * 4. 不存在的会话 ID → 403（注：代码实现为 ForbiddenException，详见注释） 5. 无效注册（短密码）→ 400
  *
  * <p>测试环境：H2 内存数据库 + Caffeine 缓存（无 Redis 依赖） + 内置 HttpServer 模拟 OpenAI 兼容接口。
  */
@@ -63,8 +63,7 @@ class EndToEndErrorFlowTest {
     /**
      * 测试专用 Bean 配置。
      *
-     * <p>SandboxManager 有两个构造函数，Spring 无法自动选择， 此处显式定义 Bean，使用 public 构造函数
-     * 并传入工作区根路径。
+     * <p>SandboxManager 有两个构造函数，Spring 无法自动选择， 此处显式定义 Bean，使用 public 构造函数 并传入工作区根路径。
      */
     @TestConfiguration
     static class E2eTestConfiguration {
@@ -109,10 +108,7 @@ class EndToEndErrorFlowTest {
         // Arrange：不携带任何认证头
         // Act：访问需要认证的会话列表接口
         ResponseEntity<Map<String, Object>> response =
-                getJson(
-                        "/api/v1/sessions",
-                        null,
-                        new ParameterizedTypeReference<>() {});
+                getJson("/api/v1/sessions", null, new ParameterizedTypeReference<>() {});
         // Assert：应返回 401 未授权
         assertStatus(response, 401, "未带 token 应返回 401");
         assertNotNull(response.getBody(), "错误响应体不应为空");
@@ -127,10 +123,7 @@ class EndToEndErrorFlowTest {
         String invalidToken = "invalid.jwt.token.format";
         // Act：携带错误 token 访问会话列表
         ResponseEntity<Map<String, Object>> response =
-                getJson(
-                        "/api/v1/sessions",
-                        invalidToken,
-                        new ParameterizedTypeReference<>() {});
+                getJson("/api/v1/sessions", invalidToken, new ParameterizedTypeReference<>() {});
         // Assert：应返回 401 未授权
         assertStatus(response, 401, "错误 token 应返回 401");
         assertNotNull(response.getBody(), "错误响应体不应为空");
@@ -140,9 +133,9 @@ class EndToEndErrorFlowTest {
     /**
      * 速率限制触发应返回 429。
      *
-     * <p>说明：application-test.yml 中已将 chat-per-minute 调高到 1000， 无法在合理时间内通过正常调用触发。
-     * 由于 DynamicPropertySource 是类级别配置，无法针对单个测试方法动态修改配额。 真正的 429 速率限制测试由
-     * AgentControllerTest 和 AuthControllerTest 单元测试覆盖（直接 mock RateLimiterService 返回 false）。
+     * <p>说明：application-test.yml 中已将 chat-per-minute 调高到 1000， 无法在合理时间内通过正常调用触发。 由于
+     * DynamicPropertySource 是类级别配置，无法针对单个测试方法动态修改配额。 真正的 429 速率限制测试由 AgentControllerTest 和
+     * AuthControllerTest 单元测试覆盖（直接 mock RateLimiterService 返回 false）。
      *
      * <p>本测试验证认证链路正常工作，确保 E2E 环境配置正确， 为其他错误路径测试提供基础。
      */
@@ -172,10 +165,7 @@ class EndToEndErrorFlowTest {
 
         // Act：认证后访问受保护接口
         ResponseEntity<Map<String, Object>> sessions =
-                getJson(
-                        "/api/v1/sessions",
-                        accessToken,
-                        new ParameterizedTypeReference<>() {});
+                getJson("/api/v1/sessions", accessToken, new ParameterizedTypeReference<>() {});
 
         // Assert：应正常返回 200，证明认证链路正常
         assertStatus(sessions, 200, "认证后应能正常访问会话列表");
@@ -185,9 +175,9 @@ class EndToEndErrorFlowTest {
     /**
      * 不存在的会话 ID 应返回 403。
      *
-     * <p>注意：根据 SessionService.findOwnedSession 的实现，访问不存在的会话 ID 会抛出
-     * ForbiddenException（403）而非 NotFoundException（404）。 这是有意设计：避免泄露会话是否存在的信息，
-     * 统一返回"会话不存在或无权限"。 任务描述中期望 404，但实际代码实现为 403， 此处按实际代码行为断言。
+     * <p>注意：根据 SessionService.findOwnedSession 的实现，访问不存在的会话 ID 会抛出 ForbiddenException（403）而非
+     * NotFoundException（404）。 这是有意设计：避免泄露会话是否存在的信息， 统一返回"会话不存在或无权限"。 任务描述中期望 404，但实际代码实现为 403，
+     * 此处按实际代码行为断言。
      */
     @Test
     @DisplayName("不存在的会话 ID → 403（代码实现为 ForbiddenException，避免泄露会话存在性）")
@@ -328,10 +318,11 @@ class EndToEndErrorFlowTest {
 
             if (isStream) {
                 String sseBody =
-                        "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"mock-\"}}]}\n\n"
-                                + "data: {\"choices\":[{\"delta\":{\"content\":\"openai-\"}}]}\n\n"
-                                + "data: {\"choices\":[{\"delta\":{\"content\":\"stream\"}}]}\n\n"
-                                + "data: [DONE]\n\n";
+                        "data:"
+                            + " {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"mock-\"}}]}\n\n"
+                            + "data: {\"choices\":[{\"delta\":{\"content\":\"openai-\"}}]}\n\n"
+                            + "data: {\"choices\":[{\"delta\":{\"content\":\"stream\"}}]}\n\n"
+                            + "data: [DONE]\n\n";
                 byte[] bytes = sseBody.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
                 exchange.sendResponseHeaders(200, bytes.length);

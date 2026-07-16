@@ -65,7 +65,14 @@ class AgentServiceTest {
                 f.service.chat(
                         f.userId,
                         new ChatRequest(
-                                f.session.getId(), "find AgentService", null, null, null, null, null, null));
+                                f.session.getId(),
+                                "find AgentService",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null));
 
         assertEquals("final answer", response.reply());
         assertEquals(1, response.toolTraces().size());
@@ -104,7 +111,8 @@ class AgentServiceTest {
         ChatResponse response =
                 f.service.chat(
                         f.userId,
-                        new ChatRequest(f.session.getId(), "loop", null, null, null, null, null, null));
+                        new ChatRequest(
+                                f.session.getId(), "loop", null, null, null, null, null, null));
 
         assertEquals("Stopped safely: reached max tool steps (4).", response.reply());
         assertEquals("max_tool_steps_reached", response.execution().stopReason());
@@ -131,7 +139,15 @@ class AgentServiceTest {
         ChatResponse response =
                 f.service.chat(
                         f.userId,
-                        new ChatRequest(f.session.getId(), "read missing", null, null, null, null, null, null));
+                        new ChatRequest(
+                                f.session.getId(),
+                                "read missing",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null));
 
         assertEquals("Stopped safely: tool execution returned error.", response.reply());
         assertEquals(1, response.toolTraces().size());
@@ -163,7 +179,8 @@ class AgentServiceTest {
         ChatResponse response =
                 f.service.chat(
                         f.userId,
-                        new ChatRequest(f.session.getId(), "loop", null, null, null, null, null, null));
+                        new ChatRequest(
+                                f.session.getId(), "loop", null, null, null, null, null, null));
 
         assertEquals("Stopped safely: reached max tool steps (2).", response.reply());
         assertEquals(2, response.execution().maxToolSteps());
@@ -181,7 +198,15 @@ class AgentServiceTest {
         ChatResponse response =
                 f.service.chat(
                         f.userId,
-                        new ChatRequest(f.session.getId(), "budget test", null, null, 1800, null, null, null));
+                        new ChatRequest(
+                                f.session.getId(),
+                                "budget test",
+                                null,
+                                null,
+                                1800,
+                                null,
+                                null,
+                                null));
 
         assertEquals("done", response.reply());
         assertEquals(1800, response.execution().maxContextTokens());
@@ -199,7 +224,14 @@ class AgentServiceTest {
                 f.service.chat(
                         f.userId,
                         new ChatRequest(
-                                f.session.getId(), "session budget", null, null, null, null, null, null));
+                                f.session.getId(),
+                                "session budget",
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null));
 
         assertEquals("done", response.reply());
         assertEquals(2600, response.execution().maxContextTokens());
@@ -269,13 +301,15 @@ class AgentServiceTest {
                         mock(com.agent.mvp.agent.service.FlexRuntimeFactory.class),
                         mock(com.agent.mvp.auth.service.UserService.class),
                         mock(com.agent.mvp.agent.service.SemanticCacheService.class),
-                        new com.agent.mvp.agent.service.AgentContextService(ragMemoryService, appProperties),
+                        new com.agent.mvp.agent.service.AgentContextService(
+                                ragMemoryService, appProperties),
                         new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
                         new com.agent.mvp.agent.service.MessageHistoryProcessor(
                                 sessionService,
                                 new com.agent.mvp.agent.service.AgentContextService(
                                         ragMemoryService, appProperties)),
-                        mock(com.agent.mvp.agent.service.ToolCallManager.class));
+                        mock(com.agent.mvp.agent.service.ToolCallManager.class),
+                        mock(com.agent.mvp.modelsource.service.ModelSourceService.class));
         final UUID userId = UUID.randomUUID();
         final ConversationSession session = new ConversationSession();
 

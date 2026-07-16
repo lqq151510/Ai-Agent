@@ -117,11 +117,14 @@ class CoachServiceTest {
                                 "stop"));
         when(repository.insert(any(com.agent.mvp.coach.entity.DevCoachRun.class)))
                 .thenAnswer(invocation -> 1);
-        when(codeRAGService.searchRelatedCode(any(), eq(3))).thenReturn(List.of("public class Demo {}"));
+        when(codeRAGService.searchRelatedCode(any(), eq(3)))
+                .thenReturn(List.of("public class Demo {}"));
 
         service.handleSentinelReport(new SentinelReportRequest("demo-project", "stack trace"));
 
         verify(broadcaster)
-                .publish(new SentinelAlertResponse("Missing OPENAI_API_KEY", "Set OPENAI_API_KEY in env/dev.env"));
+                .publish(
+                        new SentinelAlertResponse(
+                                "Missing OPENAI_API_KEY", "Set OPENAI_API_KEY in env/dev.env"));
     }
 }

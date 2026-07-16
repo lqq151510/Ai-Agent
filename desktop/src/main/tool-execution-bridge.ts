@@ -14,6 +14,9 @@
 import { PtyPool } from './pty-pool';
 import { ApprovalEngine, type ToolApprovalRequest, type ApprovalMode } from './approval-engine';
 import { ComputerUseManager } from './computer-use-manager';
+import { isReadOnlyCommand, parseCommandArgv } from './command-policy';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // --------------- Types ---------------
 
@@ -45,16 +48,19 @@ export type ToolExecutionCallback = (event: ToolExecutionEvent) => void;
 
 /** Default timeout per tool execution (ms) */
 const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
-
-/** Commands treated as read-only shell access */
-const READ_COMMANDS = new Set([
-  'ls', 'cat', 'head', 'tail', 'echo', 'pwd', 'which', 'whoami', 'date',
-  'git status', 'git log', 'git diff', 'git branch',
-]);
+const PENDING_APPROVAL_TTL_MS = 10 * 60 * 1000;
 
 // --------------- ToolExecutionBridge ---------------
 
 export class ToolExecutionBridge {
+  private readonly pendingApprovals = new Map<string, {
+    toolCall: BackendToolCall;
+    threadId: string;
+    createdAt: number;
+  }>();
+
+  private readonly processedToolCalls = new Set<string>();
+
   constructor(
     private ptyPool: PtyPool,
     private approvalEngine: ApprovalEngine,
@@ -63,6 +69,7 @@ export class ToolExecutionBridge {
     private backendPort: () => number,
     private authToken: () => string | Promise<string>,
     private currentMode: () => ApprovalMode,
+    private currentWorkspace: () => string | null,
     private computerUseManager?: ComputerUseManager,
   ) {}
 
@@ -83,12 +90,23 @@ export class ToolExecutionBridge {
     const { toolCallId, toolName, arguments: args } = toolCall;
     const mode = this.currentMode();
 
+    if (this.processedToolCalls.has(toolCallId)) {
+      const result: ToolResultPayload = {
+        toolCallId,
+        output: '[Error] Duplicate tool call execution',
+        status: 'error',
+      };
+      onEvent?.({ type: 'tool:error', toolCallId, toolName, threadId, message: 'Duplicate tool call execution', result });
+      return result;
+    }
+    this.processedToolCalls.add(toolCallId);
+
     // 1. Approval check
     const approvalRequest: ToolApprovalRequest = {
       toolCallId,
       toolName,
       args: args as Record<string, unknown>,
-      resourceType: this.classifyTool(toolName, args),
+      resourceType: this.classifyTool(toolName, args, threadId),
       description: this.describeToolCall(toolName, args),
       threadId,
       mode,
@@ -110,7 +128,12 @@ export class ToolExecutionBridge {
     }
 
     if (approval.decision === 'requires-approval') {
-      // Needs user approval — emit event and wait (caller should show dialog)
+      this.pruneExpiredApprovals();
+      this.pendingApprovals.set(toolCallId, {
+        toolCall,
+        threadId,
+        createdAt: Date.now(),
+      });
       onEvent?.({
         type: 'tool:awaiting-approval',
         toolCallId,
@@ -119,7 +142,6 @@ export class ToolExecutionBridge {
         message: this.describeToolCall(toolName, args),
         toolCall,
       });
-      // Caller should re-invoke executeApproved/reject through IPC after user responds.
       return { toolCallId, output: '', status: 'error' };
     }
 
@@ -160,10 +182,10 @@ export class ToolExecutionBridge {
    * Execute a user-approved tool call (called after user clicks "Allow").
    */
   public async executeApproved(
-    toolCall: BackendToolCall,
-    threadId: string,
+    pendingToolCallId: string,
     onEvent?: ToolExecutionCallback,
   ): Promise<ToolResultPayload> {
+    const { toolCall, threadId } = this.takePendingApproval(pendingToolCallId);
     const { toolCallId, toolName, arguments: args } = toolCall;
 
     onEvent?.({ type: 'tool:start', toolCallId, toolName, threadId });
@@ -185,6 +207,17 @@ export class ToolExecutionBridge {
       onEvent?.({ type: 'tool:error', toolCallId, toolName, threadId, message: errorMsg, result });
       return result;
     }
+  }
+
+  public async rejectPending(toolCallId: string): Promise<ToolResultPayload> {
+    this.takePendingApproval(toolCallId);
+    const result: ToolResultPayload = {
+      toolCallId,
+      output: '[Tool execution rejected by user]',
+      status: 'rejected',
+    };
+    await this.submitResult(result).catch(() => {});
+    return result;
   }
 
   // ---- Tool Execution ----
@@ -229,8 +262,9 @@ export class ToolExecutionBridge {
     const terminal = this.ptyPool.findByThreadId(threadId);
 
     // For read-only commands, collect output directly
-    if (this.isReadOnlyCommand(command)) {
-      return this.collectOutput(command, terminal?.cwd ?? process.cwd(), timeoutMs);
+    const cwd = terminal?.cwd ?? process.cwd();
+    if (isReadOnlyCommand(command, cwd)) {
+      return this.collectOutput(command, cwd, timeoutMs);
     }
 
     if (!terminal) throw new Error(`No terminal found for thread ${threadId}`);
@@ -280,6 +314,8 @@ export class ToolExecutionBridge {
     const filePath = String(args.path || '');
     if (!filePath) throw new Error('No file path provided');
 
+    this.validatePathInWorkspace(filePath);
+
     const port = this.localServicePort();
     const token = this.localServiceToken();
     const resp = await fetch(`http://127.0.0.1:${port}/file?path=${encodeURIComponent(filePath)}`, {
@@ -297,6 +333,8 @@ export class ToolExecutionBridge {
     const filePath = String(args.path || '');
     const content = String(args.content || '');
     if (!filePath) throw new Error('No file path provided');
+
+    this.validatePathInWorkspace(filePath);
 
     const escapedPath = filePath.replace(/'/g, "'\\''");
     return this.execCli({
@@ -361,13 +399,42 @@ export class ToolExecutionBridge {
 
   // ---- Utilities ----
 
-  private classifyTool(toolName: string, args: Record<string, unknown>): import('./approval-engine').ResourceType {
+  private takePendingApproval(toolCallId: string): {
+    toolCall: BackendToolCall;
+    threadId: string;
+  } {
+    const pending = this.pendingApprovals.get(toolCallId);
+    this.pendingApprovals.delete(toolCallId);
+    if (!pending) {
+      throw new Error(`Tool approval is not pending: ${toolCallId}`);
+    }
+    if (Date.now() - pending.createdAt > PENDING_APPROVAL_TTL_MS) {
+      throw new Error(`Tool approval expired: ${toolCallId}`);
+    }
+    return pending;
+  }
+
+  private pruneExpiredApprovals(): void {
+    const cutoff = Date.now() - PENDING_APPROVAL_TTL_MS;
+    for (const [toolCallId, pending] of this.pendingApprovals) {
+      if (pending.createdAt < cutoff) {
+        this.pendingApprovals.delete(toolCallId);
+      }
+    }
+  }
+
+  private classifyTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    threadId: string,
+  ): import('./approval-engine').ResourceType {
     if (toolName === 'execute_cli_command' || toolName === 'cli') {
       const cmd = String(args.command || args.cmd || '');
       if (/^(npm|pip|brew|cargo|apt|yum|gem)\s+(install|add|update)/.test(cmd)) {
         return 'shell:install';
       }
-      if (this.isReadOnlyCommand(cmd)) {
+      const cwd = this.ptyPool.findByThreadId(threadId)?.cwd ?? process.cwd();
+      if (isReadOnlyCommand(cmd, cwd)) {
         return 'shell:read';
       }
       return 'shell:command';
@@ -386,13 +453,6 @@ export class ToolExecutionBridge {
       return 'computer';
     }
     return 'shell:command';
-  }
-
-  private isReadOnlyCommand(cmd: string): boolean {
-    const firstWord = cmd.trim().split(/\s+/)[0] || '';
-    if (READ_COMMANDS.has(firstWord)) return true;
-    if (/^git\s+(status|log|diff|branch|show|ls-files)/.test(cmd)) return true;
-    return false;
   }
 
   private describeToolCall(toolName: string, args: Record<string, unknown>): string {
@@ -416,10 +476,29 @@ export class ToolExecutionBridge {
   }
 
   private collectOutput(command: string, cwd: string, _timeoutMs: number): Promise<string> {
-    // For simple read-only commands, execute via child_process directly
-    const { exec } = require('child_process');
+    // For read-only commands, use execFile with argument array to avoid shell injection.
+    // For anything else, fall back to exec (which is gated by approval).
+    const { exec, execFile } = require('child_process');
     const util = require('util');
     const execAsync = util.promisify(exec);
+    const execFileAsync = util.promisify(execFile);
+
+    if (isReadOnlyCommand(command, cwd)) {
+      const parts = parseCommandArgv(command.trim());
+      if (!parts || parts.length === 0) {
+        return Promise.resolve('(empty command)');
+      }
+      const bin = parts[0];
+      const args = parts.slice(1);
+      return execFileAsync(bin, args, { timeout: _timeoutMs, cwd })
+        .then((r: { stdout: string; stderr: string }) => {
+          const output = r.stdout || r.stderr || '';
+          return output.trim() || '(no output)';
+        })
+        .catch((err: { stdout?: string; stderr?: string; message: string }) => {
+          return err.stdout || err.stderr || err.message;
+        });
+    }
 
     return execAsync(command, { timeout: _timeoutMs, cwd })
       .then((r: { stdout: string; stderr: string }) => {
@@ -429,5 +508,32 @@ export class ToolExecutionBridge {
       .catch((err: { stdout?: string; stderr?: string; message: string }) => {
         return err.stdout || err.stderr || err.message;
       });
+  }
+
+  private validatePathInWorkspace(targetPath: string): void {
+    const ws = this.currentWorkspace();
+    if (!ws) {
+      throw new Error('No active workspace bound to validate path');
+    }
+    
+    // Resolve absolute path (if file does not exist, realpathSync throws, 
+    // but for writeFile it might not exist yet, so we resolve the dirname if file doesn't exist)
+    let realTarget: string;
+    try {
+      realTarget = fs.realpathSync(targetPath);
+    } catch (e: any) {
+      if (e.code === 'ENOENT') {
+        const dir = path.dirname(targetPath);
+        const realDir = fs.realpathSync(dir);
+        realTarget = path.join(realDir, path.basename(targetPath));
+      } else {
+        throw new Error(`Failed to resolve path: ${e.message}`);
+      }
+    }
+
+    const realWs = fs.realpathSync(ws);
+    if (!realTarget.startsWith(realWs)) {
+      throw new Error(`Access denied: path ${targetPath} is outside the current workspace.`);
+    }
   }
 }

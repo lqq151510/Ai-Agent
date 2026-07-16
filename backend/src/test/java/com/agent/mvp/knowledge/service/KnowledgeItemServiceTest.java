@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -15,8 +15,8 @@ import static org.mockito.Mockito.when;
 import com.agent.mvp.agent.dto.ParsedDocument;
 import com.agent.mvp.agent.service.MarkItDownService;
 import com.agent.mvp.auth.entity.User;
-import com.agent.mvp.ingestion.service.IngestionJobService;
 import com.agent.mvp.ingestion.entity.IngestionJob;
+import com.agent.mvp.ingestion.service.IngestionJobService;
 import com.agent.mvp.knowledge.dto.ImportSnippetKnowledgeItemRequest;
 import com.agent.mvp.knowledge.entity.KnowledgeItem;
 import com.agent.mvp.knowledge.entity.KnowledgeTag;
@@ -34,10 +34,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -146,11 +146,7 @@ class KnowledgeItemServiceTest {
         when(organizerService.organize(any()))
                 .thenReturn(
                         new KnowledgeOrganizerService.OrganizeResult(
-                                "cleaned text",
-                                "summary text",
-                                List.of("rag", "llm"),
-                                "en",
-                                12));
+                                "cleaned text", "summary text", List.of("rag", "llm"), "en", 12));
         when(ingestionJobService.createRunning(eq(userId), any(), eq("organize"), any()))
                 .thenReturn(
                         IngestionJob.builder()
@@ -163,13 +159,16 @@ class KnowledgeItemServiceTest {
 
         var response =
                 service.importSnippet(
-                        userId, new ImportSnippetKnowledgeItemRequest("RAG note", "retrieval augmented generation"));
+                        userId,
+                        new ImportSnippetKnowledgeItemRequest(
+                                "RAG note", "retrieval augmented generation"));
 
         assertEquals("ready", response.status());
         assertEquals("summary text", response.summary());
         assertEquals("cleaned text", response.cleanedContent());
         verify(ingestionJobService).createImportSucceeded(eq(userId), eq(response.id()), any());
-        verify(ingestionJobService).createRunning(eq(userId), eq(response.id()), eq("organize"), any());
+        verify(ingestionJobService)
+                .createRunning(eq(userId), eq(response.id()), eq("organize"), any());
         verify(ingestionJobService).markSucceeded(any(IngestionJob.class), any());
     }
 
@@ -301,11 +300,7 @@ class KnowledgeItemServiceTest {
         when(organizerService.organize(any()))
                 .thenReturn(
                         new KnowledgeOrganizerService.OrganizeResult(
-                                "cleaned batch",
-                                "batch summary",
-                                List.of("batch"),
-                                "en",
-                                5));
+                                "cleaned batch", "batch summary", List.of("batch"), "en", 5));
         when(ingestionJobService.createRunning(eq(userId), any(), eq("organize"), any()))
                 .thenReturn(
                         IngestionJob.builder()
@@ -321,7 +316,8 @@ class KnowledgeItemServiceTest {
         assertEquals(2, response.selectedCount());
         assertEquals(2, response.succeededCount());
         assertEquals(0, response.failedCount());
-        verify(ingestionJobService, Mockito.times(2)).createRunning(eq(userId), any(), eq("organize"), any());
+        verify(ingestionJobService, Mockito.times(2))
+                .createRunning(eq(userId), any(), eq("organize"), any());
         verify(ingestionJobService, Mockito.times(2)).markSucceeded(any(IngestionJob.class), any());
     }
 
@@ -408,8 +404,12 @@ class KnowledgeItemServiceTest {
         assertNull(response.items().get(1).cleanedContent());
         assertEquals("clean retrieval notes", response.items().get(0).summary());
         assertEquals("clean embedding notes", response.items().get(1).summary());
-        assertEquals(List.of("rag"), response.items().get(0).tags().stream().map(tag -> tag.name()).toList());
-        assertEquals(List.of("search"), response.items().get(1).tags().stream().map(tag -> tag.name()).toList());
+        assertEquals(
+                List.of("rag"),
+                response.items().get(0).tags().stream().map(tag -> tag.name()).toList());
+        assertEquals(
+                List.of("search"),
+                response.items().get(1).tags().stream().map(tag -> tag.name()).toList());
         verify(itemTagRepository, never()).findTagIdsByKnowledgeItemId(firstItemId);
         verify(itemTagRepository, never()).findTagIdsByKnowledgeItemId(secondItemId);
     }
@@ -462,8 +462,13 @@ class KnowledgeItemServiceTest {
 
     @Test
     void retrievalIndexMigrationsShouldCoverSearchAndCommonFilters() throws Exception {
-        String postgresSql = Files.readString(Path.of("src/main/resources/db/migration/V10__knowledge_retrieval_indexes.sql"));
-        String h2Sql = Files.readString(Path.of("src/main/resources/db/h2/V10__knowledge_retrieval_indexes.sql"));
+        String postgresSql =
+                Files.readString(
+                        Path.of(
+                                "src/main/resources/db/migration/V10__knowledge_retrieval_indexes.sql"));
+        String h2Sql =
+                Files.readString(
+                        Path.of("src/main/resources/db/h2/V10__knowledge_retrieval_indexes.sql"));
 
         assertTrue(postgresSql.contains("idx_knowledge_items_search_fts"));
         assertTrue(postgresSql.contains("USING GIN"));
@@ -558,13 +563,21 @@ class KnowledgeItemServiceTest {
                 .thenReturn(User.builder().id(userId).email("ze@example.com").build());
         when(itemRepository.selectList(any())).thenReturn(List.of(recentItem));
         when(itemRepository.findStatusCountsByUserId(userId))
-                .thenReturn(List.of(statusCount("ready", 4), statusCount("failed", 2), statusCount("archived", 1)));
+                .thenReturn(
+                        List.of(
+                                statusCount("ready", 4),
+                                statusCount("failed", 2),
+                                statusCount("archived", 1)));
         when(itemTagRepository.findTopTagUsageByUserId(userId, 5))
-                .thenReturn(List.of(tagSummary("rag", "#7a8a84", 7), tagSummary("search", "#a97751", 3)));
+                .thenReturn(
+                        List.of(
+                                tagSummary("rag", "#7a8a84", 7),
+                                tagSummary("search", "#a97751", 3)));
 
         var response = service.dashboardSummary(userId);
 
-        ArgumentCaptor<QueryWrapper> itemWrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        ArgumentCaptor<QueryWrapper> itemWrapperCaptor =
+                ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectList(itemWrapperCaptor.capture());
         String sqlSelect = itemWrapperCaptor.getValue().getSqlSelect();
 

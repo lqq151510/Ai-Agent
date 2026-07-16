@@ -22,7 +22,8 @@ public class IngestionJobService {
         this.ingestionJobRepository = ingestionJobRepository;
     }
 
-    public IngestionJob createImportSucceeded(UUID userId, UUID knowledgeItemId, String inputSnapshot) {
+    public IngestionJob createImportSucceeded(
+            UUID userId, UUID knowledgeItemId, String inputSnapshot) {
         IngestionJob job =
                 IngestionJob.builder()
                         .userId(userId)
@@ -38,8 +39,10 @@ public class IngestionJobService {
         return job;
     }
 
-    public IngestionJob createRunningOrganize(UUID userId, UUID knowledgeItemId, String inputSnapshot) {
-        return createRunning(userId, knowledgeItemId, IngestionJobType.ORGANIZE.value(), inputSnapshot);
+    public IngestionJob createRunningOrganize(
+            UUID userId, UUID knowledgeItemId, String inputSnapshot) {
+        return createRunning(
+                userId, knowledgeItemId, IngestionJobType.ORGANIZE.value(), inputSnapshot);
     }
 
     public IngestionJob createRunning(
@@ -88,7 +91,8 @@ public class IngestionJobService {
             wrapper.eq(IngestionJob::getStatus, IngestionJobStatus.from(status).value());
         }
         return ingestionJobRepository
-                .selectList(wrapper.orderByDesc(IngestionJob::getCreatedAt).last("LIMIT " + safeLimit))
+                .selectList(
+                        wrapper.orderByDesc(IngestionJob::getCreatedAt).last("LIMIT " + safeLimit))
                 .stream()
                 .map(this::toResponse)
                 .toList();

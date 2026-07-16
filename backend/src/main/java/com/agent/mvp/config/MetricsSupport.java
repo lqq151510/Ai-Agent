@@ -8,8 +8,8 @@ import io.micrometer.core.instrument.Timer;
 /**
  * 业务指标埋点工具。
  *
- * <p>提供带动态 tag 的 Counter / Timer 获取方法，确保 tag 值随实际 provider/model 变化。
- * Micrometer 会对相同 name+tags 的指标做去重，重复 register 返回已存在的实例。
+ * <p>提供带动态 tag 的 Counter / Timer 获取方法，确保 tag 值随实际 provider/model 变化。 Micrometer 会对相同 name+tags
+ * 的指标做去重，重复 register 返回已存在的实例。
  */
 public final class MetricsSupport {
 

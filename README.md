@@ -53,6 +53,11 @@ Then deploy:
 `deploy.sh` runs `scripts/check-consistency.sh` before building so API path drift is caught early. When `SMOKE_USE_OPENAI_MOCK=true`, it also overrides backend OpenAI endpoint to the local mock URL.
 
 CI runs the same `scripts/release-check.sh dev` gate, so pull requests and local release checks fail on the same class of runtime dependency audit, build, desktop, Compose, and config regressions.
+Additionally, the GitHub Actions CI pipeline enforces the following code quality and safety gates:
+- **JaCoCo Coverage**: Enforces minimum line and branch coverage requirements.
+- **Spotless Formatting**: Fails the build if Java code is not formatted according to the project style guidelines.
+- **Main Process Tests**: Runs the Electron main process tests.
+- **Full Safety Audit**: Prevents legacy/development tool exposures in production builds.
 
 To include Electron directory packaging in the local gate:
 

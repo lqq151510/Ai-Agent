@@ -7,5 +7,4 @@ public record OpenAIChatRequest(
         List<OpenAIMessage> messages,
         boolean stream,
         Double temperature,
-        Integer max_tokens
-) {}
+        Integer max_tokens) {}

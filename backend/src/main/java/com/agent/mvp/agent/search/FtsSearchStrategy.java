@@ -22,10 +22,8 @@ public class FtsSearchStrategy implements SearchStrategy {
     private static final String NAME = "FTS";
 
     private static final String SEARCH_SQL =
-            "SELECT text FROM engineering_memory "
-                    + "WHERE to_tsvector('english', COALESCE(text, '')) @@ plainto_tsquery('english', ?) "
-                    + "   OR text ILIKE ? "
-                    + "LIMIT ?";
+            "SELECT text FROM engineering_memory WHERE to_tsvector('english', COALESCE(text, ''))"
+                    + " @@ plainto_tsquery('english', ?)    OR text ILIKE ? LIMIT ?";
 
     private final EmbeddingStoreProvider storeProvider;
     private final SearchConfig config;

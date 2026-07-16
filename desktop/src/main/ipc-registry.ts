@@ -1,4 +1,4 @@
-import { app, ipcMain, shell, BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
+import { app, ipcMain, shell, BrowserWindow, dialog, safeStorage, type OpenDialogOptions } from 'electron';
 import { randomBytes, randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -15,9 +15,11 @@ import { ApprovalEngine, type ApprovalMode } from './approval-engine';
 import { SkillManager } from './skill-manager';
 import { ComputerUseManager } from './computer-use-manager';
 import { getDataDir, getCliEntryPath } from './utils/env';
+import { isPathWithinRoot, normalizeTreeDepth, resolveAuthorizedRoot } from './workspace-access';
 
 export class IpcRegistry {
   private desktopAuthTokens: { accessToken: string; refreshToken?: string } | null = null;
+  private isLegacyEnabled: boolean;
 
   constructor(
     private backendManager: BackendManager,
@@ -36,7 +38,9 @@ export class IpcRegistry {
     private computerUseManager: ComputerUseManager,
     private setApprovalMode: (mode: ApprovalMode) => void,
     private getApprovalMode: () => ApprovalMode,
-  ) {}
+  ) {
+    this.isLegacyEnabled = process.env.AI_AGENT_ENABLE_LEGACY_DEVTOOLS === '1';
+  }
 
   public setupIpc() {
     ipcMain.handle('backend:status', () => this.backendManager.getStatus());
@@ -51,32 +55,66 @@ export class IpcRegistry {
     
     ipcMain.handle('backend:port', () => this.getActivePort());
     
-    ipcMain.handle('cli:execute', (_event, args: string[]) => {
-      return this.cliManager.execute(getCliEntryPath(), args);
-    });
-    
-    ipcMain.on('cli:input', (_event, input: string) => {
-      this.cliManager.sendInput(input);
-    });
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('cli:execute', (_event, args: string[]) => {
+        const localServiceEnv = {
+          LOCAL_SERVICE_URL: `http://127.0.0.1:${this.localServiceManager.getPort()}`,
+          LOCAL_SERVICE_TOKEN: this.localServiceManager.getToken(),
+        };
+        return this.cliManager.execute(getCliEntryPath(), args, localServiceEnv);
+      });
+      
+      ipcMain.on('cli:input', (_event, input: string) => {
+        this.cliManager.sendInput(input);
+      });
+    }
 
     // Workspace Handlers
+    if (this.isLegacyEnabled) {
     ipcMain.handle('workspace:get-all', () => this.workspaceManager.getWorkspaces());
     ipcMain.handle('workspace:get-active', () => this.workspaceManager.getActiveWorkspace());
     ipcMain.handle('workspace:set-active', (_event, path) => this.workspaceManager.setActiveWorkspace(path));
     ipcMain.handle('workspace:add', () => this.workspaceManager.addWorkspace());
+    ipcMain.handle('workspace:get-file-tree', async (_event, path: string, depth?: number) => {
+      if (!this.localServiceManager.isReady()) {
+        return { tree: [] };
+      }
+      const workspaceRoot = this.resolveAuthorizedWorkspaceRoot(path);
+      if (!workspaceRoot) {
+        throw new Error('Workspace path is not authorized');
+      }
+      const safeDepth = normalizeTreeDepth(depth);
+      try {
+        const resp = await this.localServiceManager.fetch(
+          `/workspace/tree?path=${encodeURIComponent(workspaceRoot)}&depth=${safeDepth}`,
+        );
+        if (resp.ok) {
+          return await resp.json();
+        }
+        return { tree: [] };
+      } catch {
+        return { tree: [] };
+      }
+    });
+    ipcMain.handle('workspace:check-local-service', () => ({
+      ready: this.localServiceManager.isReady(),
+    }));
+    }
 
     // Git Handlers
-    ipcMain.handle('git:get-branches', (_event, path) => this.gitManager.getBranches(path));
-    ipcMain.handle('git:get-current-branch', (_event, path) => this.gitManager.getCurrentBranch(path));
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('git:get-branches', (_event, path) => this.gitManager.getBranches(path));
+      ipcMain.handle('git:get-current-branch', (_event, path) => this.gitManager.getCurrentBranch(path));
     ipcMain.handle('git:checkout', (_event, path, branch) => this.gitManager.checkoutBranch(path, branch));
     ipcMain.handle('git:create-branch', (_event, path, branch) => this.gitManager.createBranch(path, branch));
     ipcMain.handle('git:get-status', (_event, path) => this.gitManager.getStatus(path));
-    ipcMain.handle('git:get-diff', (_event, path, file) => this.gitManager.getDiff(path, file));
+    ipcMain.handle('git:get-diff', (_event, path, file) => this.gitManager.getDiff(path, file));    }
 
     // Chat Handlers
-    ipcMain.handle('chat:get-sessions', () => this.chatManager.getSessionsSummary());
-    ipcMain.handle('chat:get-session', (_event, id) => this.chatManager.getSession(id));
-    ipcMain.handle('chat:create-session', async (_event, branch) => {
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('chat:get-sessions', () => this.chatManager.getSessionsSummary());
+      ipcMain.handle('chat:get-session', (_event, id) => this.chatManager.getSession(id));
+      ipcMain.handle('chat:create-session', async (_event, branch) => {
       const remoteSession = await this.createBackendSession();
       return this.chatManager.createSession(branch, {
         id: remoteSession.id,
@@ -85,11 +123,12 @@ export class IpcRegistry {
     });
     ipcMain.handle('chat:append-message', (_event, id, msg) => this.chatManager.appendMessage(id, msg));
     ipcMain.handle('chat:summarize-title', (_event, id, text) => this.chatManager.summarizeTitle(id, text));
-    ipcMain.handle('chat:delete-session', (_event, id) => this.chatManager.deleteSession(id));
+    ipcMain.handle('chat:delete-session', (_event, id) => this.chatManager.deleteSession(id));    }
 
     // Terminal PTY Handlers (single terminal for backward compat)
     let legacyTerminalId: string | null = null;
-    ipcMain.handle('terminal:spawn', (event, cwd?: string) => {
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('terminal:spawn', (event, cwd?: string) => {
       const thread = this.threadManager.getActiveThread();
       const threadId = thread?.id ?? '__legacy__';
       const terminalCwd = cwd || thread?.worktreePath || thread?.projectPath || process.cwd();
@@ -112,27 +151,52 @@ export class IpcRegistry {
       if (legacyTerminalId) {
         this.ptyPool.resize(legacyTerminalId, cols, rows);
       }
-    });
+    });    }
 
     // Local Service Handlers
-    ipcMain.handle('local-service:port', () => {
-      return this.localServiceManager.isReady() ? this.localServiceManager.getPort() : null;
-    });
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('local-service:port', () => {
+        return this.localServiceManager.isReady() ? this.localServiceManager.getPort() : null;
+      });
+      ipcMain.handle('local-service:is-ready', () => {
+        return this.localServiceManager.isReady();
+      });
+    }
 
-    ipcMain.handle('local-service:is-ready', () => {
-      return this.localServiceManager.isReady();
-    });
-
-    ipcMain.handle('knowledge:request', async (_event, payload: {
+    ipcMain.handle('knowledge:request', async (event, payload: {
       method?: string;
       path: string;
       body?: unknown;
     }) => {
-      if (!payload?.path?.startsWith('/api/v1/')) {
+      // Validate sender window
+      const win = this.mainWindowGetter();
+      if (!win || event.sender !== win.webContents) {
+        throw new Error('Unauthorized sender for knowledge:request');
+      }
+
+      if (!payload || typeof payload.path !== 'string') {
+        throw new Error('Invalid request payload');
+      }
+
+      // Parse and normalize path
+      const parsedUrl = new URL(payload.path, 'http://localhost');
+      // normalize prevents directory traversal like /api/v1/../../../etc/passwd
+      const normalizedPath = path.posix.normalize(parsedUrl.pathname);
+
+      if (!normalizedPath.startsWith('/api/v1/')) {
         throw new Error('Knowledge API path must start with /api/v1/');
       }
+
       const method = (payload.method || 'GET').toUpperCase();
-      return this.backendRequest(payload.path, {
+      
+      // Whitelist filter
+      if (!this.isKnowledgeApiAllowed(method, normalizedPath)) {
+        throw new Error(`Knowledge API endpoint not allowed: ${method} ${normalizedPath}`);
+      }
+
+      const finalPath = normalizedPath + parsedUrl.search;
+
+      return this.backendRequest(finalPath, {
         method,
         body: payload.body === undefined ? undefined : JSON.stringify(payload.body),
       });
@@ -151,9 +215,10 @@ export class IpcRegistry {
     });
 
     // Computer Use Handlers
-    ipcMain.handle('computer:permissions', () => {
-      return this.computerUseManager.permissions();
-    });
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('computer:permissions', () => {
+        return this.computerUseManager.permissions();
+      });
     ipcMain.handle('computer:screenshot', () => {
       return this.computerUseManager.screenshot();
     });
@@ -169,11 +234,13 @@ export class IpcRegistry {
     ipcMain.handle('computer:scroll', (_event, params) => {
       return this.computerUseManager.scroll(params ?? {});
     });
-    ipcMain.handle('computer:open-settings', (_event, pane?: string) => {
-      return this.computerUseManager.openSettings(pane as 'accessibility' | 'screenRecording' | undefined);
-    });
+      ipcMain.handle('computer:open-settings', (_event, pane?: string) => {
+        return this.computerUseManager.openSettings(pane as 'accessibility' | 'screenRecording' | undefined);
+      });
+    }
 
-    ipcMain.handle('agent:submit-task', async (event, payload: { prompt: string }) => {
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('agent:submit-task', async (event, payload: { prompt: string }) => {
       const taskId = await this.submitAgentTask(payload.prompt);
       event.sender.send('agent:task-event', {
         taskId,
@@ -234,17 +301,25 @@ export class IpcRegistry {
       // Build systemContext by calling local-service
       let systemContext: string | undefined;
       if (this.localServiceManager.isReady() && workspacePath) {
+        const workspaceRoot = this.resolveAuthorizedWorkspaceRoot(workspacePath);
+        if (!workspaceRoot) {
+          throw new Error('Workspace path is not authorized');
+        }
+        const authorizedFiles = selectedFiles.filter(filePath =>
+          isPathWithinRoot(filePath, workspaceRoot));
+        if (authorizedFiles.length !== selectedFiles.length) {
+          throw new Error('Selected file is outside the authorized workspace');
+        }
         try {
-          const port = this.localServiceManager.getPort();
           const [contextResp, filesResp] = await Promise.all([
-            fetch(
-            `http://127.0.0.1:${port}/context?path=${encodeURIComponent(workspacePath)}`,
+            this.localServiceManager.fetch(
+              `/context?path=${encodeURIComponent(workspaceRoot)}`,
             ),
-            selectedFiles.length > 0
-              ? fetch(`http://127.0.0.1:${port}/context/files`, {
+            authorizedFiles.length > 0
+              ? this.localServiceManager.fetch('/context/files', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ paths: selectedFiles }),
+                  body: JSON.stringify({ paths: authorizedFiles }),
                 })
               : Promise.resolve(null),
           ]);
@@ -337,12 +412,14 @@ export class IpcRegistry {
         return { ok: false, error: err.message || String(err) };
       }
     });
+  }
 
     // ================================================================
     // Thread Handlers (Phase 1 — multi-agent thread management)
     // ================================================================
 
-    ipcMain.handle('thread:create', async (_event, opts: {
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('thread:create', async (_event, opts: {
       name: string;
       projectPath: string;
       mode?: 'local' | 'worktree';
@@ -380,50 +457,33 @@ export class IpcRegistry {
     ipcMain.handle('thread:set-status', (_event, id: string, status: import('./thread-manager').ThreadStatus) => {
       this.threadManager.setThreadStatus(id, status);
       return { ok: true };
-    });
+      });
+    }
 
     // ================================================================
     // Tool Approval Handlers (Phase 1 — agent tool execution bridge)
     // ================================================================
 
-    ipcMain.handle('tool:approve', async (_event, payload: {
-      toolCallId: string;
-      toolName: string;
-      arguments: Record<string, unknown>;
-      threadId: string;
-    }) => {
-      const { toolCallId, toolName, arguments: args, threadId } = payload;
-      const result = await this.toolBridge.executeApproved(
-        { toolCallId, toolName, arguments: args },
-        threadId,
-      );
-      return result;
-    });
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('tool:approve', async (_event, payload: { toolCallId: string }) => {
+        return this.toolBridge.executeApproved(payload.toolCallId);
+      });
 
     ipcMain.handle('tool:reject', async (_event, payload: {
       toolCallId: string;
     }) => {
-      const port = this.getActivePort();
-      const token = await this.ensureDesktopAccessToken();
-      await fetch(`http://127.0.0.1:${port}/api/v1/agent/chat/tool_result`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-          toolCallId: payload.toolCallId,
-          output: '[Tool execution rejected by user]',
-          status: 'rejected',
-        }),
+      return this.toolBridge.rejectPending(payload.toolCallId);
       });
-      return { ok: true };
-    });
+    }
 
     // ================================================================
     // Approval Engine Handlers
     // ================================================================
 
-    ipcMain.handle('approval:get-policy', () => {
-      return this.approvalEngine.getPolicy();
-    });
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('approval:get-policy', () => {
+        return this.approvalEngine.getPolicy();
+      });
 
     ipcMain.handle('approval:get-mode', () => {
       return this.getApprovalMode();
@@ -435,13 +495,15 @@ export class IpcRegistry {
       }
       this.setApprovalMode(mode);
       return { ok: true };
-    });
+      });
+    }
 
     // ================================================================
     // Terminal Pool Handlers (thread-aware terminal switching)
     // ================================================================
 
-    ipcMain.handle('terminal:spawn-for-thread', (event, payload: {
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('terminal:spawn-for-thread', (event, payload: {
       threadId: string;
       cwd: string;
     }) => {
@@ -462,15 +524,17 @@ export class IpcRegistry {
     }) => {
       this.ptyPool.write(payload.terminalId, payload.data);
       return { ok: true };
-    });
+      });
+    }
 
     // ================================================================
     // Review Panel Handlers (Phase 2 — diff review)
     // ================================================================
 
-    ipcMain.handle('review:get-diff', async (_event, projectPath: string) => {
-      return this.gitManager.getStructuredDiff(projectPath);
-    });
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('review:get-diff', async (_event, projectPath: string) => {
+        return this.gitManager.getStructuredDiff(projectPath);
+      });
 
     ipcMain.handle('review:stage-file', async (_event, projectPath: string, file: string) => {
       return this.gitManager.stageFile(projectPath, file);
@@ -498,16 +562,18 @@ export class IpcRegistry {
 
     ipcMain.handle('review:create-pr', async (_event, projectPath: string, options: { title: string; body?: string; base?: string }) => {
       return this.gitManager.createPullRequest(projectPath, options);
-    });
+      });
+    }
 
     // ================================================================
     // Skill Handlers (Phase 2 Track B — Skills system)
     // ================================================================
 
-    ipcMain.handle('skill:discover', () => {
-      this.skillManager.discoverSkills();
-      return { ok: true };
-    });
+    if (this.isLegacyEnabled) {
+      ipcMain.handle('skill:discover', () => {
+        this.skillManager.discoverSkills();
+        return { ok: true };
+      });
 
     ipcMain.handle('skill:list', () => {
       return this.skillManager.listSkills();
@@ -535,10 +601,11 @@ export class IpcRegistry {
       return { ok: true };
     });
 
-    ipcMain.handle('skill:set-project-paths', (_event, projectPath?: string, workspacePath?: string) => {
-      this.skillManager.setProjectScanPaths(projectPath, workspacePath);
-      return { ok: true };
-    });
+      ipcMain.handle('skill:set-project-paths', (_event, projectPath?: string, workspacePath?: string) => {
+        this.skillManager.setProjectScanPaths(projectPath, workspacePath);
+        return { ok: true };
+      });
+    }
   }
 
   private async createBackendSession(): Promise<{ id: string; title: string }> {
@@ -776,6 +843,29 @@ export class IpcRegistry {
     return this.ensureDesktopAccessToken();
   }
 
+  private isKnowledgeApiAllowed(method: string, pathname: string): boolean {
+    const allowedPrefixes = [
+      '/api/v1/dashboard',
+      '/api/v1/knowledge-items',
+      '/api/v1/tags',
+      '/api/v1/model-sources',
+      '/api/v1/settings',
+      '/api/v1/sessions'
+    ];
+    
+    // Ensure path starts with one of the allowed prefixes
+    if (!allowedPrefixes.some(prefix => pathname.startsWith(prefix))) {
+      return false;
+    }
+
+    // Only allow expected HTTP methods
+    if (!['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+      return false;
+    }
+
+    return true;
+  }
+
   private async ensureDesktopAccessToken(): Promise<string> {
     if (this.desktopAuthTokens?.accessToken) {
       return this.desktopAuthTokens.accessToken;
@@ -824,20 +914,57 @@ export class IpcRegistry {
   }
 
   private loadDesktopCredentials(): { email: string; password: string } {
-    const credentialsPath = path.join(getDataDir(), 'desktop-auth.json');
+    const isProd = app.isPackaged;
+    if (isProd && !safeStorage.isEncryptionAvailable()) {
+      throw new Error('SafeStorage is not available in production environment');
+    }
+
+    const legacyPath = path.join(getDataDir(), 'desktop-auth.json');
+    const credentialsPath = path.join(getDataDir(), 'desktop-auth-enc.txt');
     fs.mkdirSync(path.dirname(credentialsPath), { recursive: true });
+
+    // Migrate from legacy unencrypted json
+    if (fs.existsSync(legacyPath)) {
+      try {
+        const legacyData = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
+        if (legacyData.email && legacyData.password) {
+          const encData = safeStorage.isEncryptionAvailable()
+            ? safeStorage.encryptString(JSON.stringify(legacyData))
+            : Buffer.from(JSON.stringify(legacyData));
+          fs.writeFileSync(credentialsPath, encData);
+        }
+        fs.unlinkSync(legacyPath);
+      } catch (e) {
+        console.warn('Failed to migrate legacy credentials', e);
+      }
+    }
+
     if (fs.existsSync(credentialsPath)) {
-      return JSON.parse(fs.readFileSync(credentialsPath, 'utf8')) as {
-        email: string;
-        password: string;
-      };
+      try {
+        const fileData = fs.readFileSync(credentialsPath);
+        const decData = safeStorage.isEncryptionAvailable()
+          ? safeStorage.decryptString(fileData)
+          : fileData.toString('utf8');
+        return JSON.parse(decData) as { email: string; password: string };
+      } catch (e) {
+        console.warn('Failed to read encrypted credentials', e);
+      }
     }
 
     const credentials = {
       email: `desktop-${app.getVersion().replace(/[^0-9a-z]+/gi, '')}@example.com`,
       password: `Desktop!${randomBytes(12).toString('hex')}Aa1`,
     };
-    fs.writeFileSync(credentialsPath, JSON.stringify(credentials, null, 2));
+
+    try {
+      const encData = safeStorage.isEncryptionAvailable()
+        ? safeStorage.encryptString(JSON.stringify(credentials))
+        : Buffer.from(JSON.stringify(credentials));
+      fs.writeFileSync(credentialsPath, encData);
+    } catch (e) {
+      console.warn('Failed to write encrypted credentials', e);
+    }
+    
     return credentials;
   }
 
@@ -971,6 +1098,16 @@ export class IpcRegistry {
     }
 
     return { toolCallId, toolName, arguments: args };
+  }
+
+  private resolveAuthorizedWorkspaceRoot(requestedPath: string): string | null {
+    const thread = this.threadManager.getActiveThread();
+    const roots = [
+      ...this.workspaceManager.getWorkspaces().map(workspace => workspace.path),
+      thread?.projectPath,
+      thread?.worktreePath,
+    ].filter((root): root is string => Boolean(root));
+    return resolveAuthorizedRoot(requestedPath, roots);
   }
 
   private async toErrorMessage(response: Response): Promise<string> {

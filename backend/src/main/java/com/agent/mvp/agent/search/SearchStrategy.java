@@ -5,8 +5,8 @@ import java.util.List;
 /**
  * 统一的搜索策略抽象，将搜索行为的执行、可用性判断和置信度评估分离。
  *
- * <p>不同实现（FTS、向量、BM25 等）可以独立替换或组合，编排器根据 {@link #getConfidence(String)}
- * 和 {@link #isAvailable()} 动态选择策略。
+ * <p>不同实现（FTS、向量、BM25 等）可以独立替换或组合，编排器根据 {@link #getConfidence(String)} 和 {@link #isAvailable()}
+ * 动态选择策略。
  */
 public interface SearchStrategy {
 

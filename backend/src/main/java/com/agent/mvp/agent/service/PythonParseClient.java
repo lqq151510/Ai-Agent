@@ -17,8 +17,8 @@ import reactor.core.publisher.Mono;
 /**
  * python-service 文档解析客户端。
  *
- * <p>通过 WebClient 调用 python-service 的 {@code /parse} 接口，将文档转换为 Markdown。
- * 当 python-service 不可用或调用失败时，调用方应降级到本地 MarkItDownService。
+ * <p>通过 WebClient 调用 python-service 的 {@code /parse} 接口，将文档转换为 Markdown。 当 python-service
+ * 不可用或调用失败时，调用方应降级到本地 MarkItDownService。
  *
  * <p>本类只负责"调用远端"，不做降级决策；降级逻辑由 {@link MarkItDownService} 统一编排。
  */
@@ -31,8 +31,7 @@ public class PythonParseClient {
     private final AppProperties appProperties;
 
     public PythonParseClient(
-            @Qualifier("pythonServiceWebClient") WebClient webClient,
-            AppProperties appProperties) {
+            @Qualifier("pythonServiceWebClient") WebClient webClient, AppProperties appProperties) {
         this.webClient = webClient;
         this.appProperties = appProperties;
     }
@@ -72,9 +71,7 @@ public class PythonParseClient {
                             WebClientResponseException.class,
                             e ->
                                     new PythonServiceUnavailableException(
-                                            "python-service 返回状态: "
-                                                    + e.getStatusCode().value(),
-                                            e))
+                                            "python-service 返回状态: " + e.getStatusCode().value(), e))
                     .onErrorMap(
                             e -> !(e instanceof PythonServiceUnavailableException),
                             e ->

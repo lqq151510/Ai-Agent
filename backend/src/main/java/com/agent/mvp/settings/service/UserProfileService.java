@@ -15,7 +15,8 @@ public class UserProfileService {
     private final UserService userService;
     private final UserProfileRepository userProfileRepository;
 
-    public UserProfileService(UserService userService, UserProfileRepository userProfileRepository) {
+    public UserProfileService(
+            UserService userService, UserProfileRepository userProfileRepository) {
         this.userService = userService;
         this.userProfileRepository = userProfileRepository;
     }
@@ -37,7 +38,8 @@ public class UserProfileService {
         }
 
         String email = user.getEmail() == null ? "User" : user.getEmail();
-        String defaultDisplayName = email.contains("@") ? email.substring(0, email.indexOf('@')) : email;
+        String defaultDisplayName =
+                email.contains("@") ? email.substring(0, email.indexOf('@')) : email;
         UserProfile created =
                 UserProfile.builder()
                         .userId(userId)

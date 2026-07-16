@@ -16,7 +16,9 @@ class KnowledgeOrganizerServiceTest {
                 KnowledgeItem.builder()
                         .sourceType("snippet")
                         .title("Spring AI RAG notes")
-                        .rawContent("Spring AI helps build RAG pipelines with retrieval and generation.")
+                        .rawContent(
+                                "Spring AI helps build RAG pipelines with retrieval and"
+                                        + " generation.")
                         .build();
 
         var result = service.organize(item);

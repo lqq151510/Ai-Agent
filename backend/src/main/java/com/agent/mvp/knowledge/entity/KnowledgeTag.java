@@ -16,8 +16,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class KnowledgeTag {
 
-    @TableId
-    private UUID id;
+    @TableId private UUID id;
 
     private UUID userId;
 

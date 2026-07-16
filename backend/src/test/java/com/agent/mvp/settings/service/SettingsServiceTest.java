@@ -40,7 +40,8 @@ class SettingsServiceTest {
         UUID modelSourceId = UUID.randomUUID();
         when(userProfileService.requireUser(userId))
                 .thenReturn(User.builder().id(userId).email("user@example.com").build());
-        when(userProfileService.getOrCreate(userId)).thenReturn(UserProfile.builder().userId(userId).build());
+        when(userProfileService.getOrCreate(userId))
+                .thenReturn(UserProfile.builder().userId(userId).build());
         when(modelSourceRepository.selectById(modelSourceId))
                 .thenReturn(ModelSource.builder().id(modelSourceId).userId(foreignUserId).build());
 
@@ -78,7 +79,8 @@ class SettingsServiceTest {
         UUID userId = UUID.randomUUID();
         UUID oldDefaultId = UUID.randomUUID();
         UUID newDefaultId = UUID.randomUUID();
-        UserProfile profile = UserProfile.builder().userId(userId).defaultModelSourceId(oldDefaultId).build();
+        UserProfile profile =
+                UserProfile.builder().userId(userId).defaultModelSourceId(oldDefaultId).build();
         ModelSource oldDefault =
                 ModelSource.builder()
                         .id(oldDefaultId)
@@ -186,16 +188,7 @@ class SettingsServiceTest {
                 service.updateProfile(
                         userId,
                         new UpdateSettingsProfileRequest(
-                                null,
-                                null,
-                                null,
-                                null,
-                                null,
-                                null,
-                                null,
-                                true,
-                                true,
-                                true));
+                                null, null, null, null, null, null, null, true, true, true));
 
         assertNull(profile.getDefaultModelSourceId());
         assertNull(profile.getSummaryModelSourceId());

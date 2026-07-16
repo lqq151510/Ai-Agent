@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
  * 搜索策略编排器，根据 {@link SearchConfig} 选择和执行搜索策略，并通过 {@link ResultFusioner} 融合结果。
  *
  * <p>支持四种编排模式：
+ *
  * <ul>
  *   <li>{@link SearchMode#FTS_ONLY} - 仅 FTS，适合精确符号查询
  *   <li>{@link SearchMode#VECTOR_ONLY} - 仅向量，适合纯语义查询
@@ -54,7 +55,11 @@ public class SearchOrchestrator {
         }
 
         SearchMode mode = resolveMode(normalizedQuery);
-        log.debug("Searching with mode={} query='{}' maxResults={}", mode, normalizedQuery, safeMaxResults);
+        log.debug(
+                "Searching with mode={} query='{}' maxResults={}",
+                mode,
+                normalizedQuery,
+                safeMaxResults);
 
         return switch (mode) {
             case FTS_ONLY -> executeSingleStrategy(normalizedQuery, safeMaxResults, "FTS");
@@ -78,9 +83,10 @@ public class SearchOrchestrator {
             return results;
         }
 
-        List<SearchStrategy> fallbackStrategies = getAvailableStrategies().stream()
-                .filter(strategy -> !selected.contains(strategy))
-                .collect(Collectors.toList());
+        List<SearchStrategy> fallbackStrategies =
+                getAvailableStrategies().stream()
+                        .filter(strategy -> !selected.contains(strategy))
+                        .collect(Collectors.toList());
         if (fallbackStrategies.isEmpty()) {
             return results;
         }
@@ -90,9 +96,7 @@ public class SearchOrchestrator {
         return executeFusionSearch(query, maxResults, fallbackStrategies);
     }
 
-    /**
-     * 混合模式：执行所有可用策略并融合结果。
-     */
+    /** 混合模式：执行所有可用策略并融合结果。 */
     private List<String> executeHybridSearch(String query, int maxResults) {
         List<SearchStrategy> available = getAvailableStrategies();
         if (available.isEmpty()) {
@@ -131,9 +135,11 @@ public class SearchOrchestrator {
             return List.of();
         }
         if (groupedResults.size() == 1) {
-            return truncate(groupedResults.get(0).stream()
-                    .map(SearchResult::content)
-                    .collect(Collectors.toList()), maxResults);
+            return truncate(
+                    groupedResults.get(0).stream()
+                            .map(SearchResult::content)
+                            .collect(Collectors.toList()),
+                    maxResults);
         }
         return fusioner.fuse(groupedResults, maxResults);
     }
@@ -144,16 +150,15 @@ public class SearchOrchestrator {
         return strategies.stream()
                 .filter(SearchStrategy::isAvailable)
                 .filter(s -> s.getConfidence(query) >= threshold)
-                .sorted(Comparator.comparingDouble(
-                        (SearchStrategy s) -> s.getConfidence(query)).reversed())
+                .sorted(
+                        Comparator.comparingDouble((SearchStrategy s) -> s.getConfidence(query))
+                                .reversed())
                 .limit(maxStrategies)
                 .collect(Collectors.toList());
     }
 
     private List<SearchStrategy> getAvailableStrategies() {
-        return strategies.stream()
-                .filter(SearchStrategy::isAvailable)
-                .collect(Collectors.toList());
+        return strategies.stream().filter(SearchStrategy::isAvailable).collect(Collectors.toList());
     }
 
     /**
@@ -164,10 +169,11 @@ public class SearchOrchestrator {
     private SearchMode resolveMode(String query) {
         SearchMode configured = config.getDefaultMode();
         if (configured == SearchMode.ADAPTIVE && looksLikeExactLookup(query)) {
-            long ftsCount = strategies.stream()
-                    .filter(s -> "FTS".equals(s.name()))
-                    .filter(SearchStrategy::isAvailable)
-                    .count();
+            long ftsCount =
+                    strategies.stream()
+                            .filter(s -> "FTS".equals(s.name()))
+                            .filter(SearchStrategy::isAvailable)
+                            .count();
             if (ftsCount > 0) {
                 return SearchMode.HYBRID;
             }

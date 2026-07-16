@@ -66,7 +66,10 @@ function buildFileTree(dirPath: string, depth: number, maxDepth: number): FileTr
 // GET /workspace/tree?path=<dir>&depth=3
 workspaceRouter.get('/tree', (req, res) => {
   const dirPath = req.query['path'] as string;
-  const depth = Math.min(parseInt(req.query['depth'] as string || '3', 10), 5);
+  const parsedDepth = Number.parseInt(req.query['depth'] as string || '3', 10);
+  const depth = Number.isFinite(parsedDepth)
+    ? Math.max(0, Math.min(parsedDepth, 5))
+    : 3;
 
   if (!dirPath) {
     return res.status(400).json({ error: 'path is required' });

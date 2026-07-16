@@ -1,5 +1,5 @@
 import type { ElementType } from 'react';
-import { AlertTriangle, Cloud, Database, Download, HardDrive, KeyRound, PanelRight, Plus, RefreshCw, Sparkles, Trash2, UserRound, Shield, SlidersHorizontal, Link2 } from 'lucide-react';
+import { AlertTriangle, Cloud, HardDrive, KeyRound, PanelRight, Sparkles, UserRound, Shield, SlidersHorizontal, Link2 } from 'lucide-react';
 import type { KnowledgeDeskSnapshot, ModelProvider } from './knowledgeDeskApi';
 import type { SettingsTab } from './knowledgeDeskTypes';
 import { EmptyBlock, MetricCard, Panel, PreferenceRow, SettingsHeader, ToggleRow } from './knowledgeDeskShared';
@@ -59,7 +59,7 @@ const ProfileSettings = ({ snapshot }: { snapshot: KnowledgeDeskSnapshot }) => (
         <p>{snapshot.profile.email}</p>
         <div className="kd-inline-status">
           <span><HardDrive size={15} /> MacBook Pro 本地在线</span>
-          <span><Cloud size={15} /> {snapshot.source === 'api' ? '本机数据库同步正常' : '未连接数据库'}</span>
+          <span><Cloud size={15} /> {snapshot.status === 'ok' ? '本机数据库同步正常' : '未连接数据库'}</span>
         </div>
       </div>
     </section>
@@ -69,15 +69,10 @@ const ProfileSettings = ({ snapshot }: { snapshot: KnowledgeDeskSnapshot }) => (
       <MetricCard label="标签资产" value={formatCount(snapshot.storage.totalTags)} detail={`${snapshot.storage.totalModelSources} 个模型源可用`} />
       <MetricCard
         label="数据库连接"
-        value={snapshot.source === 'api' ? '已连接' : '未连接'}
-        detail={snapshot.source === 'api' ? '正在读取本机知识库' : snapshot.error ?? '后端未启动或认证不可用'}
+        value={snapshot.status === 'ok' ? '已连接' : '未连接'}
+        detail={snapshot.status === 'ok' ? '正在读取本机知识库' : snapshot.error ?? '后端未启动或认证不可用'}
       />
     </section>
-    <div className="kd-settings-actions">
-      <button type="button"><Download size={16} /> 导出数据</button>
-      <button type="button"><Database size={16} /> 备份知识库</button>
-      <button type="button"><RefreshCw size={16} /> 重建索引</button>
-    </div>
   </div>
 );
 
@@ -99,12 +94,6 @@ const ModelSettings = ({ providers }: { providers: ModelProvider[] }) => (
             <dt>默认模型</dt>
             <dd>{provider.model}</dd>
           </dl>
-          <div className="kd-model-actions">
-            <button disabled={provider.isDefault} type="button">{provider.isDefault ? '默认模型源' : '设为默认'}</button>
-            <button type="button">测试连接</button>
-            <button type="button">编辑</button>
-            <button className="danger" type="button"><Trash2 size={14} /> 删除</button>
-          </div>
         </article>
       ))}
       {providers.length === 0 ? (
@@ -114,10 +103,6 @@ const ModelSettings = ({ providers }: { providers: ModelProvider[] }) => (
           description="添加 OpenAI、DeepSeek、OpenRouter 或本地兼容模型后，整理和检索能力会使用这里的配置。"
         />
       ) : null}
-      <button className="kd-add-provider" type="button">
-        <Plus size={20} />
-        新增模型源
-      </button>
     </div>
   </div>
 );
@@ -143,16 +128,7 @@ const AiPreferenceSettings = ({
       </section>
       <section className="kd-settings-split">
         <Panel title="响应偏好" icon={Sparkles}>
-          <div className="kd-segmented kd-segmented--wide">
-            <button type="button">简短</button>
-            <button className="is-active" type="button">标准</button>
-            <button type="button">详细</button>
-          </div>
-          <div className="kd-segmented kd-segmented--wide">
-            <button type="button">成本优先</button>
-            <button className="is-active" type="button">质量优先</button>
-            <button type="button">速度优先</button>
-          </div>
+          <p className="kd-text-muted">响应偏好设置开发中...</p>
         </Panel>
         <Panel title="整理策略" icon={PanelRight}>
           <ToggleRow label="自动生成摘要" checked={profile.organizeMode !== 'manual'} />
@@ -178,8 +154,6 @@ const PrivacySettings = ({ privacyMode }: { privacyMode: string }) => (
         <strong>数据清理</strong>
         <p>删除缓存、重建索引和清理知识库前应先导出备份。</p>
       </div>
-      <button type="button">删除缓存</button>
-      <button type="button">重建索引</button>
     </section>
   </div>
 );

@@ -51,12 +51,23 @@ public class FlexRuntimeFactory {
      * @return 激活的 AgentRuntime 实例
      */
     public AgentRuntime createRuntime(
-            User user, ResolvedModelConfig resolved, List<ToolSpec> toolSpecs, String overrideBaseUrl, String overrideApiKey) {
-        
-        String customApiKey = (overrideApiKey != null && !overrideApiKey.isBlank()) ? overrideApiKey : (user != null ? user.getCustomApiKey() : null);
-        String customBaseUrl = (overrideBaseUrl != null && !overrideBaseUrl.isBlank()) ? overrideBaseUrl : (user != null ? user.getCustomBaseUrl() : null);
+            User user,
+            ResolvedModelConfig resolved,
+            List<ToolSpec> toolSpecs,
+            String overrideBaseUrl,
+            String overrideApiKey) {
 
-        if ((customApiKey != null && !customApiKey.isBlank()) || (customBaseUrl != null && !customBaseUrl.isBlank())) {
+        String customApiKey =
+                (overrideApiKey != null && !overrideApiKey.isBlank())
+                        ? overrideApiKey
+                        : (user != null ? user.getCustomApiKey() : null);
+        String customBaseUrl =
+                (overrideBaseUrl != null && !overrideBaseUrl.isBlank())
+                        ? overrideBaseUrl
+                        : (user != null ? user.getCustomBaseUrl() : null);
+
+        if ((customApiKey != null && !customApiKey.isBlank())
+                || (customBaseUrl != null && !customBaseUrl.isBlank())) {
             try {
                 return buildCustomRuntime(user, resolved, toolSpecs, customBaseUrl, customApiKey);
             } catch (Exception e) {
@@ -113,7 +124,12 @@ public class FlexRuntimeFactory {
     // -------------------------------------------------------------------------
 
     private AgentRuntime buildCustomRuntime(
-            User user, ResolvedModelConfig resolved, List<ToolSpec> toolSpecs, String customBaseUrl, String customApiKey) throws Exception {
+            User user,
+            ResolvedModelConfig resolved,
+            List<ToolSpec> toolSpecs,
+            String customBaseUrl,
+            String customApiKey)
+            throws Exception {
         String baseUrl =
                 (customBaseUrl != null && !customBaseUrl.isBlank())
                         ? customBaseUrl

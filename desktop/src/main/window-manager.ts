@@ -1,5 +1,6 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 export class WindowManager {
   public mainWindow: BrowserWindow | null = null;
@@ -42,6 +43,17 @@ export class WindowManager {
       this.mainWindow = null;
     });
 
+    this.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+      void this.openExternalUrl(url);
+      return { action: 'deny' };
+    });
+
+    this.mainWindow.webContents.on('will-navigate', (event, url) => {
+      if (this.isTrustedRendererUrl(url)) return;
+      event.preventDefault();
+      void this.openExternalUrl(url);
+    });
+
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow!.show();
     });
@@ -79,6 +91,31 @@ export class WindowManager {
       } else {
         this.showAndFocus();
       }
+    }
+  }
+
+  private isTrustedRendererUrl(url: string): boolean {
+    try {
+      const candidate = new URL(url);
+      if (this.isDev) {
+        const rendererUrl = new URL(process.env.DESKTOP_RENDERER_URL || 'http://localhost:5173');
+        return candidate.origin === rendererUrl.origin;
+      }
+      const rendererIndex = path.resolve(__dirname, '..', '..', 'renderer', 'index.html');
+      return candidate.protocol === 'file:' && path.resolve(fileURLToPath(candidate)) === rendererIndex;
+    } catch {
+      return false;
+    }
+  }
+
+  private async openExternalUrl(url: string): Promise<void> {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        await shell.openExternal(parsed.toString());
+      }
+    } catch (error) {
+      console.warn('[desktop] Blocked invalid external URL:', error);
     }
   }
 }

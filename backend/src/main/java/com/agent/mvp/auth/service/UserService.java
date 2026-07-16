@@ -47,7 +47,11 @@ public class UserService {
     @CachePut(value = "users", key = "#user.id")
     @CacheEvict(value = "users_by_email", key = "#user.email")
     public User updateUser(User user) {
-        userRepository.updateById(user);
+        int rows = userRepository.updateById(user);
+        if (rows == 0) {
+            throw new com.agent.mvp.common.exception.UnauthorizedException(
+                    "Concurrent update detected");
+        }
         return user;
     }
 }

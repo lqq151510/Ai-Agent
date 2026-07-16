@@ -6,15 +6,14 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.Metadata;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
 @Service
 public class CodeRAGService {
@@ -31,36 +30,44 @@ public class CodeRAGService {
             CompilationUnit cu = StaticJavaParser.parse(javaFile);
             List<Document> documents = new ArrayList<>();
 
-            cu.findAll(ClassOrInterfaceDeclaration.class).forEach(clazz -> {
-                String className = clazz.getNameAsString();
-                String classCode = clazz.toString();
-                
-                Map<String, String> metaMap = new HashMap<>();
-                metaMap.put("type", "class");
-                metaMap.put("className", className);
-                metaMap.put("filename", javaFile.getName());
-                
-                Document doc = Document.from(classCode, Metadata.from(metaMap));
-                documents.add(doc);
-            });
+            cu.findAll(ClassOrInterfaceDeclaration.class)
+                    .forEach(
+                            clazz -> {
+                                String className = clazz.getNameAsString();
+                                String classCode = clazz.toString();
 
-            cu.findAll(MethodDeclaration.class).forEach(method -> {
-                String methodName = method.getNameAsString();
-                String className = "Unknown";
-                if (method.findAncestor(ClassOrInterfaceDeclaration.class).isPresent()) {
-                    className = method.findAncestor(ClassOrInterfaceDeclaration.class).get().getNameAsString();
-                }
-                String methodCode = method.toString();
-                
-                Map<String, String> metaMap = new HashMap<>();
-                metaMap.put("type", "method");
-                metaMap.put("className", className);
-                metaMap.put("methodName", methodName);
-                metaMap.put("filename", javaFile.getName());
-                
-                Document doc = Document.from(methodCode, Metadata.from(metaMap));
-                documents.add(doc);
-            });
+                                Map<String, String> metaMap = new HashMap<>();
+                                metaMap.put("type", "class");
+                                metaMap.put("className", className);
+                                metaMap.put("filename", javaFile.getName());
+
+                                Document doc = Document.from(classCode, Metadata.from(metaMap));
+                                documents.add(doc);
+                            });
+
+            cu.findAll(MethodDeclaration.class)
+                    .forEach(
+                            method -> {
+                                String methodName = method.getNameAsString();
+                                String className = "Unknown";
+                                if (method.findAncestor(ClassOrInterfaceDeclaration.class)
+                                        .isPresent()) {
+                                    className =
+                                            method.findAncestor(ClassOrInterfaceDeclaration.class)
+                                                    .get()
+                                                    .getNameAsString();
+                                }
+                                String methodCode = method.toString();
+
+                                Map<String, String> metaMap = new HashMap<>();
+                                metaMap.put("type", "method");
+                                metaMap.put("className", className);
+                                metaMap.put("methodName", methodName);
+                                metaMap.put("filename", javaFile.getName());
+
+                                Document doc = Document.from(methodCode, Metadata.from(metaMap));
+                                documents.add(doc);
+                            });
 
             if (!documents.isEmpty()) {
                 ragMemoryService.ingestDocuments(documents);
@@ -74,8 +81,10 @@ public class CodeRAGService {
 
     public List<String> searchRelatedCode(String queryText, int maxResults) {
         // Since RAGMemoryService provides searchSimilarDiagnoses which filters by userId,
-        // and code segments don't have a userId, we might need a generic search method in RAGMemoryService.
-        // Or we can just use searchSimilarDiagnoses with null userId if it supports it, but let's see.
+        // and code segments don't have a userId, we might need a generic search method in
+        // RAGMemoryService.
+        // Or we can just use searchSimilarDiagnoses with null userId if it supports it, but let's
+        // see.
         // Wait, actually I will add a method to RAGMemoryService to search generic text segments.
         return ragMemoryService.searchCodeContext(queryText, maxResults);
     }

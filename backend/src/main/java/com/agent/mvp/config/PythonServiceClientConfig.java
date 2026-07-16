@@ -14,8 +14,8 @@ import reactor.netty.resources.ConnectionProvider;
 /**
  * python-service 专用的 WebClient 配置。
  *
- * <p>复用 Reactor Netty 的连接池（ConnectionProvider），并设置较大的内存缓冲区以支持
- * 文档上传/下载。超时参数由 {@link AppProperties.PythonService} 提供。
+ * <p>复用 Reactor Netty 的连接池（ConnectionProvider），并设置较大的内存缓冲区以支持 文档上传/下载。超时参数由 {@link
+ * AppProperties.PythonService} 提供。
  */
 @Configuration
 public class PythonServiceClientConfig {
@@ -44,7 +44,9 @@ public class PythonServiceClientConfig {
 
         HttpClient httpClient =
                 HttpClient.create(provider)
-                        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) cfg.getConnectTimeoutMs())
+                        .option(
+                                ChannelOption.CONNECT_TIMEOUT_MILLIS,
+                                (int) cfg.getConnectTimeoutMs())
                         .option(ChannelOption.SO_KEEPALIVE, true)
                         .responseTimeout(java.time.Duration.ofMillis(cfg.getReadTimeoutMs()))
                         .doOnConnected(

@@ -38,8 +38,7 @@ class CodeToolServiceTest {
 
         CodeToolService service = newService();
 
-        assertThrows(
-                BadRequestException.class, () -> service.readFile("secret-link.txt", 1, 10));
+        assertThrows(BadRequestException.class, () -> service.readFile("secret-link.txt", 1, 10));
     }
 
     private CodeToolService newService() {

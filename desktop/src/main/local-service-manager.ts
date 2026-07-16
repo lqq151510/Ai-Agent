@@ -101,6 +101,20 @@ export class LocalServiceManager {
     return this.ready;
   }
 
+  /**
+   * Unified authenticated fetch for local-service endpoints.
+   * All callers must use this method instead of building URLs/headers manually.
+   */
+  public async fetch(pathname: string, init?: RequestInit): Promise<Response> {
+    if (!this.ready) {
+      throw new Error('local-service is not ready');
+    }
+    const url = `http://127.0.0.1:${this.port}${pathname}`;
+    const headers = new Headers(init?.headers);
+    headers.set('Authorization', `Bearer ${this.token}`);
+    return fetch(url, { ...init, headers });
+  }
+
   private resolveEntryPath(): string {
     // Production: copied with backend-jre extraResources.
     const prodPath = path.join(process.resourcesPath ?? '', 'backend-jre', 'local-service', 'dist', 'index.js');

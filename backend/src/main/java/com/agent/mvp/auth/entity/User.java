@@ -24,6 +24,7 @@ public class User {
     @TableField("password_hash")
     private String passwordHash;
 
+    @com.baomidou.mybatisplus.annotation.Version
     @TableField("token_version")
     private int tokenVersion;
 
