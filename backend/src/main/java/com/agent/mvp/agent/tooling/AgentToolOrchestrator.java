@@ -14,7 +14,8 @@ public class AgentToolOrchestrator {
     private final Optional<CodeToolService> codeToolService;
     private final ObjectMapper objectMapper;
 
-    public AgentToolOrchestrator(Optional<CodeToolService> codeToolService, ObjectMapper objectMapper) {
+    public AgentToolOrchestrator(
+            Optional<CodeToolService> codeToolService, ObjectMapper objectMapper) {
         this.codeToolService = codeToolService;
         this.objectMapper = objectMapper;
     }
@@ -179,12 +180,18 @@ public class AgentToolOrchestrator {
             ToolCall call,
             java.util.function.Function<ToolCall, java.util.concurrent.CompletableFuture<String>>
                     clientToolInvoker) {
-        
+
         String name = call.name() == null ? "" : call.name();
-        
+
         if (codeToolService.isEmpty()) {
             return java.util.concurrent.CompletableFuture.completedFuture(
-                    new ToolResult(call.id(), name, call.argumentsJson(), "ERROR", 0, "Tool not available in this profile"));
+                    new ToolResult(
+                            call.id(),
+                            name,
+                            call.argumentsJson(),
+                            "ERROR",
+                            0,
+                            "Tool not available in this profile"));
         }
 
         CodeToolService.ToolCallOutput output;
@@ -227,20 +234,29 @@ public class AgentToolOrchestrator {
         output =
                 switch (name) {
                     case "searchCode" ->
-                            codeToolService.get().searchCode(
-                                    text(args, "query"),
-                                    text(args, "glob"),
-                                    integer(args, "maxResults", 40));
+                            codeToolService
+                                    .get()
+                                    .searchCode(
+                                            text(args, "query"),
+                                            text(args, "glob"),
+                                            integer(args, "maxResults", 40));
                     case "readFile" ->
-                            codeToolService.get().readFile(
-                                    text(args, "path"),
-                                    boxedInt(args, "startLine"),
-                                    boxedInt(args, "endLine"));
+                            codeToolService
+                                    .get()
+                                    .readFile(
+                                            text(args, "path"),
+                                            boxedInt(args, "startLine"),
+                                            boxedInt(args, "endLine"));
                     case "listRepoTree" ->
-                            codeToolService.get().listRepoTree(
-                                    fallback(text(args, "path"), "."), integer(args, "depth", 3));
+                            codeToolService
+                                    .get()
+                                    .listRepoTree(
+                                            fallback(text(args, "path"), "."),
+                                            integer(args, "depth", 3));
                     case "analyzePom" ->
-                            codeToolService.get().analyzePom(fallback(text(args, "path"), "pom.xml"));
+                            codeToolService
+                                    .get()
+                                    .analyzePom(fallback(text(args, "path"), "pom.xml"));
                     case "runSkill" ->
                             executeDynamicSkill(
                                     text(args, "name"), text(args, "params"), argsJson(args));
