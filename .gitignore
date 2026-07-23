@@ -45,6 +45,7 @@ login-brand-icon*.png
 desktop/node_modules/
 desktop/dist/
 desktop/release/
+desktop/release-dev/
 desktop/backend-jre/
 
 # Local service

@@ -1,4 +1,4 @@
-# Java AI Agent MVP (Beta Delivery Baseline)
+# AI Agent Knowledge Desk (Beta Delivery Baseline)
 
 This repo delivers a runnable Beta stack:
 - `backend`: Spring Boot API (JWT auth, sessions, SSE chat, system readiness/models API)
@@ -6,7 +6,7 @@ This repo delivers a runnable Beta stack:
 - `ts-cli`: TypeScript + React (Ink) terminal client
 - `docker-compose`: single-host backend stack with PostgreSQL, Redis, Kafka, Milvus, Python parsing service, and monitoring
 
-## AI + Java Dev Coach MVP
+## AI + Java Dev Coach（Beta 模块）
 
 The product now includes a first-pass "AI + Java development cockpit" for students and Java AI developers:
 
@@ -39,7 +39,7 @@ Run the local release gate before starting a deployment:
 ./scripts/release-check.sh dev
 ```
 
-For `prod`, create `env/prod.env` with real secrets first. Production deploy/rollback refuses to use `env/prod.env.example`.
+For the server deployment gate, create `env/prod.env` with real secrets first. Production deploy/rollback refuses to use `env/prod.env.example`. This command is not a substitute for the signed macOS installer gate below.
 
 ```bash
 ./scripts/release-check.sh prod
@@ -52,7 +52,7 @@ Then deploy:
 ```
 `deploy.sh` runs `scripts/check-consistency.sh` before building so API path drift is caught early. When `SMOKE_USE_OPENAI_MOCK=true`, it also overrides backend OpenAI endpoint to the local mock URL.
 
-CI runs the same `scripts/release-check.sh dev` gate, so pull requests and local release checks fail on the same class of runtime dependency audit, build, desktop, Compose, and config regressions.
+CI runs the same `scripts/release-check.sh dev` gate, so pull requests and local release checks fail on the same class of production/full dependency audit, build, desktop, Compose, and config regressions.
 Additionally, the GitHub Actions CI pipeline enforces the following code quality and safety gates:
 - **JaCoCo Coverage**: Enforces minimum line and branch coverage requirements.
 - **Spotless Formatting**: Fails the build if Java code is not formatted according to the project style guidelines.
@@ -65,9 +65,9 @@ To include Electron directory packaging in the local gate:
 RELEASE_CHECK_PACKAGE_DESKTOP=true ./scripts/release-check.sh dev
 ```
 
-Desktop packaging requires Node.js 18-22. The packaged app is checked for `app.asar`, embedded `backend-jre`, `ts-cli`, `local-service`, and accidental build-time dependencies.
+Desktop packaging requires Node.js 22 (`.nvmrc` pins the release line). The packaged app is checked for `app.asar`, embedded `backend-jre`, `ts-cli`, `local-service`, and accidental build-time dependencies.
 
-To generate and verify the current macOS architecture distributables (`.dmg` and `.zip`):
+To generate an unsigned macOS packaging diagnostic (`.dmg` and `.zip`):
 
 ```bash
 RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true ./scripts/release-check.sh dev
@@ -77,14 +77,25 @@ This also writes release evidence under `desktop/release/`:
 - `release-manifest.json`: version, git commit, artifact sizes/checksums, and macOS app trust status
 - `SHA256SUMS`: publishable SHA-256 checksums for generated installers
 
-Local unsigned builds only emit signing/Gatekeeper warnings. For a real macOS release, enforce trust checks explicitly:
+This diagnostic must not be published. A real macOS release requires an exact version tag, a clean source tree, GitHub Packages access, and the signing/notarization environment variables. Use the canonical gate (or `desktop/scripts/build-all.sh --release`, which delegates to it):
 
 ```bash
-RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true \
-RELEASE_CHECK_REQUIRE_MAC_SIGNING=true \
-RELEASE_CHECK_REQUIRE_MAC_GATEKEEPER=true \
-./scripts/release-check.sh prod
+GITHUB_ACTOR=<github-user> GITHUB_TOKEN=<packages-read-token> \
+CSC_LINK=<base64-p12-or-path> CSC_KEY_PASSWORD=<certificate-password> \
+APPLE_ID=<apple-id> APPLE_APP_SPECIFIC_PASSWORD=<app-password> \
+APPLE_TEAM_ID=<team-id> \
+./scripts/release-check-macos.sh
 ```
+
+### macOS Beta candidate workflow
+
+The `macOS Release Candidate` GitHub Actions workflow builds only a signed Apple Silicon beta from an exact `v<desktop-version>` tag. It first validates the server Compose configuration, then runs Python tests, backend formatting/tests, all desktop/CLI builds, signing, notarization, Gatekeeper validation, and checksum/manifest checks before creating a **draft prerelease**.
+
+Before its first run, create the GitHub `release` Environment and add `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`. Require an independent Environment reviewer and restrict deployments to `v*` tags; also protect creation, update, and deletion of `v*` tags with an active tag ruleset. The workflow fails closed when any required value is absent, and a maintainer must review the draft before publishing it.
+
+The packaged beta deliberately excludes legacy developer tooling, including Computer Use, even if `AI_AGENT_ENABLE_LEGACY_DEVTOOLS=1` is supplied at runtime. That capability remains source-checkout-only until its approval, window allowlist, and screenshot privacy controls are production-ready.
+
+See [the macOS beta release checklist](docs/release/macos-beta.md) for the required GitHub protection, local verification, tag, review, and rollback steps.
 
 To regenerate evidence for existing artifacts without rebuilding:
 
@@ -92,13 +103,15 @@ To regenerate evidence for existing artifacts without rebuilding:
 ./scripts/release-manifest.sh
 ```
 
-To run the release gate against existing distributables without rebuilding DMG/ZIP:
+To run a **local dev diagnostic** against existing distributables without rebuilding DMG/ZIP:
 
 ```bash
 RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true \
 RELEASE_CHECK_REUSE_DESKTOP_DISTRIBUTABLE=true \
 ./scripts/release-check.sh dev
 ```
+
+This reuse mode is deliberately rejected for tag, signing, Gatekeeper, and the canonical macOS release gate so a stale installer can never be treated as a release candidate.
 
 ### 3) Smoke test
 ```bash

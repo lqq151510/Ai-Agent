@@ -1,6 +1,6 @@
 {
   "name": "ai-agent-desktop",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
   "private": true,
   "description": "AI Agent Desktop Client for Mac, Windows and Linux",
   "author": "AI Agent Team",
@@ -32,9 +32,10 @@
     "typescript": "^5.5.4"
   },
   "overrides": {
-    "node-gyp": "^10.3.1"
+    "node-gyp": "^12.2.0",
+    "fast-uri": "3.1.4"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.12.0 <23"
   }
 }

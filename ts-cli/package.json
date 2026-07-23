@@ -1,6 +1,6 @@
 {
   "name": "agent-cli",
-  "version": "1.0.0",
+  "version": "0.1.0-beta.1",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -36,5 +36,10 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "esbuild": "0.28.1",
+    "linkify-it": "5.0.2",
+    "shell-quote": "1.10.0"
   }
 }

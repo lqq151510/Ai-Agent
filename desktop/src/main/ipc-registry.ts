@@ -39,7 +39,9 @@ export class IpcRegistry {
     private setApprovalMode: (mode: ApprovalMode) => void,
     private getApprovalMode: () => ApprovalMode,
   ) {
-    this.isLegacyEnabled = process.env.AI_AGENT_ENABLE_LEGACY_DEVTOOLS === '1';
+    // Keep this in lockstep with the bootstrap guard: raw developer IPC is
+    // intentionally unavailable from a packaged release.
+    this.isLegacyEnabled = !app.isPackaged && process.env.AI_AGENT_ENABLE_LEGACY_DEVTOOLS === '1';
   }
 
   public setupIpc() {

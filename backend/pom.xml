@@ -11,7 +11,7 @@
 
     <groupId>com.agent</groupId>
     <artifactId>backend</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0-beta.1</version>
     <name>ai-agent-backend</name>
 
     <properties>
@@ -28,7 +28,17 @@
         <postgresql.version>42.7.11</postgresql.version>
         <assertj.version>3.27.7</assertj.version>
         <spring-kafka.version>3.3.16</spring-kafka.version>
+        <!-- Latest FlexAgent version published to GitHub Packages. -->
+        <flexagent.version>1.2.0</flexagent.version>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages - FlexAgent</name>
+            <url>https://maven.pkg.github.com/lqq151510/flexagent</url>
+        </repository>
+    </repositories>
 
     <dependencyManagement>
         <dependencies>
@@ -301,16 +311,15 @@
         </dependency>
 
 
-        <!-- FlexAgent -->
-        <dependency>
-            <groupId>org.flexagent</groupId>
-            <artifactId>flexagent-spring-boot-starter</artifactId>
-            <version>1.5.0</version>
-        </dependency>
+        <!--
+            FlexAgent is consumed from GitHub Packages. The Spring starter is intentionally
+            omitted: AgentConfiguration creates the runtime explicitly, and the starter
+            would pull an older Spring Boot auto-configuration layer into this application.
+        -->
         <dependency>
             <groupId>org.flexagent</groupId>
             <artifactId>flexagent-langchain4j</artifactId>
-            <version>1.5.0</version>
+            <version>${flexagent.version}</version>
         </dependency>
 
         <dependency>
@@ -327,7 +336,7 @@
         <dependency>
             <groupId>com.agent</groupId>
             <artifactId>bug-sentinel-starter</artifactId>
-            <version>0.1.0-SNAPSHOT</version>
+            <version>0.1.0-beta.1</version>
         </dependency>
 
     </dependencies>

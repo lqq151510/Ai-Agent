@@ -42,7 +42,7 @@ const rootDir = process.env.ROOT_DIR;
 const releaseDir = process.env.RELEASE_DIR;
 const manifestFile = process.env.MANIFEST_FILE;
 const checksumFile = process.env.CHECKSUM_FILE;
-const artifactPattern = /(\.dmg|\.zip|\.exe|\.appimage|\.deb|\.blockmap)$/i;
+const artifactPattern = /\.(dmg|zip|exe|appimage|deb)$/i;
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -98,7 +98,7 @@ function collectArtifacts() {
       const stat = fs.statSync(absolutePath);
       return {
         fileName: entry.name,
-        path: toRelative(absolutePath),
+        path: entry.name,
         sizeBytes: stat.size,
         sha256: sha256(absolutePath),
         modifiedAt: stat.mtime.toISOString(),
@@ -189,7 +189,7 @@ const manifest = {
   applications: collectMacApps(),
 };
 
-const checksumLines = artifacts.map((artifact) => `${artifact.sha256}  ${artifact.path}`);
+const checksumLines = artifacts.map((artifact) => `${artifact.sha256}  ${artifact.fileName}`);
 
 fs.writeFileSync(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
 fs.writeFileSync(checksumFile, `${checksumLines.join('\n')}\n`);

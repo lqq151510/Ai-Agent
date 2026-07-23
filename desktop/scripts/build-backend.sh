@@ -5,21 +5,32 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OUTPUT_DIR="$SCRIPT_DIR/../backend-jre"
 BACKEND_MVN_ARGS="${DESKTOP_BACKEND_MVN_ARGS:-}"
+MAVEN_SETTINGS_FILE="${DESKTOP_BACKEND_MAVEN_SETTINGS_FILE:-$PROJECT_ROOT/.mvn/settings.xml}"
 
 echo "=== Building backend JAR (desktop profile) ==="
 
-cd "$PROJECT_ROOT/backend"
+if [[ ! -f "$MAVEN_SETTINGS_FILE" ]]; then
+    echo "ERROR: Maven settings file not found: $MAVEN_SETTINGS_FILE" >&2
+    exit 1
+fi
+
+cd "$PROJECT_ROOT"
 # shellcheck disable=SC2086 # BACKEND_MVN_ARGS 需要按空格拆分为多个参数
-mvn package -Pdesktop -DskipTests -q ${BACKEND_MVN_ARGS}
+mvn --settings "$MAVEN_SETTINGS_FILE" -pl backend -am clean package -Pdesktop -DskipTests -q ${BACKEND_MVN_ARGS}
 
 mkdir -p "$OUTPUT_DIR"
-cp target/backend-0.1.0-SNAPSHOT.jar "$OUTPUT_DIR/backend.jar"
+BACKEND_JAR="$(find "$PROJECT_ROOT/backend/target" -maxdepth 1 -type f -name 'backend-*.jar' ! -name '*.original' -print -quit)"
+if [[ -z "$BACKEND_JAR" ]]; then
+    echo "ERROR: backend package did not produce a runnable JAR" >&2
+    exit 1
+fi
+cp "$BACKEND_JAR" "$OUTPUT_DIR/backend.jar"
 echo "Backend JAR copied to: $OUTPUT_DIR/backend.jar"
 rm -f "$OUTPUT_DIR/cli.jar"
 
 echo "=== Building TS CLI bundle ==="
 cd "$PROJECT_ROOT/ts-cli"
-npm ci
+npm ci --no-audit --no-fund
 npm run build
 rm -rf "$OUTPUT_DIR/ts-cli"
 mkdir -p "$OUTPUT_DIR/ts-cli"
@@ -30,7 +41,7 @@ echo "TS CLI copied to: $OUTPUT_DIR/ts-cli/dist/index.js"
 
 echo "=== Building Local Service bundle ==="
 cd "$PROJECT_ROOT/local-service"
-npm ci
+npm ci --no-audit --no-fund
 npm run build
 rm -rf "$OUTPUT_DIR/local-service"
 mkdir -p "$OUTPUT_DIR/local-service"

@@ -11,9 +11,6 @@
     <!-- 允许加载未签名的动态库（Electron 原生模块、JNA 等） -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
-    <!-- 允许通过 DYLD 环境变量加载库（调试/开发用，发布可按需关闭） -->
-    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
-    <true/>
     <!-- 后端服务需要出站网络访问（调用 LLM API、健康检查等） -->
     <key>com.apple.security.network.client</key>
     <true/>

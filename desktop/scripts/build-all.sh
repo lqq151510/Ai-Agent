@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================================
-# AI Agent Desktop - 全量构建脚本
+# AI Agent Desktop - 开发诊断构建脚本
 # ----------------------------------------------------------------------------
 # 用法：
 #   ./scripts/build-all.sh [--mac|--win|--linux] [--skip-backend] [--skip-renderer]
+#   ./scripts/build-all.sh --release [--mac]
 #
 # 功能：
 #   1. 检查构建依赖（node / java / maven / jlink）
@@ -13,12 +14,10 @@
 #   5. 编译 Electron 主进程（tsc）
 #   6. 调用 electron-builder 打包
 #
-# macOS 公证：
-#   当环境变量 APPLE_TEAM_ID 存在时启用公证；否则跳过公证并输出警告。
-#   可选环境变量：
-#     APPLE_ID            - Apple ID 邮箱（公证用）
-#     APPLE_APP_SPECIFIC_PASSWORD - 应用专用密码（公证用）
-#     APPLE_TEAM_ID       - 开发者团队 ID（公证用，必填以启用公证）
+# macOS 发行：
+#   默认路径只生成开发诊断产物，不能作为可交付安装包。
+#   --release 委托给仓库根目录的 scripts/release-check-macos.sh，强制
+#   签名、公证、Gatekeeper、精确 tag 和干净源码门禁。
 #
 # 其他环境变量：
 #   DESKTOP_SKIP_NPM_INSTALL=true  - 跳过 npm install
@@ -34,7 +33,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT_DIR="$DESKTOP_DIR/release"
+OUTPUT_DIR="${DESKTOP_DEV_OUTPUT_DIR:-$DESKTOP_DIR/release-dev/$(date +%Y%m%d-%H%M%S)}"
 
 SKIP_INSTALL="${DESKTOP_SKIP_NPM_INSTALL:-false}"
 WEB_API_BASE="${DESKTOP_VITE_API_BASE:-http://localhost:18080}"
@@ -42,6 +41,7 @@ BUILDER_ARGS="${DESKTOP_ELECTRON_BUILDER_ARGS:-}"
 SKIP_BACKEND="false"
 SKIP_RENDERER="false"
 TARGET_PLATFORM=""
+RELEASE_BUILD="false"
 
 # 颜色输出（如终端不支持会降级）
 if [[ -t 1 ]]; then
@@ -85,6 +85,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_RENDERER="true"
             shift
             ;;
+        --release)
+            RELEASE_BUILD="true"
+            shift
+            ;;
         --help|-h)
             sed -n '2,30p' "$0"
             exit 0
@@ -115,6 +119,19 @@ log_info "项目根目录: $PROJECT_ROOT"
 log_info "Desktop 目录: $DESKTOP_DIR"
 log_info "输出目录: $OUTPUT_DIR"
 
+if [[ "$RELEASE_BUILD" == "true" ]]; then
+    if [[ "$TARGET_PLATFORM" != "mac" ]]; then
+        log_error "--release 目前只支持 macOS；请使用 scripts/release-check-macos.sh。"
+        exit 1
+    fi
+    if [[ "$SKIP_BACKEND" == "true" || "$SKIP_RENDERER" == "true" ]]; then
+        log_error "正式发行不允许跳过 backend 或 renderer 构建。"
+        exit 1
+    fi
+    log_info "委托给正式 macOS 发行门禁。"
+    exec "$PROJECT_ROOT/scripts/release-check-macos.sh"
+fi
+
 # ----------------------------------------------------------------------------
 # 依赖检查
 # ----------------------------------------------------------------------------
@@ -130,12 +147,12 @@ check_dependency() {
 
 log_step "[1/6] 检查构建依赖"
 
-check_dependency "node" "请安装 Node.js 18+ (推荐 20 LTS): https://nodejs.org/"
+check_dependency "node" "请安装 Node.js 22.12+（小于 23）: https://nodejs.org/"
 check_dependency "npm" "请安装 npm (随 Node.js 一起提供)"
 
-NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
-if [[ "$NODE_MAJOR" -lt 18 ]]; then
-    log_error "Node.js 版本过低: $(node -v)，需要 18+。"
+read -r NODE_MAJOR NODE_MINOR < <(node -p "process.versions.node.split('.').slice(0, 2).join(' ')")
+if [[ "$NODE_MAJOR" -ne 22 || "$NODE_MINOR" -lt 12 ]]; then
+    log_error "Node.js 版本不受支持: $(node -v)，需要 >=22.12.0 <23。"
     exit 1
 fi
 log_ok "Node.js $(node -v)"
@@ -183,7 +200,7 @@ else
             return
         fi
         log_info "安装依赖: $target_dir"
-        (cd "$target_dir" && npm install --silent)
+        (cd "$target_dir" && npm ci --silent --no-audit --no-fund)
     }
 
     RENDERER_DIR="$DESKTOP_DIR/src/renderer"
@@ -211,7 +228,7 @@ install_deps_if_needed_desktop() {
         return
     fi
     log_info "安装 desktop 依赖"
-    (cd "$DESKTOP_DIR" && npm install --silent)
+    (cd "$DESKTOP_DIR" && npm ci --silent --no-audit --no-fund)
 }
 install_deps_if_needed_desktop
 
@@ -219,24 +236,11 @@ install_deps_if_needed_desktop
 log_ok "Electron 主进程编译完成"
 
 # ----------------------------------------------------------------------------
-# macOS 公证配置
+# macOS 开发诊断说明
 # ----------------------------------------------------------------------------
 setup_macos_notarization() {
-    if [[ -z "${APPLE_TEAM_ID:-}" ]]; then
-        log_warn "未设置环境变量 APPLE_TEAM_ID，将跳过公证。"
-        echo "  如需启用公证，请设置以下环境变量后重新构建："
-        echo "    export APPLE_ID=\"your-apple-id@example.com\""
-        echo "    export APPLE_APP_SPECIFIC_PASSWORD=\"xxxx-xxxx-xxxx-xxxx\""
-        echo "    export APPLE_TEAM_ID=\"XXXXXXXXXX\""
-        # 通过环境变量禁用 notarize（electron-builder 读取 CSC_*/APPLE_* 变量）
-        # electron-builder.yml 中 notarize.teamId 使用 ${APPLE_TEAM_ID} 占位，
-        # 当 APPLE_TEAM_ID 为空时，electron-builder 会跳过公证。
-        return
-    fi
-    log_ok "已检测到 APPLE_TEAM_ID，将启用公证: $APPLE_TEAM_ID"
-    if [[ -z "${APPLE_ID:-}" || -z "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]]; then
-        log_warn "APPLE_ID 或 APPLE_APP_SPECIFIC_PASSWORD 未设置，公证可能失败。"
-    fi
+    log_warn "这是开发诊断构建，不能作为签名/公证发行候选。"
+    echo "  正式 macOS 发行请使用: ./scripts/build-all.sh --release"
 }
 
 # ----------------------------------------------------------------------------
@@ -258,13 +262,12 @@ case "$TARGET_PLATFORM" in
         ;;
 esac
 
-# 清理旧产物
-rm -rf "$OUTPUT_DIR"
+# 每次开发构建使用新的输出目录，避免覆盖正式候选或既有证据。
 mkdir -p "$OUTPUT_DIR"
 
-log_info "执行: electron-builder $BUILDER_TARGET_FLAG $BUILDER_ARGS"
+log_info "执行: electron-builder $BUILDER_TARGET_FLAG -c.directories.output=$OUTPUT_DIR $BUILDER_ARGS"
 # shellcheck disable=SC2086 # BUILDER_ARGS 需要按空格拆分为多个参数
-(cd "$DESKTOP_DIR" && npx electron-builder $BUILDER_TARGET_FLAG $BUILDER_ARGS)
+(cd "$DESKTOP_DIR" && npx electron-builder $BUILDER_TARGET_FLAG -c.directories.output="$OUTPUT_DIR" $BUILDER_ARGS)
 
 # ----------------------------------------------------------------------------
 # 输出构建产物

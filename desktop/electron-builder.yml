@@ -5,8 +5,8 @@
 # - 输出目录使用 `release`（而非 `dist`），因为 `dist/` 下存放 tsc 编译
 #   产物（dist/main、dist/renderer），若将 electron-builder 输出设为 dist
 #   会在打包时清空该目录，导致编译产物丢失。`release/` 为独立目录，安全。
-# - macOS 公证通过环境变量 APPLE_TEAM_ID 启用，未设置时 build-all.sh 会
-#   跳过公证并输出警告。
+# - 默认 `build-all.sh` 输出仅用于开发诊断；正式 macOS 发行必须通过
+#   `scripts/release-check-macos.sh`，它强制签名、公证与交付物验证。
 # - 图标文件位于 resources/icons/codejoy-icon.*。
 # ============================================================================
 
@@ -56,10 +56,10 @@ mac:
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
-  # 公证：通过环境变量 APPLE_TEAM_ID 启用
-  # electron-builder 会读取 process.env.APPLE_TEAM_ID（需在构建脚本中导出）
-  notarize:
-    teamId: "${APPLE_TEAM_ID}"
+  # 正式发行由 scripts/release-check-macos.sh 强制签名与公证；
+  # 凭据只从 APPLE_ID、APPLE_APP_SPECIFIC_PASSWORD、APPLE_TEAM_ID 读取。
+  # electron-builder 26.x 的 notarize 配置是布尔值。
+  notarize: true
   artifactName: "${productName}-${version}-mac-${arch}.${ext}"
   # 扩展信息：注册到系统（可选）
   extendInfo:

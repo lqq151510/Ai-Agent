@@ -141,7 +141,10 @@ if (!gotTheLock) {
       const jarPath = getBackendJarPath();
       const secrets = ensureDesktopSecrets(dataDir);
 
-      const isLegacyEnabled = process.env.AI_AGENT_ENABLE_LEGACY_DEVTOOLS === '1';
+      // Legacy developer tools can only run from a source checkout. A signed
+      // distribution must never enable Computer Use or its raw automation IPC
+      // merely because a user-controlled environment variable is present.
+      const isLegacyEnabled = !app.isPackaged && process.env.AI_AGENT_ENABLE_LEGACY_DEVTOOLS === '1';
 
       backendManager = new BackendManager(jrePath, jarPath, dataDir, activePort, {
         startupTimeoutMs: getBackendStartupTimeoutMs(),

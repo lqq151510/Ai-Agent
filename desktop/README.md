@@ -71,7 +71,7 @@ npm run dev
 
 ## 打包命令
 
-### 一键构建（推荐）
+### 一键开发诊断构建
 
 ```bash
 cd desktop
@@ -86,7 +86,7 @@ cd desktop
 ./scripts/build-all.sh --linux
 ```
 
-脚本会自动完成：依赖检查 → 后端 JAR → JRE → TS CLI → Local Service → Renderer → tsc 编译 → electron-builder 打包。
+脚本会自动完成：依赖检查 → 后端 JAR → JRE → TS CLI → Local Service → Renderer → tsc 编译 → electron-builder 打包。它的默认输出是带时间戳的 `desktop/release-dev/`，仅用于本机诊断，不能作为发布候选。
 
 ### 分步构建
 
@@ -123,15 +123,17 @@ npm run dist:linux
 ./scripts/build-all.sh --mac --skip-renderer
 ```
 
-## macOS 公证配置
+## macOS 正式发行
 
-公证需要 Apple Developer 账号和以下环境变量：
+正式候选由仓库根目录的 `scripts/release-check-macos.sh` 或 GitHub Actions 工作流生成；两者都会强制精确 tag、干净源码、签名、公证、DMG/ZIP 完整性、Gatekeeper 和 stapler 验证。需要 Apple Developer 账号和以下环境变量：
 
 | 环境变量 | 说明 | 示例 |
 | --- | --- | --- |
 | `APPLE_ID` | Apple ID 邮箱 | `you@example.com` |
 | `APPLE_APP_SPECIFIC_PASSWORD` | 应用专用密码（非 Apple ID 密码） | `abcd-efgh-ijkl-mnop` |
 | `APPLE_TEAM_ID` | 开发者团队 ID（10 位） | `ABCDE12345` |
+| `CSC_LINK` | Developer ID Application `.p12` 的 base64 或安全路径 | `<p12>` |
+| `CSC_KEY_PASSWORD` | `.p12` 密码 | `<password>` |
 
 ### 获取应用专用密码
 
@@ -144,33 +146,36 @@ npm run dist:linux
 1. 访问 https://developer.apple.com/account
 2. 「Membership」页面查看 Team ID
 
-### 启用公证构建
+### 生成签名候选
 
 ```bash
 export APPLE_ID="you@example.com"
 export APPLE_APP_SPECIFIC_PASSWORD="abcd-efgh-ijkl-mnop"
 export APPLE_TEAM_ID="ABCDE12345"
+export CSC_LINK="<base64-p12-or-path>"
+export CSC_KEY_PASSWORD="<certificate-password>"
+export GITHUB_ACTOR="<github-user>"
+export GITHUB_TOKEN="<packages-read-token>"
 
-cd desktop
-./scripts/build-all.sh --mac
+cd ..
+./scripts/release-check-macos.sh
 ```
 
-> 若未设置 `APPLE_TEAM_ID`，脚本会跳过公证并输出警告，产物仍可使用但无法通过 Gatekeeper。
+> 缺少任一签名/公证变量时，正式门禁会失败；`build-all.sh --mac` 只生成开发诊断产物。`build-all.sh --release --mac` 是正式门禁的兼容入口。
 
 ## 构建产物路径
 
 ```
-desktop/release/
-├── AI Agent-0.1.0-mac-arm64.dmg      # macOS Apple Silicon 安装包
-├── AI Agent-0.1.0-mac-arm64.zip      # macOS Apple Silicon 免安装
-├── AI Agent-0.1.0-mac-x64.dmg        # macOS Intel 安装包
-├── AI Agent-0.1.0-mac-x64.zip        # macOS Intel 免安装
-├── AI Agent-0.1.0-win-x64.exe        # Windows 安装包
-├── AI Agent-0.1.0-linux-x64.AppImage # Linux 免安装
-└── AI Agent-0.1.0-linux-x64.deb      # Linux deb 包
+desktop/release/                       # 仅正式 macOS 候选使用
+├── AI Agent-0.1.0-beta.1-mac-arm64.dmg
+├── AI Agent-0.1.0-beta.1-mac-arm64.zip
+├── release-manifest.json
+└── SHA256SUMS
+
+desktop/release-dev/<timestamp>/       # build-all.sh 开发诊断输出
 ```
 
-生成 macOS DMG/ZIP 后，仓库根目录的发布门禁会自动产出发布证据：
+生成未签名的本地 macOS DMG/ZIP 诊断包后，可让仓库根目录门禁补充诊断证据：
 
 ```bash
 RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true ./scripts/release-check.sh dev
@@ -181,13 +186,14 @@ RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true ./scripts/release-check.sh dev
 - `desktop/release/release-manifest.json`：记录版本、Git commit、产物大小、SHA-256、`.app` 签名与 Gatekeeper 评估状态。
 - `desktop/release/SHA256SUMS`：可随安装包一起发布的校验和文件。
 
-本地未签名构建默认只给出 warning。正式 macOS 发布应开启强校验：
+正式 macOS 发布必须通过规范化门禁：
 
 ```bash
-RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true \
-RELEASE_CHECK_REQUIRE_MAC_SIGNING=true \
-RELEASE_CHECK_REQUIRE_MAC_GATEKEEPER=true \
-./scripts/release-check.sh prod
+GITHUB_ACTOR=<github-user> GITHUB_TOKEN=<packages-read-token> \
+CSC_LINK=<base64-p12-or-path> CSC_KEY_PASSWORD=<certificate-password> \
+APPLE_ID=<apple-id> APPLE_APP_SPECIFIC_PASSWORD=<app-password> \
+APPLE_TEAM_ID=<team-id> \
+../scripts/release-check-macos.sh
 ```
 
 如果只需要给已有产物补清单，不重新打包：
