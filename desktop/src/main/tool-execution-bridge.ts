@@ -515,8 +515,8 @@ export class ToolExecutionBridge {
     if (!ws) {
       throw new Error('No active workspace bound to validate path');
     }
-    
-    // Resolve absolute path (if file does not exist, realpathSync throws, 
+
+    // Resolve absolute path (if file does not exist, realpathSync throws,
     // but for writeFile it might not exist yet, so we resolve the dirname if file doesn't exist)
     let realTarget: string;
     try {

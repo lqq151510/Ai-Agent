@@ -65,7 +65,7 @@ export class IpcRegistry {
         };
         return this.cliManager.execute(getCliEntryPath(), args, localServiceEnv);
       });
-      
+
       ipcMain.on('cli:input', (_event, input: string) => {
         this.cliManager.sendInput(input);
       });
@@ -190,7 +190,7 @@ export class IpcRegistry {
       }
 
       const method = (payload.method || 'GET').toUpperCase();
-      
+
       // Whitelist filter
       if (!this.isKnowledgeApiAllowed(method, normalizedPath)) {
         throw new Error(`Knowledge API endpoint not allowed: ${method} ${normalizedPath}`);
@@ -854,7 +854,7 @@ export class IpcRegistry {
       '/api/v1/settings',
       '/api/v1/sessions'
     ];
-    
+
     // Ensure path starts with one of the allowed prefixes
     if (!allowedPrefixes.some(prefix => pathname.startsWith(prefix))) {
       return false;
@@ -966,7 +966,7 @@ export class IpcRegistry {
     } catch (e) {
       console.warn('Failed to write encrypted credentials', e);
     }
-    
+
     return credentials;
   }
 

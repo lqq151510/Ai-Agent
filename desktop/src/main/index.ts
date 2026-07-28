@@ -152,7 +152,7 @@ if (!gotTheLock) {
       });
       windowManager = new WindowManager();
       trayManager = new TrayManager(windowManager, backendManager);
-      
+
       if (isLegacyEnabled) {
         cliManager = new CliManager();
         ptyPool = new PtyPool();

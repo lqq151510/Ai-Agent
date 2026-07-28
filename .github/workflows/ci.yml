@@ -104,19 +104,19 @@ jobs:
           server-id: github
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
-          
+
       - name: Spotless Code Formatting Check
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mvn --settings .mvn/settings.xml -pl backend com.diffplug.spotless:spotless-maven-plugin:2.43.0:check
-        
+
       - name: JaCoCo Coverage Report
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mvn --settings .mvn/settings.xml -pl backend -am clean test jacoco:report
-        
+
   desktop-test:
     runs-on: ubuntu-latest
     steps:
