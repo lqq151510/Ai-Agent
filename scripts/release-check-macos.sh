@@ -12,6 +12,36 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   fail "macOS is required to build and verify a signed macOS release candidate"
 fi
 
+if [[ "$(uname -m)" != "arm64" ]]; then
+  fail "Apple Silicon (arm64) is required for the current macOS release candidate"
+fi
+
+require_jdk_21() {
+  if [[ -z "${JAVA_HOME:-}" ]]; then
+    if ! JAVA_HOME="$(/usr/libexec/java_home -v 21 2>/dev/null)"; then
+      fail "JDK 21 is required; set JAVA_HOME to a JDK 21 installation"
+    fi
+    export JAVA_HOME
+  fi
+
+  local java_bin="${JAVA_HOME}/bin/java"
+  local jlink_bin="${JAVA_HOME}/bin/jlink"
+  [[ -x "${java_bin}" ]] || fail "JAVA_HOME does not contain an executable java: ${java_bin}"
+  [[ -x "${jlink_bin}" ]] || fail "JAVA_HOME does not contain an executable jlink: ${jlink_bin}"
+
+  local java_version
+  local jlink_version
+  java_version="$("${java_bin}" -version 2>&1 | head -n1 | sed -n 's/.*version "\([0-9][0-9.]*\)".*/\1/p')"
+  jlink_version="$("${jlink_bin}" --version 2>&1 | head -n1)"
+  if [[ "${java_version}" != 21.* || "${jlink_version}" != 21.* ]]; then
+    fail "formal macOS release requires JAVA_HOME java and jlink from JDK 21; found java=${java_version:-unknown}, jlink=${jlink_version:-unknown}"
+  fi
+
+  export PATH="${JAVA_HOME}/bin:${PATH}"
+}
+
+require_jdk_21
+
 required_secrets=(
   CSC_LINK
   CSC_KEY_PASSWORD

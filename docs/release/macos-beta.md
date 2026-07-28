@@ -11,10 +11,10 @@
    - `APPLE_APP_SPECIFIC_PASSWORD`
    - `APPLE_TEAM_ID`
    同时设置至少一名 required reviewer（不允许发起人自行批准），并把 deployment branch/tag policy 限制为 `v*`。
-2. 为 `main` 配置 active branch ruleset：要求 pull request，并要求 `release-preflight`、`python-service-test`、`backend-quality`、`desktop-test` 全部通过。另建一个匹配 `v*` 的 active tag ruleset，只允许 release maintainer 创建、更新或删除 tag。
-3. tag 必须指向一个已合并、干净的提交。工作流与本地正式门禁都会验证 tag commit 是 `origin/main` 的祖先。
-4. 将 npm registry TLS 连通性恢复到可用状态。发行验证不接受跳过 `npm audit` 或跳过 `npm ci`。
-5. 确认 `lqq151510/flexagent` 的 GitHub Packages 允许本仓库 Actions 使用 `packages:read`；release runner 必须从远端解析该依赖，不能依赖本机 Maven 缓存。
+2. 为 `main` 配置 active branch ruleset：要求 pull request，并要求 `release-preflight`、`python-service-test`、`backend-quality`、`desktop-test` 全部通过。另建一个匹配 `v*` 的 active tag ruleset：只允许 release maintainer 创建 tag，创建后禁止更新或删除；发布期间不得配置能绕过该不可变性的 bypass。
+3. tag 必须指向一个已合并、干净的提交。工作流与本地正式门禁都会验证 tag commit 是 `origin/main` 的祖先；工作流会在创建 draft 前、创建后和下载验证结束前重新解析远端 tag（含 annotated tag 的 peeled commit），要求它始终等于本次候选构建的 commit。
+4. 保持 npm registry TLS 连通性可用。发行验证不接受跳过 `npm audit` 或跳过 `npm ci`。
+5. 确认 `lqq151510/flexagent` 的 GitHub Packages 允许本仓库 Actions 使用 `packages:read`，并在 package settings 中给 `Ai-Agent` workflow repository Read access。release runner 必须从远端解析该依赖，不能依赖本机 Maven 缓存；本地验证的 classic PAT 必须同时具备 `read:packages`（私有仓还需 `repo`）权限，不能直接复用缺少该 scope 的普通 `gh` 登录 token。
 
 ## 本地候选验证
 
@@ -48,9 +48,10 @@ APPLE_TEAM_ID=<team-id> \
 
 1. 确认 `./scripts/check-release-version.sh` 通过。
 2. 创建与 `desktop/package.json` 匹配的精确 tag，例如 `v0.1.0-beta.1`。
-3. 由 `macOS Release Candidate` 工作流构建、签名、公证并上传 draft prerelease。
-4. 在干净的 macOS Apple Silicon 设备上下载 draft 产物，确认启动、登录、会话、流式对话与嵌入式后端。
-5. 复核 `release-manifest.json` 的 commit、`SHA256SUMS`、codesign、Gatekeeper 和 stapler 结果，再手工发布 draft。
+3. 由 `macOS Release Candidate` 工作流构建、签名、公证并上传 draft prerelease。它会反复以远端 tag 的 peeled commit 确认候选身份，并核验 release 的 tag、draft/prerelease 状态、标题和完整资产集合；不依赖可能仅显示默认分支的 `targetCommitish` 字段。只要同 tag 的 release 已存在（包括 draft），工作流都会 fail-closed，不会自动覆盖资产；经人工核验后清理错误 draft，再重新触发。
+4. draft 创建后，工作流会从 GitHub Release 重新下载精确的 DMG、ZIP、`release-manifest.json` 和 `SHA256SUMS`，逐项比对本机刚生成候选的 SHA-256，再校验 checksum、manifest commit/资产名；随后挂载下载的 DMG，并验证其中 app 的 codesign、Gatekeeper、stapler 以及嵌入式 JRE 的 `java -version`。临时下载目录和 DMG 挂载点会在完成或失败时清理并安全 detach。
+5. 第 4 步是下载物完整性与 macOS 信任链验证，不代替真机 GUI smoke。仍须在干净的 macOS Apple Silicon 设备上从 draft 下载，确认启动、登录、会话、流式对话与嵌入式后端。
+6. GUI smoke 通过后，复核 draft 的 `release-manifest.json`、`SHA256SUMS` 与工作流记录，再由指定 release maintainer 手工发布 draft。工作流运行和下载验证期间，任何人不得通过网页或 API 发布 draft、替换资产或移动 tag；GitHub Release API 没有能与上传原子绑定的发布锁。
 
 ## Beta 范围与回滚
 

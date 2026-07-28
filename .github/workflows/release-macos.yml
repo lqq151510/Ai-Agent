@@ -308,7 +308,14 @@ jobs:
           }
           NODE
 
-          printf 'dmg_path=%s\nzip_path=%s\n' "${dmg_path}" "${zip_path}" >> "${GITHUB_OUTPUT}"
+          dmg_sha256="$(shasum -a 256 "${dmg_path}" | awk '{print $1}')"
+          zip_sha256="$(shasum -a 256 "${zip_path}" | awk '{print $1}')"
+          manifest_sha256="$(shasum -a 256 desktop/release/release-manifest.json | awk '{print $1}')"
+          checksums_sha256="$(shasum -a 256 desktop/release/SHA256SUMS | awk '{print $1}')"
+
+          printf 'dmg_path=%s\nzip_path=%s\nexpected_commit=%s\ndmg_sha256=%s\nzip_sha256=%s\nmanifest_sha256=%s\nchecksums_sha256=%s\n' \
+            "${dmg_path}" "${zip_path}" "${expected_commit}" "${dmg_sha256}" "${zip_sha256}" \
+            "${manifest_sha256}" "${checksums_sha256}" >> "${GITHUB_OUTPUT}"
 
       - name: Archive release candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -328,10 +335,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DMG_PATH: ${{ steps.release-assets.outputs.dmg_path }}
           ZIP_PATH: ${{ steps.release-assets.outputs.zip_path }}
+          EXPECTED_COMMIT: ${{ steps.release-assets.outputs.expected_commit }}
         run: |
           set -euo pipefail
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "::error::a GitHub release already exists for ${RELEASE_TAG}; review or remove the draft before retrying"
+          if [[ -z "${EXPECTED_COMMIT}" ]]; then
+            echo "::error::missing expected release commit"
+            exit 1
+          fi
+
+          if existing_release="$(gh release view "${RELEASE_TAG}" --json isDraft,tagName 2>&1)"; then
+            echo "${existing_release}" >&2
+            echo "::error::a GitHub release already exists for ${RELEASE_TAG}; refuse automatic retry so stale assets or a concurrently published draft cannot be replaced"
+            exit 1
+          elif [[ "${existing_release}" != *"release not found"* ]]; then
+            echo "${existing_release}" >&2
+            echo "::error::could not determine whether a GitHub release already exists for ${RELEASE_TAG}"
             exit 1
           fi
 
@@ -349,8 +367,350 @@ jobs:
             fi
           done
 
+          assert_remote_tag_commit() {
+            local remote_tag_ref="refs/tags/${RELEASE_TAG}"
+            local remote_tag_details
+            local remote_tag_commit
+            if ! remote_tag_details="$(git ls-remote origin "${remote_tag_ref}" "${remote_tag_ref}^{}")"; then
+              echo "::error::could not resolve remote release tag ${RELEASE_TAG}"
+              exit 1
+            fi
+            if [[ -z "${remote_tag_details}" ]]; then
+              echo "::error::remote release tag does not exist: ${RELEASE_TAG}"
+              exit 1
+            fi
+
+            # Prefer the peeled commit for an annotated tag; a lightweight tag
+            # resolves directly to its commit object.
+            if ! remote_tag_commit="$(printf '%s\n' "${remote_tag_details}" | awk -v tag_ref="${remote_tag_ref}" '
+              $2 == tag_ref { direct = $1 }
+              $2 == tag_ref "^{}" { peeled = $1 }
+              END {
+                if (peeled != "") {
+                  print peeled
+                } else if (direct != "") {
+                  print direct
+                } else {
+                  exit 1
+                }
+              }
+            ')"; then
+              echo "::error::could not resolve remote release tag commit: ${RELEASE_TAG}"
+              exit 1
+            fi
+            if [[ "${remote_tag_commit}" != "${EXPECTED_COMMIT}" ]]; then
+              echo "::error::remote release tag ${RELEASE_TAG} resolves to ${remote_tag_commit}, expected ${EXPECTED_COMMIT}"
+              exit 1
+            fi
+          }
+
+          assert_draft_release() {
+            local release_json
+            if ! release_json="$(gh release view "${RELEASE_TAG}" --json assets,isDraft,isPrerelease,name,tagName 2>&1)"; then
+              echo "${release_json}" >&2
+              echo "::error::could not load the draft release for ${RELEASE_TAG}"
+              exit 1
+            fi
+            RELEASE_TAG="${RELEASE_TAG}" EXPECTED_COMMIT="${EXPECTED_COMMIT}" \
+              EXPECTED_DMG="$(basename "${DMG_PATH}")" EXPECTED_ZIP="$(basename "${ZIP_PATH}")" \
+              RELEASE_JSON="${release_json}" node <<'NODE'
+          const release = JSON.parse(process.env.RELEASE_JSON);
+          if (!release.isDraft || !release.isPrerelease) {
+            throw new Error(`release ${process.env.RELEASE_TAG} must remain a draft prerelease during verification`);
+          }
+          if (release.tagName !== process.env.RELEASE_TAG) {
+            throw new Error(`release tag ${release.tagName} does not match ${process.env.RELEASE_TAG}`);
+          }
+          if (release.name !== `AI Agent ${process.env.RELEASE_TAG}`) {
+            throw new Error(`release title ${release.name} does not match the candidate tag`);
+          }
+          const expectedAssets = [
+            process.env.EXPECTED_DMG,
+            process.env.EXPECTED_ZIP,
+            'release-manifest.json',
+            'SHA256SUMS',
+          ].sort();
+          const actualAssets = release.assets.map((asset) => asset.name).sort();
+          if (JSON.stringify(actualAssets) !== JSON.stringify(expectedAssets)) {
+            throw new Error(`release assets do not exactly match the candidate: expected ${expectedAssets.join(', ')}, got ${actualAssets.join(', ')}`);
+          }
+          NODE
+          }
+
+          assert_remote_tag_commit
           gh release create "${RELEASE_TAG}" "${assets[@]}" \
+            --verify-tag \
             --draft \
             --prerelease \
             --title "AI Agent ${RELEASE_TAG}" \
             --generate-notes
+          assert_remote_tag_commit
+          assert_draft_release
+
+      - name: Re-download and verify draft release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DMG_PATH: ${{ steps.release-assets.outputs.dmg_path }}
+          ZIP_PATH: ${{ steps.release-assets.outputs.zip_path }}
+          EXPECTED_COMMIT: ${{ steps.release-assets.outputs.expected_commit }}
+          EXPECTED_DMG_SHA256: ${{ steps.release-assets.outputs.dmg_sha256 }}
+          EXPECTED_ZIP_SHA256: ${{ steps.release-assets.outputs.zip_sha256 }}
+          EXPECTED_MANIFEST_SHA256: ${{ steps.release-assets.outputs.manifest_sha256 }}
+          EXPECTED_CHECKSUMS_SHA256: ${{ steps.release-assets.outputs.checksums_sha256 }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${EXPECTED_COMMIT}" ]]; then
+            echo "::error::missing expected release commit"
+            exit 1
+          fi
+
+          for hash_name in EXPECTED_DMG_SHA256 EXPECTED_ZIP_SHA256 EXPECTED_MANIFEST_SHA256 EXPECTED_CHECKSUMS_SHA256; do
+            hash_value="${!hash_name:-}"
+            if [[ ! "${hash_value}" =~ ^[a-fA-F0-9]{64}$ ]]; then
+              echo "::error::missing or invalid ${hash_name}"
+              exit 1
+            fi
+          done
+
+          assert_remote_tag_commit() {
+            local remote_tag_ref="refs/tags/${RELEASE_TAG}"
+            local remote_tag_details
+            local remote_tag_commit
+            if ! remote_tag_details="$(git ls-remote origin "${remote_tag_ref}" "${remote_tag_ref}^{}")"; then
+              echo "::error::could not resolve remote release tag ${RELEASE_TAG}"
+              exit 1
+            fi
+            if [[ -z "${remote_tag_details}" ]]; then
+              echo "::error::remote release tag does not exist: ${RELEASE_TAG}"
+              exit 1
+            fi
+            if ! remote_tag_commit="$(printf '%s\n' "${remote_tag_details}" | awk -v tag_ref="${remote_tag_ref}" '
+              $2 == tag_ref { direct = $1 }
+              $2 == tag_ref "^{}" { peeled = $1 }
+              END {
+                if (peeled != "") {
+                  print peeled
+                } else if (direct != "") {
+                  print direct
+                } else {
+                  exit 1
+                }
+              }
+            ')"; then
+              echo "::error::could not resolve remote release tag commit: ${RELEASE_TAG}"
+              exit 1
+            fi
+            if [[ "${remote_tag_commit}" != "${EXPECTED_COMMIT}" ]]; then
+              echo "::error::remote release tag ${RELEASE_TAG} resolves to ${remote_tag_commit}, expected ${EXPECTED_COMMIT}"
+              exit 1
+            fi
+          }
+
+          assert_draft_release() {
+            local release_json
+            if ! release_json="$(gh release view "${RELEASE_TAG}" --json assets,isDraft,isPrerelease,name,tagName 2>&1)"; then
+              echo "${release_json}" >&2
+              echo "::error::could not load the draft release for ${RELEASE_TAG}"
+              exit 1
+            fi
+            RELEASE_TAG="${RELEASE_TAG}" EXPECTED_COMMIT="${EXPECTED_COMMIT}" \
+              EXPECTED_DMG="$(basename "${DMG_PATH}")" EXPECTED_ZIP="$(basename "${ZIP_PATH}")" \
+              RELEASE_JSON="${release_json}" node <<'NODE'
+          const release = JSON.parse(process.env.RELEASE_JSON);
+          if (!release.isDraft || !release.isPrerelease) {
+            throw new Error(`release ${process.env.RELEASE_TAG} must remain a draft prerelease during verification`);
+          }
+          if (release.tagName !== process.env.RELEASE_TAG) {
+            throw new Error(`release tag ${release.tagName} does not match ${process.env.RELEASE_TAG}`);
+          }
+          if (release.name !== `AI Agent ${process.env.RELEASE_TAG}`) {
+            throw new Error(`release title ${release.name} does not match the candidate tag`);
+          }
+          const expectedAssets = [
+            process.env.EXPECTED_DMG,
+            process.env.EXPECTED_ZIP,
+            'release-manifest.json',
+            'SHA256SUMS',
+          ].sort();
+          const actualAssets = release.assets.map((asset) => asset.name).sort();
+          if (JSON.stringify(actualAssets) !== JSON.stringify(expectedAssets)) {
+            throw new Error(`release assets do not exactly match the candidate: expected ${expectedAssets.join(', ')}, got ${actualAssets.join(', ')}`);
+          }
+          NODE
+          }
+
+          assert_remote_tag_commit
+          assert_draft_release
+
+          dmg_name="$(basename "${DMG_PATH}")"
+          zip_name="$(basename "${ZIP_PATH}")"
+          release_download_dir="$(mktemp -d "${RUNNER_TEMP}/release-download.XXXXXX")"
+          dmg_mount_dir=""
+          mounted_dmg=0
+
+          cleanup() {
+            local status="$?"
+            trap - EXIT
+
+            if [[ "${mounted_dmg}" -eq 1 ]]; then
+              if ! hdiutil detach "${dmg_mount_dir}" >/dev/null 2>&1; then
+                echo "::warning::could not detach downloaded DMG at ${dmg_mount_dir}; attempting forced detach" >&2
+                if ! hdiutil detach -force "${dmg_mount_dir}" >/dev/null 2>&1; then
+                  echo "::error::could not detach downloaded DMG at ${dmg_mount_dir}" >&2
+                  status=1
+                fi
+              fi
+            fi
+
+            rm -rf -- "${release_download_dir}"
+            if [[ -n "${dmg_mount_dir}" ]]; then
+              rm -rf -- "${dmg_mount_dir}"
+            fi
+            exit "${status}"
+          }
+          trap cleanup EXIT
+
+          dmg_mount_dir="$(mktemp -d "${RUNNER_TEMP}/release-dmg.XXXXXX")"
+          assets=(
+            "${dmg_name}"
+            "${zip_name}"
+            release-manifest.json
+            SHA256SUMS
+          )
+
+          download_command=(
+            gh release download "${RELEASE_TAG}"
+            --dir "${release_download_dir}"
+            --clobber
+          )
+          for asset in "${assets[@]}"; do
+            download_command+=(--pattern "${asset}")
+          done
+          "${download_command[@]}"
+          for asset in "${assets[@]}"; do
+            if [[ ! -f "${release_download_dir}/${asset}" ]]; then
+              echo "::error::draft release download is missing expected asset: ${asset}"
+              exit 1
+            fi
+          done
+
+          assert_downloaded_hash() {
+            local asset_name="$1"
+            local expected_hash="$2"
+            local actual_hash
+            actual_hash="$(shasum -a 256 "${release_download_dir}/${asset_name}" | awk '{print $1}')"
+            if [[ "${actual_hash}" != "${expected_hash}" ]]; then
+              echo "::error::downloaded ${asset_name} SHA-256 does not match the locally verified candidate"
+              exit 1
+            fi
+          }
+          assert_downloaded_hash "${dmg_name}" "${EXPECTED_DMG_SHA256}"
+          assert_downloaded_hash "${zip_name}" "${EXPECTED_ZIP_SHA256}"
+          assert_downloaded_hash release-manifest.json "${EXPECTED_MANIFEST_SHA256}"
+          assert_downloaded_hash SHA256SUMS "${EXPECTED_CHECKSUMS_SHA256}"
+
+          (
+            cd "${release_download_dir}"
+            shasum -a 256 -c SHA256SUMS
+          )
+
+          RELEASE_TAG="${RELEASE_TAG}" EXPECTED_COMMIT="${EXPECTED_COMMIT}" \
+            DOWNLOAD_DIR="${release_download_dir}" EXPECTED_DMG="${dmg_name}" EXPECTED_ZIP="${zip_name}" node <<'NODE'
+          const crypto = require('crypto');
+          const fs = require('fs');
+          const path = require('path');
+
+          const downloadDir = process.env.DOWNLOAD_DIR;
+          const expectedArtifactNames = [process.env.EXPECTED_DMG, process.env.EXPECTED_ZIP].sort();
+          const manifest = JSON.parse(fs.readFileSync(path.join(downloadDir, 'release-manifest.json'), 'utf8'));
+          const expectedTag = `v${manifest.version}`;
+          if (process.env.RELEASE_TAG !== expectedTag) {
+            throw new Error(`downloaded manifest version ${manifest.version} does not match ${process.env.RELEASE_TAG}`);
+          }
+          if (manifest.git?.commit !== process.env.EXPECTED_COMMIT) {
+            throw new Error(`downloaded manifest commit ${manifest.git?.commit} does not match ${process.env.EXPECTED_COMMIT}`);
+          }
+          if (manifest.git?.trackedDirty !== false) {
+            throw new Error('downloaded manifest reports a dirty tracked worktree');
+          }
+          if (!Array.isArray(manifest.artifacts)) {
+            throw new Error('downloaded manifest has no distributable artifacts');
+          }
+
+          const manifestArtifacts = manifest.artifacts
+            .map((artifact) => {
+              if (
+                artifact.path !== artifact.fileName
+                || artifact.fileName !== path.basename(artifact.fileName)
+                || !/^[a-f0-9]{64}$/i.test(artifact.sha256 ?? '')
+              ) {
+                throw new Error(`downloaded manifest artifact is invalid: ${JSON.stringify(artifact)}`);
+              }
+              return artifact;
+            })
+            .sort((left, right) => left.fileName.localeCompare(right.fileName));
+          const manifestArtifactNames = manifestArtifacts.map((artifact) => artifact.fileName);
+          if (
+            expectedArtifactNames.length !== manifestArtifactNames.length
+            || expectedArtifactNames.some((name, index) => name !== manifestArtifactNames[index])
+          ) {
+            throw new Error(
+              `downloaded manifest artifacts do not match release assets: expected ${expectedArtifactNames.join(', ')}, got ${manifestArtifactNames.join(', ')}`,
+            );
+          }
+
+          for (const artifact of manifestArtifacts) {
+            const artifactPath = path.join(downloadDir, artifact.fileName);
+            const actualSha256 = crypto.createHash('sha256').update(fs.readFileSync(artifactPath)).digest('hex');
+            if (actualSha256 !== artifact.sha256) {
+              throw new Error(`downloaded ${artifact.fileName} SHA-256 does not match release manifest`);
+            }
+          }
+          NODE
+
+          downloaded_dmg="${release_download_dir}/${dmg_name}"
+          hdiutil verify "${downloaded_dmg}"
+          hdiutil attach "${downloaded_dmg}" -readonly -nobrowse -mountpoint "${dmg_mount_dir}" >/dev/null
+          mounted_dmg=1
+
+          mounted_apps=()
+          while IFS= read -r mounted_app; do
+            mounted_apps+=("${mounted_app}")
+          done < <(find "${dmg_mount_dir}" -maxdepth 1 -type d -name '*.app' -print)
+          if [[ ${#mounted_apps[@]} -ne 1 ]]; then
+            printf '%s\n' "${mounted_apps[@]}" >&2
+            echo "::error::downloaded DMG must contain exactly one app bundle"
+            exit 1
+          fi
+          mounted_app="${mounted_apps[0]}"
+
+          codesign --verify --deep --strict --verbose=2 "${mounted_app}"
+          if ! gatekeeper_status="$(spctl --status 2>&1)"; then
+            echo "${gatekeeper_status}" >&2
+            echo "::error::could not determine whether Gatekeeper assessments are enabled"
+            exit 1
+          fi
+          if grep -qi "disabled" <<<"${gatekeeper_status}"; then
+            echo "::error::Gatekeeper assessments are disabled; downloaded-asset assessment is not release evidence"
+            exit 1
+          fi
+          spctl --assess --type execute --verbose=4 "${mounted_app}"
+          xcrun stapler validate "${mounted_app}"
+
+          embedded_java="${mounted_app}/Contents/Resources/backend-jre/jre/bin/java"
+          if [[ ! -x "${embedded_java}" ]]; then
+            echo "::error::downloaded app is missing executable embedded JRE: ${embedded_java}"
+            exit 1
+          fi
+          "${embedded_java}" -version
+
+          if ! hdiutil detach "${dmg_mount_dir}" >/dev/null; then
+            echo "::error::could not safely detach downloaded DMG at ${dmg_mount_dir}"
+            exit 1
+          fi
+          mounted_dmg=0
+          assert_remote_tag_commit
+          assert_draft_release
+          echo "::notice::Downloaded-asset verification does not replace a clean-device GUI smoke test."

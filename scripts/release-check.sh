@@ -208,6 +208,27 @@ run_in_with_timeout() {
   (cd "${dir}" && perl -e 'alarm shift @ARGV; exec @ARGV' "${timeout_seconds}" "$@")
 }
 
+verify_flexagent_package_access() {
+  require_cmd curl
+
+  local flexagent_version
+  flexagent_version="$(sed -n 's|.*<flexagent.version>\([^<][^<]*\)</flexagent.version>.*|\1|p' "${ROOT_DIR}/backend/pom.xml")"
+  if [[ -z "${flexagent_version}" || "${flexagent_version}" == *$'\n'* ]]; then
+    fail "could not determine the exact FlexAgent version from backend/pom.xml"
+  fi
+
+  local package_url="https://maven.pkg.github.com/lqq151510/flexagent/org/flexagent/flexagent-langchain4j/${flexagent_version}/flexagent-langchain4j-${flexagent_version}.pom"
+  local http_status
+  log "verifying GitHub Packages access for org.flexagent:flexagent-langchain4j:${flexagent_version}"
+  if ! http_status="$(curl --silent --show-error --location --connect-timeout 10 --max-time 30 \
+    --output /dev/null --write-out '%{http_code}' --user "${GITHUB_ACTOR}:${GITHUB_TOKEN}" "${package_url}")"; then
+    fail "could not reach the FlexAgent GitHub Package; check GitHub network connectivity and package access"
+  fi
+  if [[ "${http_status}" != "200" ]]; then
+    fail "FlexAgent GitHub Package returned HTTP ${http_status}; local tokens need read:packages, and Actions needs packages: read plus package access for this repository"
+  fi
+}
+
 resolve_env_file() {
   if [[ -f "${ENV_FILE}" ]]; then
     echo "${ENV_FILE}"
@@ -310,8 +331,11 @@ audit_npm_runtime_dependencies() {
     return
   fi
 
+  local desktop_dir="${ROOT_DIR}/desktop"
+  run_npm_audit_with_retry "${desktop_dir}" "production" --omit=dev
+  run_desktop_full_audit_with_policy "${desktop_dir}"
+
   local dirs=(
-    "${ROOT_DIR}/desktop"
     "${ROOT_DIR}/desktop/src/renderer"
     "${ROOT_DIR}/ts-cli"
     "${ROOT_DIR}/local-service"
@@ -321,6 +345,61 @@ audit_npm_runtime_dependencies() {
     run_npm_audit_with_retry "${dir}" "production" --omit=dev
     run_npm_audit_with_retry "${dir}" "full"
   done
+}
+
+run_desktop_full_audit_with_policy() {
+  local dir="$1"
+  local policy_script="${ROOT_DIR}/desktop/scripts/verify-npm-audit-policy.mjs"
+  local audit_report
+  audit_report="$(mktemp "${TMPDIR:-/tmp}/ai-agent-desktop-npm-audit.XXXXXX")" || fail "could not create temporary desktop npm audit report"
+
+  if [[ ! -f "${policy_script}" ]]; then
+    rm -f "${audit_report}"
+    fail "desktop full audit policy verifier is missing: $(rel_path "${policy_script}")"
+  fi
+
+  local attempt
+  for attempt in 1 2 3; do
+    local audit_exit=0
+    log "(cd $(rel_path "${dir}") && npm audit --audit-level=moderate --json) scope=full-policy attempt ${attempt}/3 timeout=${NPM_AUDIT_TIMEOUT_SECONDS}s"
+    if (
+      cd "${dir}"
+      if command -v timeout >/dev/null 2>&1; then
+        timeout "${NPM_AUDIT_TIMEOUT_SECONDS}" npm audit --audit-level=moderate --json > "${audit_report}"
+      elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "${NPM_AUDIT_TIMEOUT_SECONDS}" npm audit --audit-level=moderate --json > "${audit_report}"
+      else
+        perl -e 'alarm shift @ARGV; exec @ARGV' "${NPM_AUDIT_TIMEOUT_SECONDS}" npm audit --audit-level=moderate --json > "${audit_report}"
+      fi
+    ); then
+      audit_exit=0
+    else
+      audit_exit=$?
+    fi
+
+    if [[ "${audit_exit}" -eq 0 || "${audit_exit}" -eq 1 ]]; then
+      if node "${policy_script}" --audit-report "${audit_report}"; then
+        rm -f "${audit_report}"
+        return
+      else
+        local verifier_exit=$?
+        if [[ "${verifier_exit}" -eq 1 ]]; then
+          rm -f "${audit_report}"
+          fail "desktop full audit violated its versioned temporary exception policy"
+        fi
+        log "warning: desktop full audit did not produce a valid policy-verifiable report"
+      fi
+    else
+      log "warning: desktop full audit command exited ${audit_exit} before policy verification"
+    fi
+
+    if [[ "${attempt}" -lt 3 ]]; then
+      sleep "${attempt}"
+    fi
+  done
+
+  rm -f "${audit_report}"
+  fail "desktop full audit failed after 3 attempts"
 }
 
 run_npm_audit_with_retry() {
@@ -862,6 +941,7 @@ fi
 if [[ -z "${GITHUB_TOKEN:-}" || -z "${GITHUB_ACTOR:-}" ]]; then
   fail "GITHUB_ACTOR and GITHUB_TOKEN are required to resolve the FlexAgent GitHub Package in a clean release build"
 fi
+verify_flexagent_package_access
 
 check_release_source_identity
 run "${ROOT_DIR}/scripts/check-release-version.sh"
