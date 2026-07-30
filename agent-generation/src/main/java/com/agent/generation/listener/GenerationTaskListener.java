@@ -2,10 +2,12 @@ package com.agent.generation.listener;
 
 import com.agent.common.config.KafkaTopicConstants;
 import com.agent.common.event.AgentEvent;
-import dev.langchain4j.model.chat.StreamingChatLanguageModel;
-import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.model.output.Response;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.StreamingChatModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -18,9 +20,9 @@ public class GenerationTaskListener {
     private static final Logger log = LoggerFactory.getLogger(GenerationTaskListener.class);
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final StreamingChatLanguageModel streamingChatModel;
+    private final StreamingChatModel streamingChatModel;
 
-    public GenerationTaskListener(KafkaTemplate<String, Object> kafkaTemplate, StreamingChatLanguageModel streamingChatModel) {
+    public GenerationTaskListener(KafkaTemplate<String, Object> kafkaTemplate, StreamingChatModel streamingChatModel) {
         this.kafkaTemplate = kafkaTemplate;
         this.streamingChatModel = streamingChatModel;
     }
@@ -34,27 +36,38 @@ public class GenerationTaskListener {
         Object metadata = event.getMetadata();
         String context = metadata != null ? metadata.toString() : "";
 
-        String prompt = "You are a helpful AI assistant. Use the following context to answer the user's query.\n\nContext:\n" + context + "\n\nQuery:\n" + query;
+        String prompt = """
+                You are a helpful AI assistant. Use the following context to answer the user's query.
+
+                Context:
+                """ + context + """
+
+
+                Query:
+                """ + query;
         if (context.isEmpty()) {
             prompt = query;
         }
 
-        streamingChatModel.generate(prompt, new StreamingResponseHandler<AiMessage>() {
+        ChatRequest chatRequest = ChatRequest.builder().messages(UserMessage.from(prompt)).build();
+        streamingChatModel.chat(chatRequest, new StreamingChatResponseHandler() {
             @Override
-            public void onNext(String token) {
+            public void onPartialResponse(String partialResponse) {
                 AgentEvent chunkEvent = AgentEvent.builder()
                         .taskId(taskId)
                         .type("CHUNK")
                         .sourceAgent("GENERATION")
-                        .content(token)
+                        .content(partialResponse)
                         .build();
                 kafkaTemplate.send(KafkaTopicConstants.TOPIC_SSE_EVENT, taskId, chunkEvent);
             }
 
             @Override
-            public void onComplete(Response<AiMessage> response) {
+            public void onCompleteResponse(ChatResponse completeResponse) {
                 log.info("Generation completed for taskId: {}", taskId);
-                
+
+                AiMessage aiMessage = completeResponse.aiMessage();
+
                 // Notify frontend: Generation finished
                 AgentEvent doneEvent = AgentEvent.builder()
                         .taskId(taskId)
@@ -69,7 +82,7 @@ public class GenerationTaskListener {
                         .taskId(taskId)
                         .type("START")
                         .sourceAgent("GENERATION")
-                        .content(response.content().text())
+                        .content(aiMessage.text())
                         .metadata(metadata)
                         .build();
                 kafkaTemplate.send(KafkaTopicConstants.TOPIC_REFLECTION, taskId, reflectionEvent);

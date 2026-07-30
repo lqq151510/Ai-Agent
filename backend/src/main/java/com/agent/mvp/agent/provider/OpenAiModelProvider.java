@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -224,7 +223,7 @@ public class OpenAiModelProvider implements ModelProvider {
                                                                             ? "{}"
                                                                             : call
                                                                                     .argumentsJson())))
-                            .collect(Collectors.toList());
+                            .toList();
             map.put("tool_calls", toolCalls);
         }
         return map;

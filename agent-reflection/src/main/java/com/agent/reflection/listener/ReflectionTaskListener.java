@@ -2,7 +2,7 @@ package com.agent.reflection.listener;
 
 import com.agent.common.config.KafkaTopicConstants;
 import com.agent.common.event.AgentEvent;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.input.PromptTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +18,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ReflectionTaskListener {
 
-    private final ChatLanguageModel chatLanguageModel;
+    private final ChatModel chatModel;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @KafkaListener(topics = KafkaTopicConstants.TOPIC_REFLECTION, groupId = "agent-reflection-group")
@@ -40,15 +40,20 @@ public class ReflectionTaskListener {
             }
 
             // Verify with LLM
-            String promptString = "You are a helpful assistant. Verify if the provided answer is grounded in the provided context and has no hallucinations.\n" +
-                    "Context:\n{{context}}\n\n" +
-                    "Answer:\n{{answer}}\n\n" +
-                    "Is the answer fully grounded in the context without hallucinations? Reply with exactly 'YES' or 'NO'.";
+            String promptString = """
+                    You are a helpful assistant. Verify if the provided answer is grounded in the provided context and has no hallucinations.
+                    Context:
+                    {{context}}
+
+                    Answer:
+                    {{answer}}
+
+                    Is the answer fully grounded in the context without hallucinations? Reply with exactly 'YES' or 'NO'.""";
 
             PromptTemplate promptTemplate = PromptTemplate.from(promptString);
             String prompt = promptTemplate.apply(Map.of("context", context, "answer", answer)).text();
 
-            String response = chatLanguageModel.generate(prompt);
+            String response = chatModel.chat(prompt);
 
             boolean isGrounded = response != null && response.trim().toUpperCase().contains("YES");
 

@@ -18,6 +18,8 @@ public class AppProperties {
     private final RateLimit rateLimit = new RateLimit();
     private final StartupValidation startupValidation = new StartupValidation();
     private final PythonService pythonService = new PythonService();
+    private final VertexAi vertexAi = new VertexAi();
+    private final PgVector pgVector = new PgVector();
 
     public ModelProviderType getDefaultProvider() {
         return defaultProvider;
@@ -69,6 +71,14 @@ public class AppProperties {
 
     public PythonService getPythonService() {
         return pythonService;
+    }
+
+    public VertexAi getVertexAi() {
+        return vertexAi;
+    }
+
+    public PgVector getPgVector() {
+        return pgVector;
     }
 
     public String getDefaultModel(ModelProviderType provider) {
@@ -369,6 +379,86 @@ public class AppProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    /** Vertex AI 配置。 */
+    public static class VertexAi {
+        private String projectId = "";
+        private String location = "us-central1";
+        private String modelName = "gemini-2.5-pro";
+
+        public String getProjectId() {
+            return projectId;
+        }
+
+        public void setProjectId(String projectId) {
+            this.projectId = projectId;
+        }
+
+        public String getLocation() {
+            return location;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
+        }
+
+        public String getModelName() {
+            return modelName;
+        }
+
+        public void setModelName(String modelName) {
+            this.modelName = modelName;
+        }
+    }
+
+    /** PgVector 连接配置。 */
+    public static class PgVector {
+        private String host = "localhost";
+        private int port = 5432;
+        private String database = "ai_agent";
+        private String username = "postgres";
+        private String password = "change-me";
+
+        public String getHost() {
+            return host;
+        }
+
+        public void setHost(String host) {
+            this.host = host;
+        }
+
+        public int getPort() {
+            return port;
+        }
+
+        public void setPort(int port) {
+            this.port = port;
+        }
+
+        public String getDatabase() {
+            return database;
+        }
+
+        public void setDatabase(String database) {
+            this.database = database;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
         }
     }
 }

@@ -291,16 +291,13 @@ class AgentServiceTest {
                 new AgentService(
                         sessionService,
                         modelRoutingService,
-                        modelGateway,
                         toolOrchestrator,
                         toolAuditService,
                         appProperties,
                         new ObjectMapper(),
-                        ragMemoryService,
                         mock(com.agent.mvp.agent.tooling.ClientToolRegistry.class),
                         mock(com.agent.mvp.agent.service.FlexRuntimeFactory.class),
                         mock(com.agent.mvp.auth.service.UserService.class),
-                        mock(com.agent.mvp.agent.service.SemanticCacheService.class),
                         new com.agent.mvp.agent.service.AgentContextService(
                                 ragMemoryService, appProperties),
                         new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
@@ -309,7 +306,11 @@ class AgentServiceTest {
                                 new com.agent.mvp.agent.service.AgentContextService(
                                         ragMemoryService, appProperties)),
                         mock(com.agent.mvp.agent.service.ToolCallManager.class),
-                        mock(com.agent.mvp.modelsource.service.ModelSourceService.class));
+                        new com.agent.mvp.agent.service.ModelSourceResolver(
+                                mock(com.agent.mvp.modelsource.service.ModelSourceService.class)),
+                        new com.agent.mvp.agent.service.SemanticCacheWriter(
+                                mock(com.agent.mvp.agent.service.SemanticCacheService.class)),
+                        new com.agent.mvp.agent.service.DiagnosticsBuilder());
         final UUID userId = UUID.randomUUID();
         final ConversationSession session = new ConversationSession();
 

@@ -29,9 +29,10 @@ public class AgentToolOrchestrator {
                         List.of(
                                 new ToolSpec(
                                         "execute_cli_command",
-                                        "Run a bash command on the user's local machine via the CLI"
-                                                + " client. Use this to read files, run tests, list"
-                                                + " dirs, or edit code locally.",
+                                        """
+                                        Run a bash command on the user's local machine via the CLI \
+                                        client. Use this to read files, run tests, list \
+                                        dirs, or edit code locally.""",
                                         schema(
                                                 List.of("command"),
                                                 "command",
@@ -40,11 +41,12 @@ public class AgentToolOrchestrator {
                                                 type("string"))),
                                 new ToolSpec(
                                         "computer_use",
-                                        "Control the user's macOS desktop through the approved"
-                                            + " desktop client. Use only after the user asks for"
-                                            + " computer/app control. Supported actions:"
-                                            + " permissions, screenshot, click, type, keypress,"
-                                            + " scroll.",
+                                        """
+                                        Control the user's macOS desktop through the approved \
+                                        desktop client. Use only after the user asks for \
+                                        computer/app control. Supported actions: \
+                                        permissions, screenshot, click, type, keypress, \
+                                        scroll.""",
                                         schema(
                                                 List.of("action"),
                                                 "action",
@@ -78,8 +80,9 @@ public class AgentToolOrchestrator {
                                                 integerType(1, 100))),
                                 new ToolSpec(
                                         "readFile",
-                                        "Read a file from workspace by path and optional line"
-                                                + " range.",
+                                        """
+                                        Read a file from workspace by path and optional line \
+                                        range.""",
                                         schema(
                                                 List.of("path"),
                                                 "path",
@@ -103,10 +106,11 @@ public class AgentToolOrchestrator {
                                         schema(List.of(), "path", type("string"))),
                                 new ToolSpec(
                                         "runSkill",
-                                        "Execute a skill by name. Skills are reusable instruction"
-                                            + " bundles stored in .agents/skills/<name>/SKILL.md or"
-                                            + " ~/.codex/skills/<name>/SKILL.md. Returns the skill"
-                                            + " instructions which the model should follow.",
+                                        """
+                                        Execute a skill by name. Skills are reusable instruction \
+                                        bundles stored in .agents/skills/<name>/SKILL.md or \
+                                        ~/.codex/skills/<name>/SKILL.md. Returns the skill \
+                                        instructions which the model should follow.""",
                                         schema(
                                                 List.of("name"),
                                                 "name",

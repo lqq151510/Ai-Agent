@@ -15,7 +15,6 @@ import java.time.Instant;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -32,21 +31,6 @@ public class EmbeddingStoreProvider {
 
     private final AppProperties appProperties;
     private final JdbcTemplate jdbcTemplate;
-
-    @Value("${PG_HOST:localhost}")
-    private String pgHost;
-
-    @Value("${PG_PORT:5432}")
-    private int pgPort;
-
-    @Value("${PG_DATABASE:ai_agent}")
-    private String pgDatabase;
-
-    @Value("${PG_USERNAME:postgres}")
-    private String pgUsername;
-
-    @Value("${PG_PASSWORD:change-me}")
-    private String pgPassword;
 
     private EmbeddingModel embeddingModel;
     private EmbeddingStore<TextSegment> embeddingStore;
@@ -87,29 +71,44 @@ public class EmbeddingStoreProvider {
 
     @PostConstruct
     public void init() {
+        this.embeddingStore = createEmbeddingStore("engineering_memory", 384);
+        this.pgVectorAvailable = embeddingStore instanceof PgVectorEmbeddingStore;
+        this.ftsAvailable = initializeFtsIndex();
+    }
+
+    /**
+     * 创建一个新的 EmbeddingStore（独立的 PgVector 表 + InMemory 回退）。
+     *
+     * <p>复用本 Provider 的 PG 连接配置，按 {@code tableName} 和 {@code dimension} 建立独立的向量存储；
+     * 创建失败时回退到 {@link InMemoryEmbeddingStore}。
+     */
+    public EmbeddingStore<TextSegment> createEmbeddingStore(String tableName, int dimension) {
         try {
-            log.info("Initializing PgVectorEmbeddingStore with host: {}, port: {}", pgHost, pgPort);
-            this.embeddingStore =
+            AppProperties.PgVector pgVector = appProperties.getPgVector();
+            log.info(
+                    "Initializing PgVectorEmbeddingStore for table '{}' with host: {}, port: {}",
+                    tableName,
+                    pgVector.getHost(),
+                    pgVector.getPort());
+            EmbeddingStore<TextSegment> store =
                     PgVectorEmbeddingStore.builder()
-                            .host(pgHost)
-                            .port(pgPort)
-                            .database(pgDatabase)
-                            .user(pgUsername)
-                            .password(pgPassword)
-                            .table("engineering_memory")
-                            .dimension(384)
+                            .host(pgVector.getHost())
+                            .port(pgVector.getPort())
+                            .database(pgVector.getDatabase())
+                            .user(pgVector.getUsername())
+                            .password(pgVector.getPassword())
+                            .table(tableName)
+                            .dimension(dimension)
                             .build();
-            this.pgVectorAvailable = true;
-            this.ftsAvailable = initializeFtsIndex();
-            log.info("PgVectorEmbeddingStore initialized successfully.");
+            log.info("PgVectorEmbeddingStore for table '{}' initialized successfully.", tableName);
+            return store;
         } catch (Exception ex) {
             log.warn(
-                    "Failed to initialize PgVectorEmbeddingStore. Falling back to"
+                    "Failed to initialize PgVectorEmbeddingStore for table '{}'. Falling back to"
                             + " InMemoryEmbeddingStore. Error: {}",
+                    tableName,
                     ex.getMessage());
-            this.embeddingStore = new InMemoryEmbeddingStore<>();
-            this.pgVectorAvailable = false;
-            this.ftsAvailable = false;
+            return new InMemoryEmbeddingStore<>();
         }
     }
 

@@ -36,57 +36,54 @@ public class AgentService {
 
     private final SessionService sessionService;
     private final ModelRoutingService modelRoutingService;
-    private final ModelGateway modelGateway;
     private final AgentToolOrchestrator toolOrchestrator;
     private final ToolAuditService toolAuditService;
     private final ObjectMapper objectMapper;
     private final AppProperties appProperties;
-    private final RAGMemoryService ragMemoryService;
     private final ClientToolRegistry clientToolRegistry;
     private final FlexRuntimeFactory flexRuntimeFactory;
     private final UserService userService;
-    private final SemanticCacheService semanticCacheService;
     private final AgentContextService agentContextService;
     private final MeterRegistry meterRegistry;
     private final MessageHistoryProcessor messageHistoryProcessor;
     private final ToolCallManager toolCallManager;
-    private final com.agent.mvp.modelsource.service.ModelSourceService modelSourceService;
+    private final ModelSourceResolver modelSourceResolver;
+    private final SemanticCacheWriter semanticCacheWriter;
+    private final DiagnosticsBuilder diagnosticsBuilder;
 
     public AgentService(
             SessionService sessionService,
             ModelRoutingService modelRoutingService,
-            ModelGateway modelGateway,
             AgentToolOrchestrator toolOrchestrator,
             ToolAuditService toolAuditService,
             AppProperties appProperties,
             ObjectMapper objectMapper,
-            RAGMemoryService ragMemoryService,
             ClientToolRegistry clientToolRegistry,
             FlexRuntimeFactory flexRuntimeFactory,
             UserService userService,
-            SemanticCacheService semanticCacheService,
             AgentContextService agentContextService,
             MeterRegistry meterRegistry,
             MessageHistoryProcessor messageHistoryProcessor,
             ToolCallManager toolCallManager,
-            com.agent.mvp.modelsource.service.ModelSourceService modelSourceService) {
+            ModelSourceResolver modelSourceResolver,
+            SemanticCacheWriter semanticCacheWriter,
+            DiagnosticsBuilder diagnosticsBuilder) {
         this.sessionService = sessionService;
         this.modelRoutingService = modelRoutingService;
-        this.modelGateway = modelGateway;
         this.toolOrchestrator = toolOrchestrator;
         this.toolAuditService = toolAuditService;
         this.appProperties = appProperties;
         this.objectMapper = objectMapper;
-        this.ragMemoryService = ragMemoryService;
         this.clientToolRegistry = clientToolRegistry;
         this.flexRuntimeFactory = flexRuntimeFactory;
         this.userService = userService;
-        this.semanticCacheService = semanticCacheService;
         this.agentContextService = agentContextService;
         this.meterRegistry = meterRegistry;
         this.messageHistoryProcessor = messageHistoryProcessor;
         this.toolCallManager = toolCallManager;
-        this.modelSourceService = modelSourceService;
+        this.modelSourceResolver = modelSourceResolver;
+        this.semanticCacheWriter = semanticCacheWriter;
+        this.diagnosticsBuilder = diagnosticsBuilder;
     }
 
     public ChatResponse chat(UUID userId, ChatRequest request) {
@@ -143,14 +140,7 @@ public class AgentService {
                     resolved.provider().name(),
                     resolved.model());
             AgentExecutionDiagnostics execution =
-                    new AgentExecutionDiagnostics(
-                            maxContextTokens,
-                            maxToolSteps(),
-                            0,
-                            false,
-                            0,
-                            "completed_from_cache",
-                            null);
+                    diagnosticsBuilder.fromCache(maxContextTokens, maxToolSteps());
             return new ChatResponse(
                     session.getId(),
                     resolved.provider(),
@@ -167,16 +157,11 @@ public class AgentService {
                                 java.util.concurrent.CompletableFuture.completedFuture(
                                         "ERROR: execute_cli_command is only available via streaming"
                                                 + " chat (/api/v1/agent/chat/stream)");
-        String resolvedBaseUrl = null;
-        String resolvedApiKey = request.customApiKey();
-        if (request.modelSourceId() != null) {
-            com.agent.mvp.modelsource.entity.ModelSource modelSource =
-                    modelSourceService.requireOwnedSource(userId, request.modelSourceId());
-            resolvedBaseUrl = modelSource.getBaseUrl();
-            if (modelSource.getApiKey() != null && !modelSource.getApiKey().isBlank()) {
-                resolvedApiKey = modelSource.getApiKey();
-            }
-        }
+        ModelSourceResolver.ResolvedEndpoint resolvedEndpoint =
+                modelSourceResolver.resolve(
+                        userId, request.modelSourceId(), request.customApiKey());
+        String resolvedBaseUrl = resolvedEndpoint.baseUrl();
+        String resolvedApiKey = resolvedEndpoint.apiKey();
 
         AgentLoopResult loop =
                 executeLoop(
@@ -191,13 +176,7 @@ public class AgentService {
                         request.clientTools(),
                         rejectClientTool);
 
-        if (loop.reply() != null && !loop.reply().isBlank()) {
-            try {
-                semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
-            } catch (Exception ex) {
-                log.warn("Semantic cache write failed, ignoring", ex);
-            }
-        }
+        semanticCacheWriter.writeAsync(request.message(), loop.reply());
 
         return new ChatResponse(
                 session.getId(),
@@ -289,14 +268,7 @@ public class AgentService {
                 chunkConsumer.accept(cachedResponse);
             }
             AgentExecutionDiagnostics execution =
-                    new AgentExecutionDiagnostics(
-                            maxContextTokens,
-                            maxToolSteps(),
-                            0,
-                            false,
-                            0,
-                            "completed_from_cache",
-                            null);
+                    diagnosticsBuilder.fromCache(maxContextTokens, maxToolSteps());
             metaConsumer.accept(
                     new ChatStreamMeta(
                             session.getId(),
@@ -340,16 +312,11 @@ public class AgentService {
                             }
                         };
 
-        String resolvedBaseUrl = null;
-        String resolvedApiKey = request.customApiKey();
-        if (request.modelSourceId() != null) {
-            com.agent.mvp.modelsource.entity.ModelSource modelSource =
-                    modelSourceService.requireOwnedSource(userId, request.modelSourceId());
-            resolvedBaseUrl = modelSource.getBaseUrl();
-            if (modelSource.getApiKey() != null && !modelSource.getApiKey().isBlank()) {
-                resolvedApiKey = modelSource.getApiKey();
-            }
-        }
+        ModelSourceResolver.ResolvedEndpoint resolvedEndpoint =
+                modelSourceResolver.resolve(
+                        userId, request.modelSourceId(), request.customApiKey());
+        String resolvedBaseUrl = resolvedEndpoint.baseUrl();
+        String resolvedApiKey = resolvedEndpoint.apiKey();
 
         AgentLoopResult loop =
                 executeLoop(
@@ -364,13 +331,7 @@ public class AgentService {
                         request.clientTools(),
                         clientToolInvoker);
 
-        if (loop.reply() != null && !loop.reply().isBlank()) {
-            try {
-                semanticCacheService.cacheResponseAsync(request.message(), loop.reply());
-            } catch (Exception ex) {
-                log.warn("Semantic cache write failed, ignoring", ex);
-            }
-        }
+        semanticCacheWriter.writeAsync(request.message(), loop.reply());
 
         metaConsumer.accept(
                 new ChatStreamMeta(
@@ -561,7 +522,7 @@ public class AgentService {
                     userId, session.getId(), resolved.provider().name(), resolved.model(), traces);
         }
         AgentExecutionDiagnostics execution =
-                new AgentExecutionDiagnostics(
+                diagnosticsBuilder.completed(
                         maxContextTokens,
                         maxToolSteps,
                         historyWindow.historyMessagesUsed(),
@@ -573,8 +534,7 @@ public class AgentService {
     }
 
     private AgentExecutionDiagnostics initialExecutionDiagnostics(int maxContextTokens) {
-        return new AgentExecutionDiagnostics(
-                maxContextTokens, maxToolSteps(), 0, false, 0, "started", null);
+        return diagnosticsBuilder.started(maxContextTokens, maxToolSteps());
     }
 
     private void persistFinalAssistant(

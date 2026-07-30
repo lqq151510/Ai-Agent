@@ -11,7 +11,6 @@ import com.agent.mvp.agent.dto.ChatResponse;
 import com.agent.mvp.agent.dto.ResolvedModelConfig;
 import com.agent.mvp.agent.service.AgentService;
 import com.agent.mvp.agent.service.FlexRuntimeFactory;
-import com.agent.mvp.agent.service.ModelGateway;
 import com.agent.mvp.agent.service.ModelRoutingService;
 import com.agent.mvp.agent.service.RAGMemoryService;
 import com.agent.mvp.agent.tooling.AgentToolOrchestrator;
@@ -37,7 +36,6 @@ class FlexAgentIntegrationMockTest {
     void testAgentServiceWithFlexAgent() throws Exception {
         SessionService sessionService = mock(SessionService.class);
         ModelRoutingService modelRoutingService = mock(ModelRoutingService.class);
-        ModelGateway modelGateway = mock(ModelGateway.class);
         AgentToolOrchestrator toolOrchestrator = mock(AgentToolOrchestrator.class);
         ToolAuditService toolAuditService = mock(ToolAuditService.class);
         AppProperties appProperties = new AppProperties();
@@ -59,25 +57,35 @@ class FlexAgentIntegrationMockTest {
         com.agent.mvp.agent.service.ToolCallManager toolCallManager =
                 mock(com.agent.mvp.agent.service.ToolCallManager.class);
 
+        com.agent.mvp.modelsource.service.ModelSourceService modelSourceService =
+                mock(com.agent.mvp.modelsource.service.ModelSourceService.class);
+        com.agent.mvp.agent.service.SemanticCacheService semanticCacheService =
+                mock(com.agent.mvp.agent.service.SemanticCacheService.class);
+        com.agent.mvp.agent.service.ModelSourceResolver modelSourceResolver =
+                new com.agent.mvp.agent.service.ModelSourceResolver(modelSourceService);
+        com.agent.mvp.agent.service.SemanticCacheWriter semanticCacheWriter =
+                new com.agent.mvp.agent.service.SemanticCacheWriter(semanticCacheService);
+        com.agent.mvp.agent.service.DiagnosticsBuilder diagnosticsBuilder =
+                new com.agent.mvp.agent.service.DiagnosticsBuilder();
+
         AgentService service =
                 new AgentService(
                         sessionService,
                         modelRoutingService,
-                        modelGateway,
                         toolOrchestrator,
                         toolAuditService,
                         appProperties,
                         new ObjectMapper(),
-                        ragMemoryService,
                         clientToolRegistry,
                         flexRuntimeFactory,
                         mock(com.agent.mvp.auth.service.UserService.class),
-                        mock(com.agent.mvp.agent.service.SemanticCacheService.class),
                         agentContextService,
                         new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
                         messageHistoryProcessor,
                         toolCallManager,
-                        mock(com.agent.mvp.modelsource.service.ModelSourceService.class));
+                        modelSourceResolver,
+                        semanticCacheWriter,
+                        diagnosticsBuilder);
 
         UUID userId = UUID.randomUUID();
         ConversationSession session = new ConversationSession();

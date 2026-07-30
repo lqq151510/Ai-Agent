@@ -2,7 +2,7 @@ package com.agent.router.listener;
 
 import com.agent.common.config.KafkaTopicConstants;
 import com.agent.common.event.AgentEvent;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -21,11 +21,11 @@ public class TaskInputListener {
     private static final long LLM_TIMEOUT_SECONDS = 60L;
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final ChatLanguageModel chatLanguageModel; // DeepSeek
+    private final ChatModel chatModel; // DeepSeek
 
-    public TaskInputListener(KafkaTemplate<String, Object> kafkaTemplate, ChatLanguageModel chatLanguageModel) {
+    public TaskInputListener(KafkaTemplate<String, Object> kafkaTemplate, ChatModel chatModel) {
         this.kafkaTemplate = kafkaTemplate;
-        this.chatLanguageModel = chatLanguageModel;
+        this.chatModel = chatModel;
     }
 
     @KafkaListener(topics = KafkaTopicConstants.TOPIC_TASK_INPUT, groupId = "router-group")
@@ -44,14 +44,15 @@ public class TaskInputListener {
         kafkaTemplate.send(KafkaTopicConstants.TOPIC_SSE_EVENT, taskId, statusEvent);
 
         // 2. Use LLM to classify intent and generate plan (with 60s timeout to avoid blocking consumer thread)
-        String sysPrompt = "You are a Router Agent. Determine if the user's query requires querying the local knowledge base. "
-                + "If no, reply strictly with 'GENERAL_CHAT'. "
-                + "If yes, reply strictly with a JSON array representing the execution plan. Example: "
-                + "[{\"step\": 1, \"action\": \"search_milvus\", \"target\": \"query concepts\"}, {\"step\": 2, \"action\": \"search_mysql\", \"target\": \"metadata\"}]";
+        String sysPrompt = """
+                You are a Router Agent. Determine if the user's query requires querying the local knowledge base. \
+                If no, reply strictly with 'GENERAL_CHAT'. \
+                If yes, reply strictly with a JSON array representing the execution plan. Example: \
+                [{"step": 1, "action": "search_milvus", "target": "query concepts"}, {"step": 2, "action": "search_mysql", "target": "metadata"}]""";
         String classification;
         try {
             classification = CompletableFuture.supplyAsync(
-                            () -> chatLanguageModel.generate(sysPrompt + "\nUser Query: " + prompt))
+                            () -> chatModel.chat(sysPrompt + "\nUser Query: " + prompt))
                     .orTimeout(LLM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .join();
         } catch (CompletionException e) {

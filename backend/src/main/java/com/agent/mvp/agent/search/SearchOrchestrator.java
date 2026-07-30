@@ -7,7 +7,6 @@ import static com.agent.mvp.agent.search.SearchQueryUtils.normalizeQuery;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -86,7 +85,7 @@ public class SearchOrchestrator {
         List<SearchStrategy> fallbackStrategies =
                 getAvailableStrategies().stream()
                         .filter(strategy -> !selected.contains(strategy))
-                        .collect(Collectors.toList());
+                        .toList();
         if (fallbackStrategies.isEmpty()) {
             return results;
         }
@@ -138,7 +137,7 @@ public class SearchOrchestrator {
             return truncate(
                     groupedResults.get(0).stream()
                             .map(SearchResult::content)
-                            .collect(Collectors.toList()),
+                            .toList(),
                     maxResults);
         }
         return fusioner.fuse(groupedResults, maxResults);
@@ -154,11 +153,11 @@ public class SearchOrchestrator {
                         Comparator.comparingDouble((SearchStrategy s) -> s.getConfidence(query))
                                 .reversed())
                 .limit(maxStrategies)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private List<SearchStrategy> getAvailableStrategies() {
-        return strategies.stream().filter(SearchStrategy::isAvailable).collect(Collectors.toList());
+        return strategies.stream().filter(SearchStrategy::isAvailable).toList();
     }
 
     /**

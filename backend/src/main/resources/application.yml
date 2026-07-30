@@ -82,6 +82,16 @@ app:
   openai:
     base-url: ${OPENAI_BASE_URL:http://localhost:1234/v1}
     api-key: ${OPENAI_API_KEY:sk-placeholder}
+  vertexai:
+    project-id: ${VERTEX_AI_PROJECT_ID:}
+    location: ${VERTEX_AI_LOCATION:us-central1}
+    model-name: ${VERTEX_AI_MODEL_NAME:gemini-2.5-pro}
+  pg-vector:
+    host: ${PG_HOST:localhost}
+    port: ${PG_PORT:5432}
+    database: ${PG_DATABASE:ai_agent}
+    username: ${PG_USERNAME:postgres}
+    password: ${PG_PASSWORD:change-me}
   search:
     default-mode: ${SEARCH_DEFAULT_MODE:ADAPTIVE}
     confidence-threshold: ${SEARCH_CONFIDENCE_THRESHOLD:0.5}

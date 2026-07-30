@@ -45,11 +45,12 @@ public class CoderAgent {
                         List.of(
                                 ModelChatMessage.of(
                                         "system",
-                                        "You are an expert Coder Agent. Your job is to generate"
-                                            + " Java source code based on the provided plan. Please"
-                                            + " output the code. The generated code will be saved"
-                                            + " into an isolated sandbox directory for safety and"
-                                            + " rollback."),
+                                        """
+                                        You are an expert Coder Agent. Your job is to generate \
+                                        Java source code based on the provided plan. Please \
+                                        output the code. The generated code will be saved \
+                                        into an isolated sandbox directory for safety and \
+                                        rollback."""),
                                 ModelChatMessage.of("user", plan)),
                         null,
                         null,
