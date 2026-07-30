@@ -12,7 +12,7 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "*"
+        spring.json.trusted.packages: "com.agent.common.event"
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -23,5 +23,6 @@ langchain4j:
       base-url: https://api.deepseek.com/v1
       api-key: ${DEEPSEEK_API_KEY:demo}
       model-name: deepseek-chat
-      log-requests: true
-      log-responses: true
+      # 生产环境应关闭，避免记录含 API key 和用户对话内容的完整请求/响应
+      log-requests: false
+      log-responses: false

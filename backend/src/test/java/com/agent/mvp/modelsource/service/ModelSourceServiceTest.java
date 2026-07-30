@@ -67,7 +67,7 @@ class ModelSourceServiceTest {
 
         assertTrue(response.isDefault());
         assertEquals(targetId, profile.getDefaultModelSourceId());
-        verify(repository).updateById(eq(existingDefault));
+        verify(repository).clearDefaultByUserId(eq(userId), any(Instant.class));
         verify(repository).updateById(eq(target));
         verify(userProfileService).save(eq(profile));
     }

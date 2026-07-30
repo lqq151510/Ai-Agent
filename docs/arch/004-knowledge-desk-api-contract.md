@@ -63,6 +63,10 @@
 
 - `sourceType`：`web` | `markdown` | `pdf` | `snippet`
 - `status`：`inbox` | `processing` | `ready` | `failed` | `archived`
+- `sourceAsset.origin`：`picker` | `watched_folder`
+- `sourceAsset.availability`：`pending` | `available` | `missing`
+
+`sourceAsset` 是可选的受管原件安全元数据。它只包含 `id`、`originalFilename`、`mediaType`、`byteSize`、`origin`、`availability`；不会包含本机路径、受管库相对路径、存储键、文件内容或内容哈希。
 
 ### 3.4 任务流水
 
@@ -210,7 +214,7 @@
 
 返回可由本机保存为 JSON 的备份内容。该请求只读：如果当前用户尚无个人资料，响应使用默认的 `manual / local_first` 偏好，但不会因此创建记录。
 
-备份只包含知识条目、标签和非敏感偏好。它**不会**包含 API Key、登录/认证信息或模型源配置，并固定返回 `modelSourcesIncluded: false`。
+备份只包含知识条目、标签和非敏感偏好，以及可选的安全 `sourceAsset` 元数据。它**不会**包含 API Key、登录/认证信息、模型源配置、受管原件二进制、路径、存储键或内容哈希，并固定返回 `modelSourcesIncluded: false`。恢复的 `sourceAsset` 会生成新 ID 且固定标为 `missing`，因此不能伪造“原件可打开”。
 
 响应示例：
 
@@ -434,6 +438,8 @@
 
 - `file`：必填，上传的本地文档
 - `title`：可选，手动覆盖标题
+- `sourceAssetId`：可选；桌面主进程为已经安全写入受管原件库的文件生成的 UUID
+- `sourceAssetOrigin`：可选；与 `sourceAssetId` 配对，取值 `picker` 或 `watched_folder`。未传时默认 `picker`
 
 当前行为约定：
 
@@ -444,7 +450,8 @@
 - 会把 `sourceUri` 写成 `upload://<filename>`
 - 会复用现有 `MarkItDownService -> PythonParseClient` 解析链路
 - 如果用户 `organizeMode=auto`，导入后会继续执行整理
-- 服务端会基于上传的原始字节计算 SHA-256；同一用户重复上传相同字节会在解析前返回 `409`
+- 服务端会基于上传的原始字节重新计算 SHA-256 和字节数；同一用户重复上传相同字节会在解析前返回 `409`
+- 当传入 `sourceAssetId` 时，成功事务会建立 `sourceAsset` 元数据并返回它。后端不会保存或返回受管原件路径、存储键或二进制
 
 上传前可由桌面主进程调用 `POST /knowledge-items/import/preflight` 做无内容预检：
 
@@ -521,7 +528,15 @@ GET /knowledge-items?status=inbox&status=failed&sourceType=markdown&tag=rag&from
       ],
       "createdAt": "2026-06-25T10:00:00Z",
       "updatedAt": "2026-06-25T10:30:00Z",
-      "archivedAt": null
+      "archivedAt": null,
+      "sourceAsset": {
+        "id": "b14acff4-0a88-4fad-a0fd-574244ba1c8f",
+        "originalFilename": "transformer-notes.pdf",
+        "mediaType": "application/pdf",
+        "byteSize": 2048,
+        "origin": "picker",
+        "availability": "available"
+      }
     }
   ],
   "total": 1,

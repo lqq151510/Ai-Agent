@@ -109,6 +109,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('knowledge:preflight-local-file-batch'),
     commitLocalFileBatch: (payload: { batchId: string; candidateIds: string[] }) =>
       ipcRenderer.invoke('knowledge:commit-local-file-batch', payload),
+    listManagedSourceFolders: () =>
+      ipcRenderer.invoke('knowledge:list-managed-source-folders'),
+    addManagedSourceFolder: () =>
+      ipcRenderer.invoke('knowledge:add-managed-source-folder'),
+    setManagedSourceFolderEnabled: (payload: { folderId: string; enabled: boolean }) =>
+      ipcRenderer.invoke('knowledge:set-managed-source-folder-enabled', payload),
+    scanManagedSourceFolder: (payload: { folderId: string }) =>
+      ipcRenderer.invoke('knowledge:scan-managed-source-folder', payload),
+    removeManagedSourceFolder: (payload: { folderId: string }) =>
+      ipcRenderer.invoke('knowledge:remove-managed-source-folder', payload),
+    openManagedSourceAsset: (payload: { assetId: string; reveal?: boolean }) =>
+      ipcRenderer.invoke('knowledge:open-managed-source-asset', payload),
     saveBackup: (payload: { content: string; suggestedName: string }) =>
       ipcRenderer.invoke('knowledge:save-backup', payload),
     selectBackup: () => ipcRenderer.invoke('knowledge:select-backup'),

@@ -18,4 +18,5 @@ public record SettingsBackupKnowledgeItem(
         Instant createdAt,
         Instant updatedAt,
         Instant archivedAt,
+        SettingsBackupSourceAsset sourceAsset,
         List<UUID> tagIds) {}

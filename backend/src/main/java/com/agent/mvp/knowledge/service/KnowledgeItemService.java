@@ -12,6 +12,9 @@ import com.agent.mvp.ingestion.entity.IngestionJob;
 import com.agent.mvp.ingestion.service.IngestionJobService;
 import com.agent.mvp.knowledge.KnowledgeItemSourceType;
 import com.agent.mvp.knowledge.KnowledgeItemStatus;
+import com.agent.mvp.knowledge.KnowledgeSourceAssetAvailability;
+import com.agent.mvp.knowledge.KnowledgeSourceAssetOrigin;
+import com.agent.mvp.knowledge.SourceUriSanitizer;
 import com.agent.mvp.knowledge.dto.BatchOrganizeResponse;
 import com.agent.mvp.knowledge.dto.CreateTagRequest;
 import com.agent.mvp.knowledge.dto.DashboardRecentItemResponse;
@@ -24,15 +27,18 @@ import com.agent.mvp.knowledge.dto.ImportSnippetKnowledgeItemRequest;
 import com.agent.mvp.knowledge.dto.ImportWebKnowledgeItemRequest;
 import com.agent.mvp.knowledge.dto.KnowledgeItemPageResponse;
 import com.agent.mvp.knowledge.dto.KnowledgeItemResponse;
+import com.agent.mvp.knowledge.dto.KnowledgeSourceAssetResponse;
 import com.agent.mvp.knowledge.dto.TagResponse;
 import com.agent.mvp.knowledge.dto.UpdateKnowledgeItemRequest;
 import com.agent.mvp.knowledge.entity.KnowledgeItem;
 import com.agent.mvp.knowledge.entity.KnowledgeItemTag;
+import com.agent.mvp.knowledge.entity.KnowledgeSourceAsset;
 import com.agent.mvp.knowledge.entity.KnowledgeTag;
 import com.agent.mvp.knowledge.repo.KnowledgeItemRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemStatusCountView;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
+import com.agent.mvp.knowledge.repo.KnowledgeSourceAssetRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
 import com.agent.mvp.settings.OrganizeMode;
 import com.agent.mvp.settings.entity.UserProfile;
@@ -58,8 +64,16 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.regex.Pattern;
+import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -72,6 +86,33 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class KnowledgeItemService {
+    private static final Logger log = LoggerFactory.getLogger(KnowledgeItemService.class);
+
+    /**
+     * Bounded thread pool for organize operations. Limited to 3 threads to avoid overwhelming the
+     * LLM API while still allowing concurrent processing of batch organize requests.
+     */
+    private final ExecutorService organizeExecutor = Executors.newFixedThreadPool(
+            3,
+            r -> {
+                Thread t = new Thread(r, "knowledge-organize");
+                t.setDaemon(true);
+                return t;
+            });
+
+    @PreDestroy
+    void shutdownOrganizeExecutor() {
+        organizeExecutor.shutdown();
+        try {
+            if (!organizeExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                organizeExecutor.shutdownNow();
+            }
+        } catch (InterruptedException ex) {
+            organizeExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private static final String LIST_SUMMARY_SQL =
             "COALESCE(NULLIF(summary, ''), SUBSTRING(COALESCE(NULLIF(cleaned_content, ''),"
                     + " raw_content), 1, 280)) AS summary";
@@ -79,11 +120,16 @@ public class KnowledgeItemService {
             "to_tsvector('simple', COALESCE(title, '') || ' ' || COALESCE(summary, '') || ' ' || "
                     + "COALESCE(NULLIF(cleaned_content, ''), raw_content, ''))";
     private static final int MAX_IMPORT_PREFLIGHT_HASHES = 20;
+    private static final long MAX_SOURCE_ASSET_BYTES = 20L * 1024 * 1024;
     private static final Pattern SHA_256_HEX = Pattern.compile("^[0-9a-fA-F]{64}$");
     private static final String CONTENT_HASH_UNIQUE_CONSTRAINT =
             "uq_knowledge_items_user_content_hash";
+    private static final String SOURCE_ASSET_ITEM_UNIQUE_CONSTRAINT =
+            "uq_knowledge_source_assets_item";
+    private static final int MAX_SOURCE_ASSET_FILENAME_CHARS = 512;
 
     private final KnowledgeItemRepository knowledgeItemRepository;
+    private final KnowledgeSourceAssetRepository knowledgeSourceAssetRepository;
     private final KnowledgeTagRepository knowledgeTagRepository;
     private final KnowledgeItemTagRepository knowledgeItemTagRepository;
     private final IngestionJobService ingestionJobService;
@@ -97,6 +143,7 @@ public class KnowledgeItemService {
     @Autowired
     public KnowledgeItemService(
             KnowledgeItemRepository knowledgeItemRepository,
+            KnowledgeSourceAssetRepository knowledgeSourceAssetRepository,
             KnowledgeTagRepository knowledgeTagRepository,
             KnowledgeItemTagRepository knowledgeItemTagRepository,
             IngestionJobService ingestionJobService,
@@ -108,6 +155,7 @@ public class KnowledgeItemService {
             PlatformTransactionManager transactionManager) {
         this(
                 knowledgeItemRepository,
+                knowledgeSourceAssetRepository,
                 knowledgeTagRepository,
                 knowledgeItemTagRepository,
                 ingestionJobService,
@@ -130,6 +178,7 @@ public class KnowledgeItemService {
             ObjectMapper objectMapper) {
         this(
                 knowledgeItemRepository,
+                null,
                 knowledgeTagRepository,
                 knowledgeItemTagRepository,
                 ingestionJobService,
@@ -141,7 +190,31 @@ public class KnowledgeItemService {
                 null);
     }
 
-    KnowledgeItemService(
+    public KnowledgeItemService(
+            KnowledgeItemRepository knowledgeItemRepository,
+            KnowledgeSourceAssetRepository knowledgeSourceAssetRepository,
+            KnowledgeTagRepository knowledgeTagRepository,
+            KnowledgeItemTagRepository knowledgeItemTagRepository,
+            IngestionJobService ingestionJobService,
+            KnowledgeOrganizerService knowledgeOrganizerService,
+            MarkItDownService markItDownService,
+            UserProfileService userProfileService,
+            ObjectMapper objectMapper) {
+        this(
+                knowledgeItemRepository,
+                knowledgeSourceAssetRepository,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository,
+                ingestionJobService,
+                knowledgeOrganizerService,
+                markItDownService,
+                userProfileService,
+                objectMapper,
+                false,
+                null);
+    }
+
+    public KnowledgeItemService(
             KnowledgeItemRepository knowledgeItemRepository,
             KnowledgeTagRepository knowledgeTagRepository,
             KnowledgeItemTagRepository knowledgeItemTagRepository,
@@ -152,7 +225,34 @@ public class KnowledgeItemService {
             ObjectMapper objectMapper,
             boolean postgresFullTextSearch,
             TransactionTemplate transactionTemplate) {
+        this(
+                knowledgeItemRepository,
+                null,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository,
+                ingestionJobService,
+                knowledgeOrganizerService,
+                markItDownService,
+                userProfileService,
+                objectMapper,
+                postgresFullTextSearch,
+                transactionTemplate);
+    }
+
+    KnowledgeItemService(
+            KnowledgeItemRepository knowledgeItemRepository,
+            KnowledgeSourceAssetRepository knowledgeSourceAssetRepository,
+            KnowledgeTagRepository knowledgeTagRepository,
+            KnowledgeItemTagRepository knowledgeItemTagRepository,
+            IngestionJobService ingestionJobService,
+            KnowledgeOrganizerService knowledgeOrganizerService,
+            MarkItDownService markItDownService,
+            UserProfileService userProfileService,
+            ObjectMapper objectMapper,
+            boolean postgresFullTextSearch,
+            TransactionTemplate transactionTemplate) {
         this.knowledgeItemRepository = knowledgeItemRepository;
+        this.knowledgeSourceAssetRepository = knowledgeSourceAssetRepository;
         this.knowledgeTagRepository = knowledgeTagRepository;
         this.knowledgeItemTagRepository = knowledgeItemTagRepository;
         this.ingestionJobService = ingestionJobService;
@@ -171,15 +271,16 @@ public class KnowledgeItemService {
 
     public KnowledgeItemResponse importWeb(UUID userId, ImportWebKnowledgeItemRequest request) {
         UserProfile profile = userProfileService.getOrCreate(userId);
-        String resolvedTitle = fallbackTitle(request.title(), request.url());
+        String sourceUri = SourceUriSanitizer.sanitize(request.url());
+        String resolvedTitle = fallbackTitle(request.title(), SourceUriSanitizer.displayName(sourceUri));
         KnowledgeItem item =
                 createImportedItem(
                         userId,
                         KnowledgeItemSourceType.WEB.value(),
                         resolvedTitle,
-                        request.url(),
+                        sourceUri,
                         request.content(),
-                        toJson(Map.of("url", request.url(), "title", resolvedTitle)),
+                        toJson(Map.of("url", sourceUri, "title", resolvedTitle)),
                         null);
         return finalizeImportedItem(userId, item, profile);
     }
@@ -191,34 +292,63 @@ public class KnowledgeItemService {
                 || KnowledgeItemSourceType.SNIPPET.value().equals(sourceType)) {
             throw new BadRequestException("File import only supports markdown or pdf source types");
         }
-        String resolvedTitle = fallbackTitle(request.title(), request.sourceUri());
+        String sourceUri = SourceUriSanitizer.sanitize(request.sourceUri());
+        String resolvedTitle = fallbackTitle(request.title(), SourceUriSanitizer.displayName(sourceUri));
         KnowledgeItem item =
                 createImportedItem(
                         userId,
                         sourceType,
                         resolvedTitle,
-                        request.sourceUri(),
+                        sourceUri,
                         request.content(),
                         toJson(
                                 Map.of(
                                         "sourceType", sourceType,
-                                        "sourceUri", request.sourceUri(),
+                                        "sourceUri", sourceUri,
                                         "title", resolvedTitle)),
                         null);
         return finalizeImportedItem(userId, item, profile);
     }
 
     public KnowledgeItemResponse importUpload(UUID userId, MultipartFile file, String title) {
+        return importUpload(userId, file, title, null, null);
+    }
+
+    public KnowledgeItemResponse importUpload(
+            UUID userId,
+            MultipartFile file,
+            String title,
+            String sourceAssetId,
+            String sourceAssetOrigin) {
         UserProfile profile = userProfileService.getOrCreate(userId);
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Uploaded file is required");
         }
+        SourceAssetRequest sourceAssetRequest =
+                normalizeSourceAssetRequest(sourceAssetId, sourceAssetOrigin);
         String originalFilename = file.getOriginalFilename();
+        String sanitizedOriginalFilename = sanitizeFilename(originalFilename);
+        String filenameMediaType = resolveKnownUploadMediaType(originalFilename);
         Path tempFile = null;
         try {
             tempFile = createTempFile(originalFilename);
             file.transferTo(tempFile);
             String contentHash = calculateSha256(tempFile);
+            long byteSize = Files.size(tempFile);
+            if (byteSize > MAX_SOURCE_ASSET_BYTES) {
+                throw new BadRequestException("Uploaded file exceeds the 20 MiB limit");
+            }
+            KnowledgeItemResponse idempotentResponse =
+                    findIdempotentSourceAssetImport(
+                            userId,
+                            sourceAssetRequest,
+                            contentHash,
+                            byteSize,
+                            sanitizedOriginalFilename,
+                            filenameMediaType);
+            if (idempotentResponse != null) {
+                return idempotentResponse;
+            }
             if (contentHashExists(userId, contentHash)) {
                 throw duplicateUploadConflict();
             }
@@ -239,6 +369,17 @@ public class KnowledgeItemService {
             String resolvedTitle =
                     fallbackTitle(title, resolveUploadTitle(parsed, originalFilename));
             String sourceUri = buildUploadSourceUri(originalFilename);
+            SourceAssetImportDetails sourceAsset =
+                    sourceAssetRequest == null
+                            ? null
+                            : new SourceAssetImportDetails(
+                                    sourceAssetRequest.id(),
+                                    contentHash,
+                                    sanitizedOriginalFilename,
+                                    resolveUploadMediaType(originalFilename, parsed.sourceFormat()),
+                                    byteSize,
+                                    sourceAssetRequest.origin(),
+                                    KnowledgeSourceAssetAvailability.AVAILABLE.value());
 
             // Persist item + import-succeeded job in the same short transaction.
             final String jobMetadata =
@@ -258,12 +399,42 @@ public class KnowledgeItemService {
                                 sourceUri,
                                 parsed.markdown(),
                                 jobMetadata,
-                                contentHash);
+                                contentHash,
+                                sourceAsset);
             } catch (DuplicateKeyException ex) {
-                throw duplicateUploadConflict();
+                KnowledgeItemResponse idempotentAfterRace =
+                        findIdempotentSourceAssetImport(
+                                userId,
+                                sourceAssetRequest,
+                                contentHash,
+                                byteSize,
+                                sourceAsset == null
+                                        ? sanitizedOriginalFilename
+                                        : sourceAsset.originalFilename(),
+                                sourceAsset == null ? filenameMediaType : sourceAsset.mediaType());
+                if (idempotentAfterRace != null) {
+                    return idempotentAfterRace;
+                }
+                throw uploadConflictFor(ex, sourceAsset != null);
             } catch (DataIntegrityViolationException ex) {
+                KnowledgeItemResponse idempotentAfterRace =
+                        findIdempotentSourceAssetImport(
+                                userId,
+                                sourceAssetRequest,
+                                contentHash,
+                                byteSize,
+                                sourceAsset == null
+                                        ? sanitizedOriginalFilename
+                                        : sourceAsset.originalFilename(),
+                                sourceAsset == null ? filenameMediaType : sourceAsset.mediaType());
+                if (idempotentAfterRace != null) {
+                    return idempotentAfterRace;
+                }
                 if (isContentHashConstraintViolation(ex)) {
                     throw duplicateUploadConflict();
+                }
+                if (sourceAsset != null && isSourceAssetConstraintViolation(ex)) {
+                    throw managedSourceAssetConflict();
                 }
                 throw ex;
             }
@@ -420,12 +591,32 @@ public class KnowledgeItemService {
         wrapper.orderByAsc(KnowledgeItem::getCreatedAt).last("LIMIT " + safeLimit);
 
         List<KnowledgeItem> items = knowledgeItemRepository.selectList(wrapper);
+        // 并发执行 organize：每个任务在独立的短事务中运行（runOrganize 内部自带 @Transactional
+        // 边界与事务模板），互不干扰。线程池有界（3 个），避免压垮 LLM API。
+        List<CompletableFuture<KnowledgeItemResponse>> futures = items.stream()
+                .map(item -> CompletableFuture.supplyAsync(
+                        () -> runOrganize(userId, item, false, IngestionJobType.ORGANIZE.value()),
+                        organizeExecutor))
+                .toList();
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .orTimeout(10, TimeUnit.MINUTES)
+                    .join();
+        } catch (CompletionException ex) {
+            // 超时或未预期异常：记录日志，继续收集已完成任务的结果，不中断整体流程。
+            log.warn("organizeBatch completed with exceptions for user {}", userId, ex);
+        }
+
         List<UUID> processedItemIds = new ArrayList<>();
         List<UUID> failedItemIds = new ArrayList<>();
-
-        for (KnowledgeItem item : items) {
-            KnowledgeItemResponse response =
-                    runOrganize(userId, item, false, IngestionJobType.ORGANIZE.value());
+        for (CompletableFuture<KnowledgeItemResponse> future : futures) {
+            if (!future.isDone() || future.isCancelled() || future.isCompletedExceptionally()) {
+                continue;
+            }
+            KnowledgeItemResponse response = future.getNow(null);
+            if (response == null) {
+                continue;
+            }
             processedItemIds.add(response.id());
             if (KnowledgeItemStatus.FAILED.value().equals(response.status())) {
                 failedItemIds.add(response.id());
@@ -574,6 +765,19 @@ public class KnowledgeItemService {
             String content,
             String jobMetadata,
             String contentHash) {
+        return createImportedItem(
+                userId, sourceType, title, sourceUri, content, jobMetadata, contentHash, null);
+    }
+
+    private KnowledgeItem createImportedItem(
+            UUID userId,
+            String sourceType,
+            String title,
+            String sourceUri,
+            String content,
+            String jobMetadata,
+            String contentHash,
+            SourceAssetImportDetails sourceAsset) {
         return txReturn(
                 status -> {
                     KnowledgeItem item =
@@ -585,9 +789,65 @@ public class KnowledgeItemService {
                                     content,
                                     KnowledgeItemStatus.INBOX.value(),
                                     contentHash);
+                    if (sourceAsset != null) {
+                        createSourceAsset(userId, item.getId(), sourceAsset);
+                    }
                     ingestionJobService.createImportSucceeded(userId, item.getId(), jobMetadata);
                     return item;
                 });
+    }
+
+    private void createSourceAsset(
+            UUID userId, UUID knowledgeItemId, SourceAssetImportDetails sourceAsset) {
+        if (knowledgeSourceAssetRepository == null) {
+            throw new IllegalStateException("Knowledge source asset repository is not configured");
+        }
+        KnowledgeSourceAsset asset =
+                KnowledgeSourceAsset.builder()
+                        .id(sourceAsset.id())
+                        .userId(userId)
+                        .knowledgeItemId(knowledgeItemId)
+                        .contentHash(sourceAsset.contentHash())
+                        .originalFilename(sourceAsset.originalFilename())
+                        .mediaType(sourceAsset.mediaType())
+                        .byteSize(sourceAsset.byteSize())
+                        .origin(sourceAsset.origin())
+                        .availability(sourceAsset.availability())
+                        .build();
+        asset.onCreate();
+        knowledgeSourceAssetRepository.insert(asset);
+    }
+
+    private KnowledgeItemResponse findIdempotentSourceAssetImport(
+            UUID userId,
+            SourceAssetRequest sourceAssetRequest,
+            String contentHash,
+            long byteSize,
+            String originalFilename,
+            String mediaType) {
+        if (sourceAssetRequest == null || mediaType == null || knowledgeSourceAssetRepository == null) {
+            return null;
+        }
+        KnowledgeSourceAsset existingAsset =
+                knowledgeSourceAssetRepository.selectById(sourceAssetRequest.id());
+        if (existingAsset == null) {
+            return null;
+        }
+        if (!userId.equals(existingAsset.getUserId())
+                || !contentHash.equals(existingAsset.getContentHash())
+                || existingAsset.getByteSize() == null
+                || byteSize != existingAsset.getByteSize()
+                || !originalFilename.equals(existingAsset.getOriginalFilename())
+                || !mediaType.equals(existingAsset.getMediaType())
+                || !sourceAssetRequest.origin().equals(existingAsset.getOrigin())) {
+            throw managedSourceAssetConflict();
+        }
+        KnowledgeItem existingItem =
+                knowledgeItemRepository.selectById(existingAsset.getKnowledgeItemId());
+        if (existingItem == null || !userId.equals(existingItem.getUserId())) {
+            throw managedSourceAssetConflict();
+        }
+        return toResponse(existingItem);
     }
 
     private void markOrganizeFailed(
@@ -775,17 +1035,60 @@ public class KnowledgeItemService {
                 .toList();
     }
 
+    private SourceAssetRequest normalizeSourceAssetRequest(
+            String sourceAssetId, String sourceAssetOrigin) {
+        boolean hasAssetId = sourceAssetId != null && !sourceAssetId.isBlank();
+        boolean hasOrigin = sourceAssetOrigin != null && !sourceAssetOrigin.isBlank();
+        if (!hasAssetId) {
+            if (hasOrigin) {
+                throw new BadRequestException("sourceAssetOrigin requires sourceAssetId");
+            }
+            return null;
+        }
+        UUID id;
+        try {
+            id = UUID.fromString(sourceAssetId.trim());
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("sourceAssetId must be a UUID");
+        }
+        String origin =
+                hasOrigin
+                        ? KnowledgeSourceAssetOrigin.from(sourceAssetOrigin).value()
+                        : KnowledgeSourceAssetOrigin.PICKER.value();
+        return new SourceAssetRequest(id, origin);
+    }
+
     private ConflictException duplicateUploadConflict() {
         return new ConflictException("An identical file has already been imported");
     }
 
+    private ConflictException managedSourceAssetConflict() {
+        return new ConflictException("Managed source asset conflicts with an existing import");
+    }
+
+    private ConflictException uploadConflictFor(
+            DuplicateKeyException exception, boolean sourceAssetRequested) {
+        if (sourceAssetRequested && isSourceAssetConstraintViolation(exception)) {
+            return managedSourceAssetConflict();
+        }
+        return duplicateUploadConflict();
+    }
+
     private boolean isContentHashConstraintViolation(DataIntegrityViolationException exception) {
+        return exceptionContains(exception, CONTENT_HASH_UNIQUE_CONSTRAINT);
+    }
+
+    private boolean isSourceAssetConstraintViolation(DataIntegrityViolationException exception) {
+        return exceptionContains(exception, SOURCE_ASSET_ITEM_UNIQUE_CONSTRAINT);
+    }
+
+    private boolean exceptionContains(Throwable exception, String expectedText) {
         Throwable cause = exception;
         while (cause != null) {
             String message = cause.getMessage();
             if (message != null
                     && message.toLowerCase(Locale.ROOT)
-                            .contains(CONTENT_HASH_UNIQUE_CONSTRAINT)) {
+                            .contains(expectedText.toLowerCase(Locale.ROOT))) {
                 return true;
             }
             cause = cause.getCause();
@@ -807,7 +1110,7 @@ public class KnowledgeItemService {
                         .userId(userId)
                         .sourceType(sourceType)
                         .title(cleanedTitle)
-                        .sourceUri(sourceUri)
+                        .sourceUri(SourceUriSanitizer.sanitize(sourceUri))
                         .contentHash(contentHash)
                         .rawContent(content.trim())
                         .status(status)
@@ -919,19 +1222,62 @@ public class KnowledgeItemService {
     }
 
     private void replaceTags(UUID userId, UUID itemId, List<String> tagNames) {
+        List<String> normalized = normalizeTagNames(tagNames);
         knowledgeItemTagRepository.deleteByKnowledgeItemId(itemId);
-        for (String tagName : normalizeTagNames(tagNames)) {
-            KnowledgeTag tag =
-                    knowledgeTagRepository.selectOne(
-                            new LambdaQueryWrapper<KnowledgeTag>()
-                                    .eq(KnowledgeTag::getUserId, userId)
-                                    .eq(KnowledgeTag::getName, tagName));
-            if (tag == null) {
-                tag = KnowledgeTag.builder().userId(userId).name(tagName).color("#7a8a84").build();
+        if (normalized.isEmpty()) {
+            return;
+        }
+        // 批量查询已存在的 tags：一次查询代替 N 次 selectOne。
+        List<KnowledgeTag> existing =
+                knowledgeTagRepository.selectList(
+                        new LambdaQueryWrapper<KnowledgeTag>()
+                                .eq(KnowledgeTag::getUserId, userId)
+                                .in(KnowledgeTag::getName, normalized));
+        Map<String, KnowledgeTag> tagByName =
+                existing.stream()
+                        .collect(Collectors.toMap(KnowledgeTag::getName, t -> t, (a, b) -> a));
+
+        // 找出需要新建的 tags 并批量插入。
+        List<KnowledgeTag> toCreate = new ArrayList<>();
+        for (String name : normalized) {
+            if (!tagByName.containsKey(name)) {
+                KnowledgeTag tag =
+                        KnowledgeTag.builder().userId(userId).name(name).color("#7a8a84").build();
                 tag.onCreate();
-                knowledgeTagRepository.insert(tag);
+                toCreate.add(tag);
+                tagByName.put(name, tag);
             }
-            knowledgeItemTagRepository.insert(new KnowledgeItemTag(itemId, tag.getId()));
+        }
+        if (!toCreate.isEmpty()) {
+            try {
+                knowledgeTagRepository.insertBatch(toCreate);
+            } catch (DataIntegrityViolationException ex) {
+                // 并发场景下可能因 UNIQUE(user_id, name) 冲突导致批量插入失败，
+                // 回退到逐条插入：冲突时 selectOne 获取已存在的 tag，保证正确性。
+                for (KnowledgeTag tag : toCreate) {
+                    try {
+                        knowledgeTagRepository.insert(tag);
+                    } catch (DuplicateKeyException dup) {
+                        KnowledgeTag already =
+                                knowledgeTagRepository.selectOne(
+                                        new LambdaQueryWrapper<KnowledgeTag>()
+                                                .eq(KnowledgeTag::getUserId, userId)
+                                                .eq(KnowledgeTag::getName, tag.getName()));
+                        if (already != null) {
+                            tagByName.put(tag.getName(), already);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 批量插入关联：一次批量插入代替 N 次 insert。
+        List<KnowledgeItemTag> relations =
+                normalized.stream()
+                        .map(name -> new KnowledgeItemTag(itemId, tagByName.get(name).getId()))
+                        .toList();
+        if (!relations.isEmpty()) {
+            knowledgeItemTagRepository.insertBatch(relations);
         }
     }
 
@@ -961,15 +1307,19 @@ public class KnowledgeItemService {
     }
 
     private KnowledgeItemPageResponse toPageResponse(Page<KnowledgeItem> itemPage) {
+        List<UUID> itemIds = itemPage.getRecords().stream().map(KnowledgeItem::getId).toList();
         Map<UUID, List<TagResponse>> tagsByItemId =
-                getTagsByItemIds(itemPage.getRecords().stream().map(KnowledgeItem::getId).toList());
+                getTagsByItemIds(itemIds);
+        Map<UUID, KnowledgeSourceAsset> sourceAssetsByItemId =
+                getSourceAssetsByItemIds(itemIds);
         return new KnowledgeItemPageResponse(
                 itemPage.getRecords().stream()
                         .map(
                                 item ->
                                         toListResponse(
                                                 item,
-                                                tagsByItemId.getOrDefault(item.getId(), List.of())))
+                                                tagsByItemId.getOrDefault(item.getId(), List.of()),
+                                                sourceAssetsByItemId.get(item.getId())))
                         .toList(),
                 itemPage.getTotal(),
                 itemPage.getCurrent(),
@@ -995,29 +1345,49 @@ public class KnowledgeItemService {
         return tagsByItemId;
     }
 
+    private Map<UUID, KnowledgeSourceAsset> getSourceAssetsByItemIds(List<UUID> itemIds) {
+        if (knowledgeSourceAssetRepository == null || itemIds == null || itemIds.isEmpty()) {
+            return Map.of();
+        }
+        return knowledgeSourceAssetRepository
+                .selectList(
+                        new LambdaQueryWrapper<KnowledgeSourceAsset>()
+                                .in(KnowledgeSourceAsset::getKnowledgeItemId, itemIds))
+                .stream()
+                .collect(
+                        Collectors.toMap(
+                                KnowledgeSourceAsset::getKnowledgeItemId,
+                                asset -> asset,
+                                (first, ignored) -> first));
+    }
+
     private TagResponse toTagResponse(KnowledgeTag tag) {
         return new TagResponse(tag.getId(), tag.getName(), tag.getColor(), tag.getCreatedAt());
     }
 
     private KnowledgeItemResponse toResponse(KnowledgeItem item) {
-        return toResponse(item, getTags(item.getId()));
+        return toResponse(item, getTags(item.getId()), true, getSourceAsset(item));
     }
 
     private KnowledgeItemResponse toResponse(KnowledgeItem item, List<TagResponse> tags) {
-        return toResponse(item, tags, true);
+        return toResponse(item, tags, true, getSourceAsset(item));
     }
 
-    private KnowledgeItemResponse toListResponse(KnowledgeItem item, List<TagResponse> tags) {
-        return toResponse(item, tags, false);
+    private KnowledgeItemResponse toListResponse(
+            KnowledgeItem item, List<TagResponse> tags, KnowledgeSourceAsset sourceAsset) {
+        return toResponse(item, tags, false, sourceAsset);
     }
 
     private KnowledgeItemResponse toResponse(
-            KnowledgeItem item, List<TagResponse> tags, boolean includeContent) {
+            KnowledgeItem item,
+            List<TagResponse> tags,
+            boolean includeContent,
+            KnowledgeSourceAsset sourceAsset) {
         return new KnowledgeItemResponse(
                 item.getId(),
                 item.getSourceType(),
                 item.getTitle(),
-                item.getSourceUri(),
+                SourceUriSanitizer.sanitize(item.getSourceUri()),
                 includeContent ? item.getRawContent() : null,
                 includeContent ? item.getCleanedContent() : null,
                 includeContent ? item.getSummary() : summaryForList(item),
@@ -1027,7 +1397,32 @@ public class KnowledgeItemService {
                 tags,
                 item.getCreatedAt(),
                 item.getUpdatedAt(),
-                item.getArchivedAt());
+                item.getArchivedAt(),
+                toSourceAssetResponse(sourceAsset));
+    }
+
+    private KnowledgeSourceAsset getSourceAsset(KnowledgeItem item) {
+        if (knowledgeSourceAssetRepository == null || item == null || item.getId() == null) {
+            return null;
+        }
+        return knowledgeSourceAssetRepository.selectOne(
+                new LambdaQueryWrapper<KnowledgeSourceAsset>()
+                        .eq(KnowledgeSourceAsset::getUserId, item.getUserId())
+                        .eq(KnowledgeSourceAsset::getKnowledgeItemId, item.getId()));
+    }
+
+    private KnowledgeSourceAssetResponse toSourceAssetResponse(KnowledgeSourceAsset sourceAsset) {
+        if (sourceAsset == null) {
+            return null;
+        }
+        return new KnowledgeSourceAssetResponse(
+                sourceAsset.getId(),
+                SourceUriSanitizer.safeBasename(
+                        sourceAsset.getOriginalFilename(), "local-file"),
+                sourceAsset.getMediaType(),
+                sourceAsset.getByteSize() == null ? 0L : sourceAsset.getByteSize(),
+                sourceAsset.getOrigin(),
+                sourceAsset.getAvailability());
     }
 
     private String summaryForList(KnowledgeItem item) {
@@ -1070,6 +1465,28 @@ public class KnowledgeItemService {
         };
     }
 
+    private String resolveUploadMediaType(String filename, String parsedFormat) {
+        String format = normalizeUploadFormat(parsedFormat, filename);
+        return switch (format) {
+            case "pdf" -> "application/pdf";
+            case "md", "markdown" -> "text/markdown";
+            case "txt" -> "text/plain";
+            case "html", "htm" -> "text/html";
+            default -> throw new BadRequestException("Uploaded file type is not supported");
+        };
+    }
+
+    private String resolveKnownUploadMediaType(String filename) {
+        String format = normalizeUploadFormat(null, filename);
+        return switch (format) {
+            case "pdf" -> "application/pdf";
+            case "md", "markdown" -> "text/markdown";
+            case "txt" -> "text/plain";
+            case "html", "htm" -> "text/html";
+            default -> null;
+        };
+    }
+
     private String resolveUploadTitle(ParsedDocument parsed, String filename) {
         if (parsed != null && parsed.metadata() != null) {
             String metadataTitle = parsed.metadata().get("title");
@@ -1097,10 +1514,15 @@ public class KnowledgeItemService {
     }
 
     private String sanitizeFilename(String filename) {
-        if (filename == null || filename.isBlank()) {
-            return "uploaded-file";
+        String sanitized = SourceUriSanitizer.safeBasename(filename, "uploaded-file");
+        if (sanitized.length() <= MAX_SOURCE_ASSET_FILENAME_CHARS) {
+            return sanitized;
         }
-        return filename.replace("\\", "/").replaceAll("^.*/", "").trim();
+        int dot = sanitized.lastIndexOf('.');
+        String extension =
+                dot > 0 && sanitized.length() - dot <= 64 ? sanitized.substring(dot) : "";
+        return sanitized.substring(0, MAX_SOURCE_ASSET_FILENAME_CHARS - extension.length())
+                + extension;
     }
 
     private String stripExtension(String filename) {
@@ -1120,6 +1542,9 @@ public class KnowledgeItemService {
         int dot = sanitized.lastIndexOf('.');
         if (dot >= 0) {
             suffix = sanitized.substring(dot);
+        }
+        if (suffix.length() > 64) {
+            suffix = suffix.substring(0, 64);
         }
         return Files.createTempFile("knowledge-upload-", suffix);
     }
@@ -1155,4 +1580,15 @@ public class KnowledgeItemService {
             throw new IllegalStateException("Failed to serialize job payload", ex);
         }
     }
+
+    private record SourceAssetRequest(UUID id, String origin) {}
+
+    private record SourceAssetImportDetails(
+            UUID id,
+            String contentHash,
+            String originalFilename,
+            String mediaType,
+            long byteSize,
+            String origin,
+            String availability) {}
 }

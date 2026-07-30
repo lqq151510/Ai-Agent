@@ -14,8 +14,11 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import io.netty.channel.ChannelOption;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,9 +27,11 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
 
 @Service
 public class SystemDiagnosticsService {
@@ -36,6 +41,7 @@ public class SystemDiagnosticsService {
     private final AppProperties appProperties;
     private final JdbcTemplate jdbcTemplate;
     private final StringRedisTemplate redisTemplate;
+    private final WebClient webClient;
 
     public SystemDiagnosticsService(
             AppProperties appProperties,
@@ -44,6 +50,21 @@ public class SystemDiagnosticsService {
         this.appProperties = appProperties;
         this.jdbcTemplate = jdbcTemplate;
         this.redisTemplate = redisTemplate;
+        this.webClient =
+                WebClient.builder()
+                        .clientConnector(
+                                new ReactorClientHttpConnector(
+                                        HttpClient.create()
+                                                .option(
+                                                        ChannelOption.CONNECT_TIMEOUT_MILLIS,
+                                                        5000)
+                                                .doOnConnected(
+                                                        conn ->
+                                                                conn.addHandlerLast(
+                                                                        new ReadTimeoutHandler(
+                                                                                10,
+                                                                                TimeUnit.SECONDS)))))
+                        .build();
     }
 
     public ModelsResponse listModels() {
@@ -216,7 +237,7 @@ public class SystemDiagnosticsService {
         return withRetryProbe(
                 () -> {
                     Map<String, Object> payload =
-                            WebClient.create()
+                            this.webClient
                                     .get()
                                     .uri(baseUrl + "/models")
                                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)

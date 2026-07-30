@@ -14,6 +14,12 @@ import { ToolExecutionBridge, type BackendToolCall, type ToolExecutionEvent } fr
 import { ApprovalEngine, type ApprovalMode } from './approval-engine';
 import { SkillManager } from './skill-manager';
 import { ComputerUseManager } from './computer-use-manager';
+import {
+  KnowledgeSourceManager,
+  type ManagedSourceReadResult,
+  type ManagedSourceUploadRequest,
+  type ManagedSourceUploadResult,
+} from './knowledge-source-manager';
 import { getDataDir, getCliEntryPath } from './utils/env';
 import { isPathWithinRoot, normalizeTreeDepth, resolveAuthorizedRoot } from './workspace-access';
 
@@ -117,6 +123,7 @@ export class IpcRegistry {
     private computerUseManager: ComputerUseManager,
     private setApprovalMode: (mode: ApprovalMode) => void,
     private getApprovalMode: () => ApprovalMode,
+    private knowledgeSourceManager: KnowledgeSourceManager,
   ) {
     // Keep this in lockstep with the bootstrap guard: raw developer IPC is
     // intentionally unavailable from a packaged release.
@@ -295,8 +302,8 @@ export class IpcRegistry {
         return { canceled: true };
       }
 
-      const item = await this.importKnowledgeLocalFile(filePath, payload?.title);
-      return { canceled: false, item };
+      const result = await this.importKnowledgeLocalFile(filePath, payload?.title);
+      return { canceled: false, item: result.item, skipped: result.outcome === 'skipped' };
     });
 
     ipcMain.handle('knowledge:preflight-local-file-batch', async (event): Promise<LocalKnowledgeImportPreflightResponse> => {
@@ -311,6 +318,45 @@ export class IpcRegistry {
         return this.commitLocalKnowledgeImportBatch(event.sender.id, payload);
       },
     );
+
+    // Managed source folders intentionally have a narrow IPC surface. The
+    // manager owns all directory paths, cursors, and stored asset locations;
+    // renderer callers receive only opaque IDs and safe DTOs.
+    ipcMain.handle('knowledge:list-managed-source-folders', (event) => {
+      this.assertKnowledgeSender(event.sender);
+      return this.knowledgeSourceManager.listManagedSourceFolders();
+    });
+
+    ipcMain.handle('knowledge:add-managed-source-folder', async (event) => {
+      this.assertKnowledgeSender(event.sender);
+      return this.knowledgeSourceManager.addManagedSourceFolder(() => this.selectManagedSourceFolder());
+    });
+
+    ipcMain.handle('knowledge:set-managed-source-folder-enabled', async (event, payload?: {
+      folderId?: unknown;
+      enabled?: unknown;
+    }) => {
+      this.assertKnowledgeSender(event.sender);
+      return this.knowledgeSourceManager.setManagedSourceFolderEnabled(payload?.folderId, payload?.enabled);
+    });
+
+    ipcMain.handle('knowledge:scan-managed-source-folder', async (event, payload?: { folderId?: unknown }) => {
+      this.assertKnowledgeSender(event.sender);
+      return this.knowledgeSourceManager.scanManagedSourceFolder(payload?.folderId);
+    });
+
+    ipcMain.handle('knowledge:remove-managed-source-folder', async (event, payload?: { folderId?: unknown }) => {
+      this.assertKnowledgeSender(event.sender);
+      return this.knowledgeSourceManager.removeManagedSourceFolder(payload?.folderId);
+    });
+
+    ipcMain.handle('knowledge:open-managed-source-asset', async (event, payload?: {
+      assetId?: unknown;
+      reveal?: unknown;
+    }) => {
+      this.assertKnowledgeSender(event.sender);
+      return this.knowledgeSourceManager.openManagedSourceAsset(payload?.assetId, payload?.reveal === true);
+    });
 
     ipcMain.handle('knowledge:save-backup', async (event, payload?: {
       content?: string;
@@ -976,8 +1022,19 @@ export class IpcRegistry {
     for (const candidate of readyCandidates) {
       try {
         const fileContent = await this.readVerifiedLocalKnowledgeImportFile(candidate);
-        await this.importKnowledgeLocalFileContent(candidate.name, fileContent);
-        result.imported.push({ candidateId: candidate.candidateId, name: candidate.name });
+        const upload = await this.knowledgeSourceManager.ingestPickerContent({
+          filename: candidate.name,
+          content: fileContent,
+        });
+        if (upload.outcome === 'skipped') {
+          result.skipped.push({
+            candidateId: candidate.candidateId,
+            name: candidate.name,
+            reason: '此文件内容已在本机知识库中，已跳过。',
+          });
+        } else {
+          result.imported.push({ candidateId: candidate.candidateId, name: candidate.name });
+        }
       } catch (error) {
         const rawReason = error instanceof Error ? error.message : String(error);
         if (this.isDuplicateKnowledgeImportError(rawReason)) {
@@ -1050,10 +1107,20 @@ export class IpcRegistry {
     }
   }
 
-  private async readLimitedKnowledgeImportFile(filePath: string): Promise<LocalKnowledgeImportFileContent> {
+  public async readManagedSourceFile(filePath: string): Promise<ManagedSourceReadResult> {
+    const file = await this.readLimitedKnowledgeImportFile(filePath, { rejectSymlink: true });
+    return { content: file.content, size: file.size, modifiedAtMs: file.modifiedAtMs };
+  }
+
+  private async readLimitedKnowledgeImportFile(
+    filePath: string,
+    options: { rejectSymlink?: boolean } = {},
+  ): Promise<LocalKnowledgeImportFileContent> {
     let handle: fs.promises.FileHandle | null = null;
     try {
-      handle = await fs.promises.open(filePath, 'r');
+      handle = options.rejectSymlink
+        ? await fs.promises.open(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
+        : await fs.promises.open(filePath, 'r');
       const before = await handle.stat();
       if (!before.isFile()) {
         throw new Error('所选路径不是文件。');
@@ -1075,7 +1142,7 @@ export class IpcRegistry {
         offset += bytesRead;
       }
       const after = await handle.stat();
-      if (offset !== before.size || after.size !== before.size) {
+      if (offset !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
         throw new Error('文件在读取时发生变化，请重新选择文件。');
       }
       return { content, size: before.size, modifiedAtMs: before.mtimeMs };
@@ -1167,6 +1234,20 @@ export class IpcRegistry {
     return result.filePaths;
   }
 
+  private async selectManagedSourceFolder(): Promise<string | null> {
+    const options: OpenDialogOptions = {
+      title: '选择自动收集资料目录',
+      buttonLabel: '使用此目录',
+      properties: ['openDirectory'],
+    };
+    const window = this.mainWindowGetter();
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  }
+
   private async saveKnowledgeBackup(
     content: unknown,
     suggestedName: unknown,
@@ -1231,16 +1312,38 @@ export class IpcRegistry {
     return 'knowledge-desk-backup.json';
   }
 
-  private async importKnowledgeLocalFile(filePath: string, title?: string): Promise<any> {
+  private async importKnowledgeLocalFile(filePath: string, title?: string): Promise<ManagedSourceUploadResult> {
     const filename = path.basename(filePath);
     const fileBuffer = (await this.readLimitedKnowledgeImportFile(filePath)).content;
-    return this.importKnowledgeLocalFileContent(filename, fileBuffer, title);
+    return this.knowledgeSourceManager.ingestPickerContent({ filename, content: fileBuffer, title });
+  }
+
+  public async uploadManagedSourceFile(
+    request: ManagedSourceUploadRequest,
+  ): Promise<ManagedSourceUploadResult> {
+    try {
+      const item = await this.importKnowledgeLocalFileContent(
+        request.filename,
+        request.content,
+        request.title,
+        {
+          sourceAssetId: request.sourceAssetId,
+          sourceAssetOrigin: request.sourceAssetOrigin,
+        },
+      );
+      return { outcome: 'imported', item };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.isDuplicateKnowledgeImportError(message)) return { outcome: 'skipped' };
+      throw error;
+    }
   }
 
   private async importKnowledgeLocalFileContent(
     filename: string,
     fileBuffer: Buffer,
     title?: string,
+    sourceAsset?: { sourceAssetId: string; sourceAssetOrigin: 'picker' | 'watched_folder' },
   ): Promise<any> {
     const formData = new FormData();
     formData.append('file', new Blob([fileBuffer], { type: this.mimeTypeForKnowledgeFile(filename) }), filename);
@@ -1248,6 +1351,10 @@ export class IpcRegistry {
     const normalizedTitle = title?.trim();
     if (normalizedTitle) {
       formData.append('title', normalizedTitle);
+    }
+    if (sourceAsset) {
+      formData.append('sourceAssetId', sourceAsset.sourceAssetId);
+      formData.append('sourceAssetOrigin', sourceAsset.sourceAssetOrigin);
     }
 
     return this.backendRequest('/api/v1/knowledge-items/import/upload', {

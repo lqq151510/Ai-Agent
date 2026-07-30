@@ -4,12 +4,17 @@ import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.knowledge.KnowledgeItemSourceType;
 import com.agent.mvp.knowledge.KnowledgeItemStatus;
+import com.agent.mvp.knowledge.KnowledgeSourceAssetAvailability;
+import com.agent.mvp.knowledge.KnowledgeSourceAssetOrigin;
+import com.agent.mvp.knowledge.SourceUriSanitizer;
 import com.agent.mvp.knowledge.entity.KnowledgeItem;
 import com.agent.mvp.knowledge.entity.KnowledgeItemTag;
+import com.agent.mvp.knowledge.entity.KnowledgeSourceAsset;
 import com.agent.mvp.knowledge.entity.KnowledgeTag;
 import com.agent.mvp.knowledge.repo.KnowledgeItemRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
+import com.agent.mvp.knowledge.repo.KnowledgeSourceAssetRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
 import com.agent.mvp.modelsource.entity.ModelSource;
 import com.agent.mvp.modelsource.repo.ModelSourceRepository;
@@ -18,6 +23,7 @@ import com.agent.mvp.settings.PrivacyMode;
 import com.agent.mvp.settings.dto.SettingsBackupKnowledgeItem;
 import com.agent.mvp.settings.dto.SettingsBackupPayload;
 import com.agent.mvp.settings.dto.SettingsBackupPreferences;
+import com.agent.mvp.settings.dto.SettingsBackupSourceAsset;
 import com.agent.mvp.settings.dto.SettingsBackupTag;
 import com.agent.mvp.settings.dto.SettingsImportResponse;
 import com.agent.mvp.settings.dto.SettingsProfileResponse;
@@ -36,6 +42,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +58,9 @@ public class SettingsService {
     private static final int MAX_SUMMARY_CHARS = 20_000;
     private static final int MAX_TITLE_CHARS = 240;
     private static final int MAX_SOURCE_URI_CHARS = 800;
+    private static final int MAX_SOURCE_ASSET_FILENAME_CHARS = 512;
+    private static final int MAX_SOURCE_ASSET_MEDIA_TYPE_CHARS = 120;
+    private static final long MAX_SOURCE_ASSET_BYTES = 20L * 1024 * 1024;
     private static final int MAX_LANGUAGE_CHARS = 16;
     private static final int MAX_TAG_NAME_CHARS = 80;
     private static final int MAX_TAG_COLOR_CHARS = 24;
@@ -61,8 +71,27 @@ public class SettingsService {
     private final UserProfileRepository userProfileRepository;
     private final ModelSourceRepository modelSourceRepository;
     private final KnowledgeItemRepository knowledgeItemRepository;
+    private final KnowledgeSourceAssetRepository knowledgeSourceAssetRepository;
     private final KnowledgeTagRepository knowledgeTagRepository;
     private final KnowledgeItemTagRepository knowledgeItemTagRepository;
+
+    @Autowired
+    public SettingsService(
+            UserProfileService userProfileService,
+            UserProfileRepository userProfileRepository,
+            ModelSourceRepository modelSourceRepository,
+            KnowledgeItemRepository knowledgeItemRepository,
+            KnowledgeSourceAssetRepository knowledgeSourceAssetRepository,
+            KnowledgeTagRepository knowledgeTagRepository,
+            KnowledgeItemTagRepository knowledgeItemTagRepository) {
+        this.userProfileService = userProfileService;
+        this.userProfileRepository = userProfileRepository;
+        this.modelSourceRepository = modelSourceRepository;
+        this.knowledgeItemRepository = knowledgeItemRepository;
+        this.knowledgeSourceAssetRepository = knowledgeSourceAssetRepository;
+        this.knowledgeTagRepository = knowledgeTagRepository;
+        this.knowledgeItemTagRepository = knowledgeItemTagRepository;
+    }
 
     public SettingsService(
             UserProfileService userProfileService,
@@ -71,12 +100,14 @@ public class SettingsService {
             KnowledgeItemRepository knowledgeItemRepository,
             KnowledgeTagRepository knowledgeTagRepository,
             KnowledgeItemTagRepository knowledgeItemTagRepository) {
-        this.userProfileService = userProfileService;
-        this.userProfileRepository = userProfileRepository;
-        this.modelSourceRepository = modelSourceRepository;
-        this.knowledgeItemRepository = knowledgeItemRepository;
-        this.knowledgeTagRepository = knowledgeTagRepository;
-        this.knowledgeItemTagRepository = knowledgeItemTagRepository;
+        this(
+                userProfileService,
+                userProfileRepository,
+                modelSourceRepository,
+                knowledgeItemRepository,
+                null,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository);
     }
 
     public SettingsProfileResponse getProfile(UUID userId) {
@@ -176,6 +207,7 @@ public class SettingsService {
                                 .eq(KnowledgeItem::getUserId, userId)
                                 .orderByAsc(KnowledgeItem::getCreatedAt));
         Map<UUID, List<UUID>> tagIdsByItem = collectTagIdsByItem(items);
+        Map<UUID, KnowledgeSourceAsset> sourceAssetsByItem = collectSourceAssetsByItem(items);
 
         return new SettingsBackupPayload(
                 BACKUP_SCHEMA_VERSION,
@@ -197,7 +229,7 @@ public class SettingsService {
                                                 item.getId(),
                                                 item.getSourceType(),
                                                 item.getTitle(),
-                                                item.getSourceUri(),
+                                                SourceUriSanitizer.sanitize(item.getSourceUri()),
                                                 item.getRawContent(),
                                                 item.getCleanedContent(),
                                                 item.getSummary(),
@@ -209,6 +241,8 @@ public class SettingsService {
                                                 item.getCreatedAt(),
                                                 item.getUpdatedAt(),
                                                 item.getArchivedAt(),
+                                                toBackupSourceAsset(
+                                                        sourceAssetsByItem.get(item.getId())),
                                                 tagIdsByItem.getOrDefault(item.getId(), List.of())))
                         .toList(),
                 false);
@@ -222,6 +256,7 @@ public class SettingsService {
         Map<UUID, KnowledgeTag> importedTags = new HashMap<>();
         int createdTags = 0;
 
+        List<KnowledgeTag> tagsToInsert = new ArrayList<>();
         for (ImportTagPlan sourceTag : plan.tags()) {
             KnowledgeTag targetTag = tagsByNormalizedName.get(sourceTag.normalizedName());
             if (targetTag == null) {
@@ -233,13 +268,17 @@ public class SettingsService {
                                 .createdAt(sourceTag.createdAt())
                                 .build();
                 targetTag.onCreate();
-                knowledgeTagRepository.insert(targetTag);
+                tagsToInsert.add(targetTag);
                 tagsByNormalizedName.put(sourceTag.normalizedName(), targetTag);
                 createdTags++;
             }
             importedTags.put(sourceTag.id(), targetTag);
         }
+        if (!tagsToInsert.isEmpty()) {
+            knowledgeTagRepository.insertBatch(tagsToInsert);
+        }
 
+        List<KnowledgeItem> itemsToInsert = new ArrayList<>();
         for (ImportItemPlan sourceItem : plan.items()) {
             KnowledgeItem importedItem =
                     KnowledgeItem.builder()
@@ -258,12 +297,27 @@ public class SettingsService {
                             .archivedAt(sourceItem.archivedAt())
                             .build();
             importedItem.onCreate();
-            knowledgeItemRepository.insert(importedItem);
+            itemsToInsert.add(importedItem);
+        }
+        if (!itemsToInsert.isEmpty()) {
+            knowledgeItemRepository.insertBatch(itemsToInsert);
+        }
+
+        List<KnowledgeItemTag> itemTagsToInsert = new ArrayList<>();
+        for (int i = 0; i < plan.items().size(); i++) {
+            ImportItemPlan sourceItem = plan.items().get(i);
+            KnowledgeItem importedItem = itemsToInsert.get(i);
+            if (sourceItem.sourceAsset() != null) {
+                createMissingSourceAsset(userId, importedItem.getId(), sourceItem.sourceAsset());
+            }
             for (UUID tagId : sourceItem.tagIds()) {
-                knowledgeItemTagRepository.insert(
+                itemTagsToInsert.add(
                         new KnowledgeItemTag(
                                 importedItem.getId(), importedTags.get(tagId).getId()));
             }
+        }
+        if (!itemTagsToInsert.isEmpty()) {
+            knowledgeItemTagRepository.insertBatch(itemTagsToInsert);
         }
 
         return new SettingsImportResponse(
@@ -302,6 +356,59 @@ public class SettingsService {
             }
         }
         return tagIdsByItem;
+    }
+
+    private Map<UUID, KnowledgeSourceAsset> collectSourceAssetsByItem(
+            List<KnowledgeItem> items) {
+        if (knowledgeSourceAssetRepository == null || items.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, KnowledgeSourceAsset> sourceAssetsByItem = new HashMap<>();
+        for (KnowledgeSourceAsset sourceAsset :
+                knowledgeSourceAssetRepository.selectList(
+                        new LambdaQueryWrapper<KnowledgeSourceAsset>()
+                                .in(
+                                        KnowledgeSourceAsset::getKnowledgeItemId,
+                                        items.stream().map(KnowledgeItem::getId).toList()))) {
+            if (sourceAsset != null && sourceAsset.getKnowledgeItemId() != null) {
+                sourceAssetsByItem.putIfAbsent(sourceAsset.getKnowledgeItemId(), sourceAsset);
+            }
+        }
+        return sourceAssetsByItem;
+    }
+
+    private SettingsBackupSourceAsset toBackupSourceAsset(KnowledgeSourceAsset sourceAsset) {
+        if (sourceAsset == null) {
+            return null;
+        }
+        return new SettingsBackupSourceAsset(
+                sourceAsset.getId(),
+                SourceUriSanitizer.safeBasename(sourceAsset.getOriginalFilename(), "local-file"),
+                sourceAsset.getMediaType(),
+                sourceAsset.getByteSize(),
+                sourceAsset.getOrigin(),
+                sourceAsset.getAvailability());
+    }
+
+    private void createMissingSourceAsset(
+            UUID userId, UUID knowledgeItemId, SourceAssetBackupPlan sourceAsset) {
+        if (knowledgeSourceAssetRepository == null) {
+            throw new IllegalStateException("Knowledge source asset repository is not configured");
+        }
+        KnowledgeSourceAsset restoredAsset =
+                KnowledgeSourceAsset.builder()
+                        .id(UUID.randomUUID())
+                        .userId(userId)
+                        .knowledgeItemId(knowledgeItemId)
+                        .contentHash(null)
+                        .originalFilename(sourceAsset.originalFilename())
+                        .mediaType(sourceAsset.mediaType())
+                        .byteSize(sourceAsset.byteSize())
+                        .origin(sourceAsset.origin())
+                        .availability(KnowledgeSourceAssetAvailability.MISSING.value())
+                        .build();
+        restoredAsset.onCreate();
+        knowledgeSourceAssetRepository.insert(restoredAsset);
     }
 
     private Map<String, KnowledgeTag> loadTagsByNormalizedName(UUID userId) {
@@ -427,7 +534,12 @@ public class SettingsService {
                         "knowledgeItems.cleanedContent");
         String summary = optionalText(item.summary(), MAX_SUMMARY_CHARS, "knowledgeItems.summary");
         String sourceUri =
-                optionalText(item.sourceUri(), MAX_SOURCE_URI_CHARS, "knowledgeItems.sourceUri");
+                SourceUriSanitizer.sanitize(
+                        optionalText(
+                                item.sourceUri(),
+                                MAX_SOURCE_URI_CHARS,
+                                "knowledgeItems.sourceUri"));
+        SourceAssetBackupPlan sourceAsset = validateSourceAsset(item.sourceAsset());
         String language =
                 optionalText(item.language(), MAX_LANGUAGE_CHARS, "knowledgeItems.language");
         if (item.wordCount() == null || item.wordCount() < 0) {
@@ -473,7 +585,48 @@ public class SettingsService {
                 item.createdAt(),
                 item.updatedAt(),
                 item.archivedAt(),
+                sourceAsset,
                 List.copyOf(tagIds));
+    }
+
+    private SourceAssetBackupPlan validateSourceAsset(SettingsBackupSourceAsset sourceAsset) {
+        if (sourceAsset == null) {
+            return null;
+        }
+        if (sourceAsset.id() == null) {
+            throw new BadRequestException("knowledgeItems.sourceAsset.id is required");
+        }
+        String originalFilename =
+                SourceUriSanitizer.safeBasename(
+                        requiredText(
+                                sourceAsset.originalFilename(),
+                                MAX_SOURCE_ASSET_FILENAME_CHARS,
+                                "knowledgeItems.sourceAsset.originalFilename"),
+                        "local-file");
+        String mediaType =
+                requiredText(
+                                sourceAsset.mediaType(),
+                                MAX_SOURCE_ASSET_MEDIA_TYPE_CHARS,
+                                "knowledgeItems.sourceAsset.mediaType")
+                        .trim();
+        if (sourceAsset.byteSize() == null
+                || sourceAsset.byteSize() < 0
+                || sourceAsset.byteSize() > MAX_SOURCE_ASSET_BYTES) {
+            throw new BadRequestException("knowledgeItems.sourceAsset.byteSize is invalid");
+        }
+        String origin =
+                KnowledgeSourceAssetOrigin.from(
+                                requiredText(
+                                        sourceAsset.origin(),
+                                        32,
+                                        "knowledgeItems.sourceAsset.origin"))
+                        .value();
+        KnowledgeSourceAssetAvailability.from(
+                requiredText(
+                        sourceAsset.availability(),
+                        24,
+                        "knowledgeItems.sourceAsset.availability"));
+        return new SourceAssetBackupPlan(originalFilename, mediaType, sourceAsset.byteSize(), origin);
     }
 
     private <T> List<T> requiredList(List<T> values, String fieldName) {
@@ -534,7 +687,11 @@ public class SettingsService {
             Instant createdAt,
             Instant updatedAt,
             Instant archivedAt,
+            SourceAssetBackupPlan sourceAsset,
             List<UUID> tagIds) {}
+
+    private record SourceAssetBackupPlan(
+            String originalFilename, String mediaType, long byteSize, String origin) {}
 
     private void validateModelSourceOwnership(UUID userId, UUID modelSourceId) {
         if (modelSourceId == null) {
@@ -554,30 +711,11 @@ public class SettingsService {
     }
 
     private void syncDefaultModelSource(UUID userId, UUID defaultModelSourceId) {
-        List<ModelSource> sources =
-                modelSourceRepository.selectList(
-                        new LambdaQueryWrapper<ModelSource>().eq(ModelSource::getUserId, userId));
-        for (ModelSource source : sources) {
-            boolean shouldBeDefault = defaultModelSourceId.equals(source.getId());
-            if (Boolean.TRUE.equals(source.getIsDefault()) != shouldBeDefault) {
-                source.setIsDefault(shouldBeDefault);
-                source.touch();
-                modelSourceRepository.updateById(source);
-            }
-        }
+        modelSourceRepository.syncDefault(userId, defaultModelSourceId, Instant.now());
     }
 
     private void clearDefaultModelSource(UUID userId) {
-        List<ModelSource> sources =
-                modelSourceRepository.selectList(
-                        new LambdaQueryWrapper<ModelSource>().eq(ModelSource::getUserId, userId));
-        for (ModelSource source : sources) {
-            if (Boolean.TRUE.equals(source.getIsDefault())) {
-                source.setIsDefault(false);
-                source.touch();
-                modelSourceRepository.updateById(source);
-            }
-        }
+        modelSourceRepository.clearDefaultByUserId(userId, Instant.now());
     }
 
     private long countItems(UUID userId, String status) {

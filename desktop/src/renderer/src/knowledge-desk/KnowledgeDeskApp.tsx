@@ -14,8 +14,10 @@ import {
 } from 'lucide-react';
 import {
   archiveKnowledgeItem,
+  addManagedSourceFolder,
   canUseDesktopBackupPicker,
   canUseDesktopBatchFileImport,
+  canUseManagedSourceFolders,
   fallbackSnapshot,
   canUseDesktopFilePicker,
   commitLocalKnowledgeFileBatch,
@@ -27,15 +29,20 @@ import {
   importLocalKnowledgeFile,
   listIngestionJobs,
   listKnowledgeItems,
+  listManagedSourceFolders,
   loadKnowledgeItemDetail,
   loadKnowledgeDeskSnapshot,
   organizeKnowledgeItem,
   organizeKnowledgeItems,
+  openManagedSourceAsset,
   reprocessKnowledgeItem,
   restoreKnowledgeItem,
   pickKnowledgeDeskBackup,
   preflightLocalKnowledgeFileBatch,
+  removeManagedSourceFolder,
   saveKnowledgeDeskBackup,
+  scanManagedSourceFolder,
+  setManagedSourceFolderEnabled,
   testModelSource,
   updateKnowledgeDeskSettingsProfile,
   updateKnowledgeItem,
@@ -49,6 +56,7 @@ import {
   type LocalFileBatchPreflight,
   type ListKnowledgeItemsParams,
   type ModelProvider,
+  type ManagedSourceFolder,
   type UpdateKnowledgeItemDraft,
 } from './knowledgeDeskApi';
 import { Button } from '../components/ui';
@@ -95,11 +103,13 @@ const KnowledgeDeskApp = () => {
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [itemActionState, setItemActionState] = useState<{ itemId: string; action: KnowledgeWorkflowAction } | null>(null);
   const [notice, setNotice] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [managedSourceFolders, setManagedSourceFolders] = useState<ManagedSourceFolder[]>([]);
   const detailRequestRef = useRef(0);
   const detailJobsRequestRef = useRef(0);
   const desktopFilePickerAvailable = canUseDesktopFilePicker();
   const desktopBatchFileImportAvailable = canUseDesktopBatchFileImport();
   const desktopBackupPickerAvailable = canUseDesktopBackupPicker();
+  const desktopManagedSourceFoldersAvailable = canUseManagedSourceFolders();
 
   useEffect(() => {
     let cancelled = false;
@@ -149,6 +159,48 @@ const KnowledgeDeskApp = () => {
     setNotice({ message, type });
     window.setTimeout(() => setNotice(null), 3200);
   };
+
+  const refreshManagedSourceFolders = useCallback(async () => {
+    if (!desktopManagedSourceFoldersAvailable) {
+      setManagedSourceFolders([]);
+      return [];
+    }
+    const folders = await listManagedSourceFolders();
+    setManagedSourceFolders(folders);
+    return folders;
+  }, [desktopManagedSourceFoldersAvailable]);
+
+  useEffect(() => {
+    void refreshManagedSourceFolders().catch(() => setManagedSourceFolders([]));
+  }, [refreshManagedSourceFolders]);
+
+  const handleAddManagedSourceFolder = useCallback(async () => {
+    await addManagedSourceFolder();
+    await refreshManagedSourceFolders();
+  }, [refreshManagedSourceFolders]);
+
+  const handleSetManagedSourceFolderEnabled = useCallback(async (folderId: string, enabled: boolean) => {
+    await setManagedSourceFolderEnabled(folderId, enabled);
+    await refreshManagedSourceFolders();
+    showNotice(enabled ? '已恢复资料夹监听。' : '已暂停资料夹监听。');
+  }, [refreshManagedSourceFolders]);
+
+  const handleScanManagedSourceFolder = useCallback(async (folderId: string) => {
+    await scanManagedSourceFolder(folderId);
+    await refreshManagedSourceFolders();
+    showNotice('已开始扫描本机资料夹。', 'info');
+  }, [refreshManagedSourceFolders]);
+
+  const handleRemoveManagedSourceFolder = useCallback(async (folderId: string) => {
+    await removeManagedSourceFolder(folderId);
+    await refreshManagedSourceFolders();
+    showNotice('已停止并移除资料夹监听；原目录和已收录原件均未删除。', 'info');
+  }, [refreshManagedSourceFolders]);
+
+  const handleOpenManagedSourceAsset = useCallback(async (assetId: string, reveal = false) => {
+    await openManagedSourceAsset(assetId, reveal);
+    showNotice(reveal ? '已在 Finder 中定位受管原件。' : '已使用系统默认应用打开受管原件。', 'info');
+  }, []);
 
   const loadDetailJobs = useCallback(async (itemId: string) => {
     const requestId = detailJobsRequestRef.current + 1;
@@ -578,11 +630,17 @@ const KnowledgeDeskApp = () => {
           <SettingsPage
             activeTab={settingsTab}
             canUseDesktopBackupPicker={desktopBackupPickerAvailable}
+            canUseManagedSourceFolders={desktopManagedSourceFoldersAvailable}
+            managedSourceFolders={managedSourceFolders}
+            onAddManagedSourceFolder={handleAddManagedSourceFolder}
             onCreateLocalModel={handleCreateLocalModel}
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
             onOrganizeModeChange={handleOrganizeModeChange}
             onPickDesktopBackup={handlePickDesktopBackup}
+            onRemoveManagedSourceFolder={handleRemoveManagedSourceFolder}
+            onScanManagedSourceFolder={handleScanManagedSourceFolder}
+            onSetManagedSourceFolderEnabled={handleSetManagedSourceFolderEnabled}
             onTabChange={setSettingsTab}
             onTestModel={handleTestModel}
             onUseForOrganization={handleUseForOrganization}
@@ -671,6 +729,7 @@ const KnowledgeDeskApp = () => {
                     jobsError={detailJobsFetch.error}
                     jobsLoading={detailJobsFetch.isLoading}
                     onAction={handleItemAction}
+                    onOpenManagedSourceAsset={handleOpenManagedSourceAsset}
                     onRetryJobs={() => void loadDetailJobs(detailItem.id)}
                     onUpdate={handleItemUpdate}
                   />

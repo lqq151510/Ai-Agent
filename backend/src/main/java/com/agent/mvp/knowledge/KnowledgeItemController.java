@@ -68,9 +68,12 @@ public class KnowledgeItemController extends AuthenticatedControllerSupport {
     public KnowledgeItemResponse importUpload(
             @RequestPart("file") MultipartFile file,
             @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "sourceAssetId", required = false) String sourceAssetId,
+            @RequestParam(value = "sourceAssetOrigin", required = false) String sourceAssetOrigin,
             Authentication authentication) {
         AuthenticatedUser user = requireAuthenticatedUser(authentication);
-        return knowledgeItemService.importUpload(user.userId(), file, title);
+        return knowledgeItemService.importUpload(
+                user.userId(), file, title, sourceAssetId, sourceAssetOrigin);
     }
 
     @PostMapping("/knowledge-items/import/preflight")

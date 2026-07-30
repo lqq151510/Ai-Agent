@@ -12,6 +12,7 @@ export type KnowledgeItem = {
   cleanedContent?: string;
   tags: string[];
   status?: KnowledgeStatus;
+  sourceAsset?: KnowledgeSourceAsset;
 };
 
 export type KnowledgeItemPage = {
@@ -69,6 +70,32 @@ export type LocalFileBatchCommitResult = {
   imported: Array<{ candidateId: string; name: string }>;
   skipped: Array<{ candidateId: string; name: string; reason: string }>;
   failed: Array<{ candidateId: string; name: string; reason: string }>;
+};
+
+export type KnowledgeSourceAsset = {
+  id: string;
+  originalFilename: string;
+  mediaType: string;
+  byteSize: number;
+  origin: 'picker' | 'watched_folder' | 'unknown';
+  availability: 'pending' | 'available' | 'missing' | 'unknown';
+};
+
+export type ManagedSourceFolderCounts = {
+  waiting: number;
+  importing: number;
+  imported: number;
+  skipped: number;
+  failed: number;
+};
+
+export type ManagedSourceFolder = {
+  id: string;
+  label: string;
+  enabled: boolean;
+  status: 'watching' | 'paused' | 'scanning' | 'error' | 'unknown';
+  lastScanAt?: string | null;
+  counts: ManagedSourceFolderCounts;
 };
 
 export type SearchKnowledgeItemsParams = {
@@ -194,6 +221,7 @@ export type KnowledgeDeskBackup = {
     createdAt: string;
     updatedAt: string;
     archivedAt?: string | null;
+    sourceAsset?: KnowledgeSourceAsset | null;
     tagIds: string[];
   }>;
   modelSourcesIncluded: false;
@@ -232,6 +260,7 @@ type BackendKnowledgeItem = {
   status: string;
   wordCount?: number;
   tags?: BackendTag[];
+  sourceAsset?: unknown;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -358,6 +387,12 @@ type KnowledgeElectronApi = {
     commitLocalFileBatch?: (payload: { batchId: string; candidateIds: string[] }) => Promise<BackendLocalFileBatchCommitResult>;
     saveBackup?: (payload: { content: string; suggestedName: string }) => Promise<{ canceled: boolean; filePath?: string }>;
     selectBackup?: () => Promise<{ canceled: boolean; content?: string; fileName?: string }>;
+    listManagedSourceFolders?: () => Promise<unknown>;
+    addManagedSourceFolder?: () => Promise<unknown>;
+    setManagedSourceFolderEnabled?: (payload: { folderId: string; enabled: boolean }) => Promise<unknown>;
+    scanManagedSourceFolder?: (payload: { folderId: string }) => Promise<unknown>;
+    removeManagedSourceFolder?: (payload: { folderId: string }) => Promise<unknown>;
+    openManagedSourceAsset?: (payload: { assetId: string; reveal?: boolean }) => Promise<unknown>;
   };
 };
 
@@ -384,6 +419,18 @@ export const canUseDesktopBatchFileImport = () => {
 export const canUseDesktopBackupPicker = () => {
   const electronApi = getElectronApi();
   return Boolean(electronApi?.knowledge?.saveBackup && electronApi?.knowledge?.selectBackup);
+};
+
+export const canUseManagedSourceFolders = () => {
+  const knowledge = getElectronApi()?.knowledge;
+  return Boolean(
+    knowledge?.listManagedSourceFolders
+      && knowledge.addManagedSourceFolder
+      && knowledge.setManagedSourceFolderEnabled
+      && knowledge.scanManagedSourceFolder
+      && knowledge.removeManagedSourceFolder
+      && knowledge.openManagedSourceAsset,
+  );
 };
 
 const canUseDirectBackend = () => (
@@ -560,6 +607,87 @@ export const commitLocalKnowledgeFileBatch = async (
     skipped: toLocalFileBatchCommitEntries(result?.skipped, true) as LocalFileBatchCommitResult['skipped'],
     failed: toLocalFileBatchCommitEntries(result?.failed, true) as LocalFileBatchCommitResult['failed'],
   };
+};
+
+const sourceFolderCount = (value: unknown): number => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0
+);
+
+const toManagedSourceFolder = (value: unknown): ManagedSourceFolder => {
+  if (!value || typeof value !== 'object') {
+    throw new Error('本机资料源返回了无效条目。');
+  }
+  const folder = value as Record<string, unknown>;
+  if (
+    typeof folder.id !== 'string'
+    || typeof folder.label !== 'string'
+    || typeof folder.enabled !== 'boolean'
+  ) {
+    throw new Error('本机资料源返回了无效条目。');
+  }
+  const rawStatus = typeof folder.status === 'string' ? folder.status : 'unknown';
+  const status = rawStatus === 'disabled'
+    ? 'paused'
+    : ['watching', 'paused', 'scanning', 'error'].includes(rawStatus)
+      ? rawStatus as ManagedSourceFolder['status']
+      : 'unknown';
+  const rawCounts = folder.counts && typeof folder.counts === 'object'
+    ? folder.counts as Record<string, unknown>
+    : {};
+  return {
+    id: folder.id,
+    label: folder.label,
+    enabled: folder.enabled,
+    status,
+    lastScanAt: typeof folder.lastScanAt === 'string' ? folder.lastScanAt : null,
+    counts: {
+      waiting: sourceFolderCount(rawCounts.waiting),
+      importing: sourceFolderCount(rawCounts.importing),
+      imported: sourceFolderCount(rawCounts.imported),
+      skipped: sourceFolderCount(rawCounts.skipped),
+      failed: sourceFolderCount(rawCounts.failed),
+    },
+  };
+};
+
+const requireManagedSourceFolderBridge = () => {
+  const knowledge = getElectronApi()?.knowledge;
+  if (!canUseManagedSourceFolders() || !knowledge) {
+    throw new Error('本机资料源仅能在桌面端使用。');
+  }
+  return knowledge;
+};
+
+export const listManagedSourceFolders = async (): Promise<ManagedSourceFolder[]> => {
+  const list = requireManagedSourceFolderBridge().listManagedSourceFolders!;
+  const result = await list();
+  if (!result || typeof result !== 'object' || !Array.isArray((result as { folders?: unknown }).folders)) {
+    throw new Error('本机资料源返回了无效结果。');
+  }
+  return (result as { folders: unknown[] }).folders.map(toManagedSourceFolder);
+};
+
+export const addManagedSourceFolder = async (): Promise<void> => {
+  await requireManagedSourceFolderBridge().addManagedSourceFolder!();
+};
+
+export const setManagedSourceFolderEnabled = async (folderId: string, enabled: boolean): Promise<void> => {
+  await requireManagedSourceFolderBridge().setManagedSourceFolderEnabled!({ folderId, enabled });
+};
+
+export const scanManagedSourceFolder = async (folderId: string): Promise<void> => {
+  await requireManagedSourceFolderBridge().scanManagedSourceFolder!({ folderId });
+};
+
+export const removeManagedSourceFolder = async (folderId: string): Promise<void> => {
+  await requireManagedSourceFolderBridge().removeManagedSourceFolder!({ folderId });
+};
+
+export const openManagedSourceAsset = async (assetId: string, reveal = false): Promise<void> => {
+  const result = await requireManagedSourceFolderBridge().openManagedSourceAsset!({ assetId, reveal });
+  if (!result || typeof result !== 'object' || (result as { opened?: unknown }).opened !== true) {
+    throw new Error('本机原件目前不可打开，请稍后重试。');
+  }
 };
 
 export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot> => {
@@ -969,6 +1097,33 @@ export const restoreKnowledgeItem = async (item: KnowledgeItem): Promise<Knowled
   return toKnowledgeItem(await request<BackendKnowledgeItem>(`/api/v1/knowledge-items/${encodeURIComponent(item.id)}/restore`, 'POST'));
 };
 
+const toKnowledgeSourceAsset = (value: unknown): KnowledgeSourceAsset | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const sourceAsset = value as Record<string, unknown>;
+  if (
+    typeof sourceAsset.id !== 'string'
+    || typeof sourceAsset.originalFilename !== 'string'
+    || typeof sourceAsset.mediaType !== 'string'
+    || typeof sourceAsset.byteSize !== 'number'
+  ) {
+    return undefined;
+  }
+  const rawOrigin = sourceAsset.origin;
+  const origin = rawOrigin === 'picker' || rawOrigin === 'watched_folder' ? rawOrigin : 'unknown';
+  const rawAvailability = sourceAsset.availability;
+  const availability = rawAvailability === 'pending' || rawAvailability === 'available' || rawAvailability === 'missing'
+    ? rawAvailability
+    : 'unknown';
+  return {
+    id: sourceAsset.id,
+    originalFilename: sourceAsset.originalFilename,
+    mediaType: sourceAsset.mediaType,
+    byteSize: sourceAsset.byteSize,
+    origin,
+    availability,
+  };
+};
+
 const toKnowledgeItem = (item: BackendKnowledgeItem): KnowledgeItem => ({
   id: item.id,
   title: item.title,
@@ -980,6 +1135,7 @@ const toKnowledgeItem = (item: BackendKnowledgeItem): KnowledgeItem => ({
   cleanedContent: item.cleanedContent || undefined,
   tags: (item.tags ?? []).map((tag) => tag.name),
   status: toStatus(item.status),
+  sourceAsset: toKnowledgeSourceAsset(item.sourceAsset),
 });
 
 const toKnowledgeItemPage = (page: BackendKnowledgePage): KnowledgeItemPage => ({
@@ -1114,9 +1270,21 @@ const isValidKnowledgeDeskBackupShape = (backup: Partial<KnowledgeDeskBackup>) =
     && Number.isFinite(item.wordCount)
     && isNonEmptyString(item?.createdAt)
     && isNonEmptyString(item?.updatedAt)
+    && (item.sourceAsset == null || isBackupSourceAsset(item.sourceAsset))
     && Array.isArray(item?.tagIds)
     && item.tagIds.every(isNonEmptyString)
   ))
+);
+
+const isBackupSourceAsset = (sourceAsset: KnowledgeSourceAsset) => (
+  isNonEmptyString(sourceAsset.id)
+  && isNonEmptyString(sourceAsset.originalFilename)
+  && isNonEmptyString(sourceAsset.mediaType)
+  && typeof sourceAsset.byteSize === 'number'
+  && Number.isFinite(sourceAsset.byteSize)
+  && sourceAsset.byteSize >= 0
+  && (sourceAsset.origin === 'picker' || sourceAsset.origin === 'watched_folder' || sourceAsset.origin === 'unknown')
+  && ['pending', 'available', 'missing', 'unknown'].includes(sourceAsset.availability)
 );
 
 const isBackupPreferences = (preferences: KnowledgeDeskBackup['preferences'] | undefined) => (

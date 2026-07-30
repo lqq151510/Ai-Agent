@@ -20,6 +20,14 @@ public interface KnowledgeItemTagRepository {
                     + "#{tagId,typeHandler=com.agent.mvp.config.UuidTypeHandler})")
     int insert(KnowledgeItemTag relation);
 
+    @Insert(
+            "<script>INSERT INTO knowledge_item_tags(knowledge_item_id, tag_id) VALUES "
+                    + "<foreach collection='list' item='item' separator=','>"
+                    + "(#{item.knowledgeItemId,typeHandler=com.agent.mvp.config.UuidTypeHandler}, "
+                    + "#{item.tagId,typeHandler=com.agent.mvp.config.UuidTypeHandler})"
+                    + "</foreach></script>")
+    int insertBatch(@Param("list") List<KnowledgeItemTag> list);
+
     @Delete(
             "DELETE FROM knowledge_item_tags WHERE knowledge_item_id = "
                     + "#{knowledgeItemId,typeHandler=com.agent.mvp.config.UuidTypeHandler}")

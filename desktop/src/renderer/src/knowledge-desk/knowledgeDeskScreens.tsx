@@ -1358,6 +1358,7 @@ export const DetailPage = ({
   jobsError,
   jobsLoading,
   onAction,
+  onOpenManagedSourceAsset,
   onRetryJobs,
   onUpdate,
 }: {
@@ -1370,6 +1371,7 @@ export const DetailPage = ({
   jobsError?: string | null;
   jobsLoading: boolean;
   onAction: (item: KnowledgeItem, action: KnowledgeWorkflowAction) => Promise<void>;
+  onOpenManagedSourceAsset: (assetId: string, reveal?: boolean) => Promise<void>;
   onRetryJobs: () => void;
   onUpdate: (item: KnowledgeItem, draft: { title: string; summary: string; tags: string[] }) => Promise<void>;
 }) => {
@@ -1381,6 +1383,8 @@ export const DetailPage = ({
   });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [sourceAssetAction, setSourceAssetAction] = useState<'open' | 'reveal' | null>(null);
+  const [sourceAssetError, setSourceAssetError] = useState<string | null>(null);
   const body = item.cleanedContent || item.rawContent || item.summary;
   const paragraphs = body
     .split('\n')
@@ -1394,6 +1398,19 @@ export const DetailPage = ({
     setEditError(null);
     setDraft({ title: item.title, summary: item.summary, tags: itemTagDraft });
     setIsEditing(true);
+  };
+
+  const useManagedSourceAsset = async (action: 'open' | 'reveal') => {
+    if (!item.sourceAsset || item.sourceAsset.availability !== 'available') return;
+    setSourceAssetAction(action);
+    setSourceAssetError(null);
+    try {
+      await onOpenManagedSourceAsset(item.sourceAsset.id, action === 'reveal');
+    } catch (sourceError) {
+      setSourceAssetError(sourceError instanceof Error ? sourceError.message : String(sourceError));
+    } finally {
+      setSourceAssetAction(null);
+    }
   };
 
   const submitEdit = async (event: FormEvent<HTMLFormElement>) => {
@@ -1526,6 +1543,37 @@ export const DetailPage = ({
           这条资料仍在整理中，完成后会自动进入知识库。
         </div>
       ) : null}
+      {item.sourceAsset ? (
+        <section className={`kd-source-asset kd-source-asset--${item.sourceAsset.availability}`} aria-label="本机原件">
+          <div className="kd-source-asset__meta">
+            <FolderOpen size={18} />
+            <div>
+              <p className="kd-kicker">本机原件</p>
+              <strong>{item.sourceAsset.originalFilename}</strong>
+              <span>
+                {item.sourceAsset.origin === 'watched_folder' ? '自动收集' : '手动导入'} · {formatSourceAssetSize(item.sourceAsset.byteSize)} · {sourceAssetAvailabilityCopy(item.sourceAsset.availability)}
+              </span>
+            </div>
+          </div>
+          {item.sourceAsset.availability === 'available' ? (
+            <div className="kd-source-asset__actions">
+              <button disabled={sourceAssetAction !== null} onClick={() => void useManagedSourceAsset('open')} type="button">
+                {sourceAssetAction === 'open' ? <Loader2 className="animate-spin" size={14} /> : <Eye size={14} />} 打开原件
+              </button>
+              <button disabled={sourceAssetAction !== null} onClick={() => void useManagedSourceAsset('reveal')} type="button">
+                {sourceAssetAction === 'reveal' ? <Loader2 className="animate-spin" size={14} /> : <FolderOpen size={14} />} 在 Finder 中显示
+              </button>
+            </div>
+          ) : (
+            <p className="kd-source-asset__missing">
+              {item.sourceAsset.availability === 'missing'
+                ? '此条资料的原件未随当前本机数据恢复，但正文、摘要和标签仍可使用。'
+                : '原件正在完成本机保存，请稍后刷新详情。'}
+            </p>
+          )}
+          {sourceAssetError ? <p className="kd-form-error">{sourceAssetError}</p> : null}
+        </section>
+      ) : null}
       {error ? (
         <ErrorCard
           className="my-4"
@@ -1551,6 +1599,20 @@ export const DetailPage = ({
       </blockquote>
     </article>
   );
+};
+
+const formatSourceAssetSize = (bytes: number) => {
+  if (!Number.isFinite(bytes) || bytes < 1) return '大小未知';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const sourceAssetAvailabilityCopy = (availability: NonNullable<KnowledgeItem['sourceAsset']>['availability']) => {
+  if (availability === 'available') return '已安全保存';
+  if (availability === 'missing') return '原件缺失';
+  if (availability === 'pending') return '保存中';
+  return '状态未知';
 };
 
 const SEARCH_HISTORY_KEY = 'kd:search-history';

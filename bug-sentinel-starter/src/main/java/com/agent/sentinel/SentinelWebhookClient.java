@@ -1,13 +1,18 @@
 package com.agent.sentinel;
 
+import jakarta.annotation.PreDestroy;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Sentinel Webhook 客户端，负责将异常堆栈异步上报到指定 webhook URL。
@@ -22,13 +27,25 @@ public class SentinelWebhookClient {
     private final String environment;
     private final boolean enabled;
 
+    private final ExecutorService executor = Executors.newFixedThreadPool(
+            Math.max(2, Runtime.getRuntime().availableProcessors() / 2),
+            r -> {
+                Thread t = new Thread(r, "sentinel-webhook");
+                t.setDaemon(true);
+                return t;
+            }
+    );
+
     public SentinelWebhookClient(String webhookUrl, String projectName) {
         this(webhookUrl, projectName, "default", true);
     }
 
     public SentinelWebhookClient(
             String webhookUrl, String projectName, String environment, boolean enabled) {
-        this.restTemplate = new RestTemplate();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(10000);
+        this.restTemplate = new RestTemplate(factory);
         this.webhookUrl =
                 webhookUrl != null
                         ? webhookUrl
@@ -68,7 +85,21 @@ public class SentinelWebhookClient {
                         // 上报失败静默忽略，避免无限循环
                         System.err.println("Failed to send sentinel report: " + e.getMessage());
                     }
-                });
+                },
+                executor);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** 当前线程绑定的业务标签（由 AOP 切面设置），用于区分上报来源。 */

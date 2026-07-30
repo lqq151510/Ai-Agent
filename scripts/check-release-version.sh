@@ -51,4 +51,8 @@ for component in "${components[@]}"; do
   fi
 done
 
+macos_metadata="$(node "${ROOT_DIR}/scripts/macos-release-metadata.mjs" --json)" \
+  || fail "macOS bundle metadata is invalid"
+
 echo "[release-version] all release components use ${reference_version}"
+echo "[release-version] macOS bundle metadata: ${macos_metadata}"

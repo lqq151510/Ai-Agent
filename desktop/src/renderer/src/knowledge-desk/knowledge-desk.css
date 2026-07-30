@@ -1136,6 +1136,85 @@
   color: var(--error);
 }
 
+.kd-source-asset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 22px;
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--surface-page);
+}
+
+.kd-source-asset--available {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-default));
+}
+
+.kd-source-asset--missing {
+  border-color: var(--warning);
+  background: var(--warning-alpha-15);
+}
+
+.kd-source-asset__meta {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.kd-source-asset__meta > svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.kd-source-asset__meta p {
+  margin: 0 0 2px;
+}
+
+.kd-source-asset__meta strong,
+.kd-source-asset__meta span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.kd-source-asset__meta span,
+.kd-source-asset__missing {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.kd-source-asset__actions,
+.kd-managed-source-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kd-source-asset__actions button,
+.kd-managed-source-card__actions button,
+.kd-managed-sources__header > button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+}
+
+.kd-source-asset__actions button:hover:not(:disabled),
+.kd-managed-source-card__actions button:hover:not(:disabled),
+.kd-managed-sources__header > button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .kd-ingestion-history {
   margin: 28px 0;
   padding: 18px;
@@ -1549,6 +1628,119 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.kd-managed-sources {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--surface-page);
+}
+
+.kd-managed-sources__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.kd-managed-sources__header h3 {
+  margin: 2px 0 6px;
+  font-size: 17px;
+}
+
+.kd-managed-sources__header p:not(.kd-kicker) {
+  max-width: 620px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.kd-managed-sources__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.kd-managed-sources__notice svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.kd-managed-source-card {
+  display: grid;
+  gap: 11px;
+  padding: 13px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-card);
+}
+
+.kd-managed-source-card__title {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.kd-managed-source-card__title strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.kd-managed-source-card__title p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.kd-managed-source-status {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--text-tertiary);
+}
+
+.kd-managed-source-status--watching {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-alpha-10);
+}
+
+.kd-managed-source-status--scanning {
+  background: var(--warning);
+}
+
+.kd-managed-source-status--error {
+  background: var(--error);
+}
+
+.kd-managed-source-card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kd-managed-source-card__stats span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--surface-page);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.kd-managed-source-card__actions .is-danger {
+  color: var(--error);
 }
 
 .kd-segmented--wide {
@@ -2057,6 +2249,16 @@
   .kd-settings,
   .kd-settings-split {
     grid-template-columns: 1fr;
+  }
+
+  .kd-managed-sources__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kd-source-asset {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .kd-settings-nav {

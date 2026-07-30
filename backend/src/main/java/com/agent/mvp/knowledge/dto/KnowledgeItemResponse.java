@@ -1,5 +1,6 @@
 package com.agent.mvp.knowledge.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -18,4 +19,5 @@ public record KnowledgeItemResponse(
         List<TagResponse> tags,
         Instant createdAt,
         Instant updatedAt,
-        Instant archivedAt) {}
+        Instant archivedAt,
+        @JsonInclude(JsonInclude.Include.NON_NULL) KnowledgeSourceAssetResponse sourceAsset) {}

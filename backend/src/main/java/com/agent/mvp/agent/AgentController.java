@@ -119,7 +119,7 @@ public class AgentController {
         AuthenticatedUser user = com.agent.mvp.auth.security.AuthUtils.requireUser(authentication);
         enforceChatRateLimit(user);
 
-        SseEmitter emitter = new SseEmitter(0L);
+        SseEmitter emitter = new SseEmitter(300_000L);
 
         long heartbeatMs = Math.max(1_000L, appProperties.getAgent().getHeartbeatIntervalMs());
         ScheduledFuture<?> heartbeat =

@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE_DIR="${1:-${ROOT_DIR}/desktop/release}"
 MANIFEST_FILE="${RELEASE_DIR}/release-manifest.json"
 CHECKSUM_FILE="${RELEASE_DIR}/SHA256SUMS"
+RELEASE_MANIFEST_MACOS_ARCH="${RELEASE_MANIFEST_MACOS_ARCH:-}"
 
 log() {
   echo "[release-manifest] $*"
@@ -32,6 +33,7 @@ ROOT_DIR="${ROOT_DIR}" \
 RELEASE_DIR="${RELEASE_DIR}" \
 MANIFEST_FILE="${MANIFEST_FILE}" \
 CHECKSUM_FILE="${CHECKSUM_FILE}" \
+RELEASE_MANIFEST_MACOS_ARCH="${RELEASE_MANIFEST_MACOS_ARCH}" \
 node <<'NODE'
 const fs = require('fs');
 const path = require('path');
@@ -42,7 +44,12 @@ const rootDir = process.env.ROOT_DIR;
 const releaseDir = process.env.RELEASE_DIR;
 const manifestFile = process.env.MANIFEST_FILE;
 const checksumFile = process.env.CHECKSUM_FILE;
+const macosArch = process.env.RELEASE_MANIFEST_MACOS_ARCH || null;
 const artifactPattern = /\.(dmg|zip|exe|appimage|deb)$/i;
+
+if (macosArch !== null && !/^(arm64|x64)$/.test(macosArch)) {
+  throw new Error(`[release-manifest] unsupported macOS architecture selector: ${macosArch}`);
+}
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -114,7 +121,11 @@ function collectMacApps() {
 
   const appRoots = fs
     .readdirSync(releaseDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith('mac-'))
+    .filter((entry) => (
+      entry.isDirectory()
+      && entry.name.startsWith('mac-')
+      && (macosArch === null || entry.name === `mac-${macosArch}`)
+    ))
     .map((entry) => path.join(releaseDir, entry.name));
 
   const apps = [];

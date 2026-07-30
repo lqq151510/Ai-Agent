@@ -23,7 +23,6 @@ import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,7 +31,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/openai/v1")
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class OpenAIController {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAIController.class);

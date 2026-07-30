@@ -185,16 +185,7 @@ public class ModelSourceService {
     }
 
     private void clearDefault(UUID userId) {
-        List<ModelSource> currentDefaults =
-                modelSourceRepository.selectList(
-                        new LambdaQueryWrapper<ModelSource>()
-                                .eq(ModelSource::getUserId, userId)
-                                .eq(ModelSource::getIsDefault, true));
-        for (ModelSource current : currentDefaults) {
-            current.setIsDefault(false);
-            current.touch();
-            modelSourceRepository.updateById(current);
-        }
+        modelSourceRepository.clearDefaultByUserId(userId, Instant.now());
     }
 
     private void ensureNameAvailable(UUID userId, String name, UUID currentId) {

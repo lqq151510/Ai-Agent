@@ -1,4 +1,4 @@
-import { app, globalShortcut, Notification } from 'electron';
+import { app, globalShortcut, Notification, shell } from 'electron';
 import { BackendManager } from './backend-manager';
 import { CliManager } from './cli-manager';
 import { WindowManager } from './window-manager';
@@ -14,6 +14,7 @@ import { ToolExecutionBridge } from './tool-execution-bridge';
 import { ApprovalEngine, type ApprovalMode } from './approval-engine';
 import { SkillManager } from './skill-manager';
 import { ComputerUseManager } from './computer-use-manager';
+import { KnowledgeSourceManager } from './knowledge-source-manager';
 import { findFreePort } from './utils/network';
 import { getDataDir, getJrePath, getBackendJarPath, getBackendStartupTimeoutMs } from './utils/env';
 import { ensureDesktopSecrets } from './utils/secrets';
@@ -45,7 +46,12 @@ let toolBridge: ToolExecutionBridge;
 let approvalEngine: ApprovalEngine;
 let skillManager: SkillManager;
 let computerUseManager: ComputerUseManager;
+let knowledgeSourceManager: KnowledgeSourceManager;
 let approvalMode: ApprovalMode = 'suggest';
+
+app.on('will-quit', () => {
+  knowledgeSourceManager?.dispose();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -152,6 +158,15 @@ if (!gotTheLock) {
       });
       windowManager = new WindowManager();
       trayManager = new TrayManager(windowManager, backendManager);
+      knowledgeSourceManager = new KnowledgeSourceManager({
+        dataDirectory: dataDir,
+        // These closures are only invoked after the registry exists and keep
+        // source reads/uploads inside the Electron main process.
+        readSourceFile: (sourcePath) => ipcRegistry.readManagedSourceFile(sourcePath),
+        uploadManagedSource: (request) => ipcRegistry.uploadManagedSourceFile(request),
+        openPath: (sourcePath) => shell.openPath(sourcePath),
+        revealPath: (sourcePath) => shell.showItemInFolder(sourcePath),
+      });
 
       if (isLegacyEnabled) {
         cliManager = new CliManager();
@@ -191,6 +206,7 @@ if (!gotTheLock) {
         computerUseManager!,
         (mode) => { approvalMode = mode; },
         () => approvalMode,
+        knowledgeSourceManager,
       );
 
       ipcRegistry.setupIpc();
@@ -223,6 +239,7 @@ if (!gotTheLock) {
       }
 
       await backendManager.start();
+      await knowledgeSourceManager.initialize();
 
       windowManager.mainWindow?.webContents.on('did-finish-load', () => {
         windowManager.mainWindow?.webContents.send('backend:status-changed', backendManager.getStatus());

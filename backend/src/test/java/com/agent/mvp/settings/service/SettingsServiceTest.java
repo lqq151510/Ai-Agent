@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -18,16 +19,19 @@ import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.knowledge.entity.KnowledgeItem;
 import com.agent.mvp.knowledge.entity.KnowledgeItemTag;
+import com.agent.mvp.knowledge.entity.KnowledgeSourceAsset;
 import com.agent.mvp.knowledge.entity.KnowledgeTag;
 import com.agent.mvp.knowledge.repo.KnowledgeItemRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
+import com.agent.mvp.knowledge.repo.KnowledgeSourceAssetRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
 import com.agent.mvp.modelsource.entity.ModelSource;
 import com.agent.mvp.modelsource.repo.ModelSourceRepository;
 import com.agent.mvp.settings.dto.SettingsBackupKnowledgeItem;
 import com.agent.mvp.settings.dto.SettingsBackupPayload;
 import com.agent.mvp.settings.dto.SettingsBackupPreferences;
+import com.agent.mvp.settings.dto.SettingsBackupSourceAsset;
 import com.agent.mvp.settings.dto.SettingsBackupTag;
 import com.agent.mvp.settings.dto.UpdateSettingsProfileRequest;
 import com.agent.mvp.settings.entity.UserProfile;
@@ -163,8 +167,7 @@ class SettingsServiceTest {
 
         assertEquals(newDefaultId, profile.getDefaultModelSourceId());
         assertEquals(newDefaultId, response.defaultModelSourceId());
-        verify(modelSourceRepository).updateById(oldDefault);
-        verify(modelSourceRepository).updateById(newDefault);
+        verify(modelSourceRepository).syncDefault(eq(userId), eq(newDefaultId), any(Instant.class));
         verify(userProfileService).save(profile);
     }
 
@@ -228,7 +231,7 @@ class SettingsServiceTest {
         assertNull(profile.getSummaryModelSourceId());
         assertNull(profile.getTaggingModelSourceId());
         assertNull(response.defaultModelSourceId());
-        verify(modelSourceRepository).updateById(currentDefault);
+        verify(modelSourceRepository).clearDefaultByUserId(eq(userId), any(Instant.class));
         verify(userProfileService).save(profile);
     }
 
@@ -238,6 +241,8 @@ class SettingsServiceTest {
         UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
         ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
         KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeSourceAssetRepository knowledgeSourceAssetRepository =
+                mock(KnowledgeSourceAssetRepository.class);
         KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
         KnowledgeItemTagRepository knowledgeItemTagRepository =
                 mock(KnowledgeItemTagRepository.class);
@@ -247,6 +252,7 @@ class SettingsServiceTest {
                         userProfileRepository,
                         modelSourceRepository,
                         knowledgeItemRepository,
+                        knowledgeSourceAssetRepository,
                         knowledgeTagRepository,
                         knowledgeItemTagRepository);
 
@@ -286,6 +292,20 @@ class SettingsServiceTest {
                         .color("#7a8a84")
                         .createdAt(createdAt)
                         .build();
+        KnowledgeSourceAsset sourceAsset =
+                KnowledgeSourceAsset.builder()
+                        .id(UUID.randomUUID())
+                        .userId(userId)
+                        .knowledgeItemId(itemId)
+                        .contentHash("f".repeat(64))
+                        .originalFilename("/Users/ze/private/rag.md")
+                        .mediaType("text/markdown")
+                        .byteSize(42L)
+                        .origin("picker")
+                        .availability("available")
+                        .createdAt(createdAt)
+                        .updatedAt(createdAt)
+                        .build();
         KnowledgeItemTagView relation = new KnowledgeItemTagView();
         relation.setKnowledgeItemId(itemId);
         relation.setTagId(tagId);
@@ -298,6 +318,7 @@ class SettingsServiceTest {
         when(userProfileRepository.selectById(userId)).thenReturn(profile);
         when(knowledgeTagRepository.selectList(any())).thenReturn(List.of(tag));
         when(knowledgeItemRepository.selectList(any())).thenReturn(List.of(item));
+        when(knowledgeSourceAssetRepository.selectList(any())).thenReturn(List.of(sourceAsset));
         when(knowledgeItemTagRepository.findTagsByKnowledgeItemIds(List.of(itemId)))
                 .thenReturn(List.of(relation));
         when(modelSourceRepository.selectList(any()))
@@ -314,9 +335,16 @@ class SettingsServiceTest {
         assertFalse(backup.modelSourcesIncluded());
         assertEquals("泽宝", backup.preferences().displayName());
         assertEquals(List.of(tagId), backup.knowledgeItems().getFirst().tagIds());
+        assertEquals("upload://rag.md", backup.knowledgeItems().getFirst().sourceUri());
+        assertEquals(sourceAsset.getId(), backup.knowledgeItems().getFirst().sourceAsset().id());
+        assertEquals(
+                "rag.md", backup.knowledgeItems().getFirst().sourceAsset().originalFilename());
         String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(backup);
         assertFalse(json.contains("apiKey"));
         assertFalse(json.contains("sk-local-secret"));
+        assertFalse(json.contains(sourceAsset.getContentHash()));
+        assertFalse(json.contains("contentHash"));
+        assertFalse(json.contains("/Users/ze/private"));
         verifyNoInteractions(modelSourceRepository);
         verify(userProfileService, never()).getOrCreate(any());
     }
@@ -374,38 +402,122 @@ class SettingsServiceTest {
         assertEquals(1, response.createdTags());
         assertFalse(response.preferencesRestored());
         assertFalse(response.modelSourcesRestored());
-        ArgumentCaptor<KnowledgeItem> itemCaptor = ArgumentCaptor.forClass(KnowledgeItem.class);
-        verify(knowledgeItemRepository).insert(itemCaptor.capture());
-        KnowledgeItem importedItem = itemCaptor.getValue();
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<KnowledgeItem>> itemCaptor = ArgumentCaptor.forClass(List.class);
+        verify(knowledgeItemRepository).insertBatch(itemCaptor.capture());
+        KnowledgeItem importedItem = itemCaptor.getValue().get(0);
         assertNotEquals(sourceItemId, importedItem.getId());
         assertEquals(userId, importedItem.getUserId());
         assertEquals("ready", importedItem.getStatus());
 
-        ArgumentCaptor<KnowledgeTag> tagCaptor = ArgumentCaptor.forClass(KnowledgeTag.class);
-        verify(knowledgeTagRepository).insert(tagCaptor.capture());
-        KnowledgeTag createdRagTag = tagCaptor.getValue();
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<KnowledgeTag>> tagCaptor = ArgumentCaptor.forClass(List.class);
+        verify(knowledgeTagRepository).insertBatch(tagCaptor.capture());
+        KnowledgeTag createdRagTag = tagCaptor.getValue().get(0);
         assertEquals("rag", createdRagTag.getName());
         assertEquals(userId, createdRagTag.getUserId());
         assertTrue(createdRagTag.getId() != null);
 
-        ArgumentCaptor<KnowledgeItemTag> relationCaptor =
-                ArgumentCaptor.forClass(KnowledgeItemTag.class);
-        verify(knowledgeItemTagRepository, times(2)).insert(relationCaptor.capture());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<KnowledgeItemTag>> relationCaptor =
+                ArgumentCaptor.forClass(List.class);
+        verify(knowledgeItemTagRepository).insertBatch(relationCaptor.capture());
+        assertEquals(2, relationCaptor.getValue().size());
         assertTrue(
-                relationCaptor.getAllValues().stream()
+                relationCaptor.getValue().stream()
                         .allMatch(
                                 relation ->
                                         importedItem
                                                 .getId()
                                                 .equals(relation.getKnowledgeItemId())));
         assertTrue(
-                relationCaptor.getAllValues().stream()
+                relationCaptor.getValue().stream()
                         .anyMatch(relation -> existingJavaTagId.equals(relation.getTagId())));
         assertTrue(
-                relationCaptor.getAllValues().stream()
+                relationCaptor.getValue().stream()
                         .anyMatch(relation -> createdRagTag.getId().equals(relation.getTagId())));
         verify(knowledgeItemRepository, never()).updateById(any(KnowledgeItem.class));
         verify(userProfileService, never()).save(any());
+    }
+
+    @Test
+    void importBackupShouldRestoreSafeSourceMetadataAsMissingWithoutHashOrLocalPath() {
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
+        ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
+        KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeSourceAssetRepository knowledgeSourceAssetRepository =
+                mock(KnowledgeSourceAssetRepository.class);
+        KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
+        SettingsService service =
+                new SettingsService(
+                        userProfileService,
+                        userProfileRepository,
+                        modelSourceRepository,
+                        knowledgeItemRepository,
+                        knowledgeSourceAssetRepository,
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository);
+
+        UUID userId = UUID.randomUUID();
+        UUID backupItemId = UUID.randomUUID();
+        UUID backupTagId = UUID.randomUUID();
+        UUID backupSourceAssetId = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-07-29T08:00:00Z");
+        SettingsBackupPayload backup =
+                new SettingsBackupPayload(
+                        1,
+                        createdAt,
+                        new SettingsBackupPreferences("泽宝", null, "manual", "local_first"),
+                        List.of(new SettingsBackupTag(backupTagId, "rag", "#7a8a84", createdAt)),
+                        List.of(
+                                new SettingsBackupKnowledgeItem(
+                                        backupItemId,
+                                        "markdown",
+                                        "Imported note",
+                                        "file:///Users/ze/private/notes.md",
+                                        "Imported content",
+                                        null,
+                                        null,
+                                        "inbox",
+                                        "en",
+                                        2,
+                                        createdAt,
+                                        createdAt,
+                                        null,
+                                        new SettingsBackupSourceAsset(
+                                                backupSourceAssetId,
+                                                "C:\\Users\\ze\\private\\notes.md",
+                                                "text/markdown",
+                                                42L,
+                                                "watched_folder",
+                                                "available"),
+                                        List.of(backupTagId))),
+                        false);
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("user@example.com").build());
+        when(knowledgeTagRepository.selectList(any())).thenReturn(List.of());
+
+        service.importBackup(userId, backup);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<KnowledgeItem>> itemCaptor = ArgumentCaptor.forClass(List.class);
+        verify(knowledgeItemRepository).insertBatch(itemCaptor.capture());
+        assertEquals("upload://notes.md", itemCaptor.getValue().get(0).getSourceUri());
+        ArgumentCaptor<KnowledgeSourceAsset> assetCaptor =
+                ArgumentCaptor.forClass(KnowledgeSourceAsset.class);
+        verify(knowledgeSourceAssetRepository).insert(assetCaptor.capture());
+        KnowledgeSourceAsset restoredAsset = assetCaptor.getValue();
+        assertNotEquals(backupSourceAssetId, restoredAsset.getId());
+        assertEquals(itemCaptor.getValue().get(0).getId(), restoredAsset.getKnowledgeItemId());
+        assertNull(restoredAsset.getContentHash());
+        assertEquals("notes.md", restoredAsset.getOriginalFilename());
+        assertEquals("text/markdown", restoredAsset.getMediaType());
+        assertEquals(42L, restoredAsset.getByteSize());
+        assertEquals("watched_folder", restoredAsset.getOrigin());
+        assertEquals("missing", restoredAsset.getAvailability());
     }
 
     @Test
@@ -490,6 +602,7 @@ class SettingsServiceTest {
                         firstValidItem.exportedAt(),
                         firstValidItem.exportedAt(),
                         null,
+                        null,
                         List.of(tagId));
         SettingsBackupPayload backup =
                 new SettingsBackupPayload(
@@ -537,6 +650,7 @@ class SettingsServiceTest {
                                 2,
                                 createdAt,
                                 createdAt,
+                                null,
                                 null,
                                 tagIds)),
                 false);

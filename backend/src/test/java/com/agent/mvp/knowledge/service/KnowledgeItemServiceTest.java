@@ -24,11 +24,13 @@ import com.agent.mvp.ingestion.service.IngestionJobService;
 import com.agent.mvp.knowledge.dto.ImportPreflightRequest;
 import com.agent.mvp.knowledge.dto.ImportSnippetKnowledgeItemRequest;
 import com.agent.mvp.knowledge.entity.KnowledgeItem;
+import com.agent.mvp.knowledge.entity.KnowledgeSourceAsset;
 import com.agent.mvp.knowledge.entity.KnowledgeTag;
 import com.agent.mvp.knowledge.repo.KnowledgeItemRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemStatusCountView;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
+import com.agent.mvp.knowledge.repo.KnowledgeSourceAssetRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeTagUsageSummaryView;
 import com.agent.mvp.settings.entity.UserProfile;
@@ -107,6 +109,302 @@ class KnowledgeItemServiceTest {
                 "5f5762850052fac61f58ed36def304edd152378016ed1ade7e284fd1d19ac7eb",
                 itemCaptor.getValue().getContentHash());
         verify(ingestionJobService).createImportSucceeded(eq(userId), eq(response.id()), any());
+    }
+
+    @Test
+    void importUploadShouldPersistAndReturnOnlySafeManagedSourceAssetMetadata() throws Exception {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeSourceAssetRepository sourceAssetRepository =
+                mock(KnowledgeSourceAssetRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        sourceAssetRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        UUID sourceAssetId = UUID.randomUUID();
+        byte[] bytes = "managed original bytes".getBytes();
+        MockMultipartFile file =
+                new MockMultipartFile(
+                        "file",
+                        "/Users/ze/private/managed-notes.md",
+                        "text/markdown",
+                        bytes);
+        when(itemRepository.selectCount(any())).thenReturn(0L);
+        when(markItDownService.parseDocument(any()))
+                .thenReturn(new ParsedDocument("managed-notes.md", "# Managed", "md", Map.of()));
+        when(itemTagRepository.findTagIdsByKnowledgeItemId(any())).thenReturn(List.of());
+        AtomicReference<KnowledgeSourceAsset> storedAsset = new AtomicReference<>();
+        Mockito.doAnswer(
+                        invocation -> {
+                            storedAsset.set(invocation.getArgument(0));
+                            return 1;
+                        })
+                .when(sourceAssetRepository)
+                .insert(any(KnowledgeSourceAsset.class));
+        when(sourceAssetRepository.selectOne(any())).thenAnswer(invocation -> storedAsset.get());
+
+        var response =
+                service.importUpload(
+                        userId,
+                        file,
+                        null,
+                        sourceAssetId.toString(),
+                        "watched_folder");
+
+        ArgumentCaptor<KnowledgeItem> itemCaptor = ArgumentCaptor.forClass(KnowledgeItem.class);
+        verify(itemRepository).insert(itemCaptor.capture());
+        KnowledgeSourceAsset persistedAsset = storedAsset.get();
+        assertEquals(sourceAssetId, persistedAsset.getId());
+        assertEquals(userId, persistedAsset.getUserId());
+        assertEquals(response.id(), persistedAsset.getKnowledgeItemId());
+        assertEquals(itemCaptor.getValue().getContentHash(), persistedAsset.getContentHash());
+        assertEquals("managed-notes.md", persistedAsset.getOriginalFilename());
+        assertEquals("text/markdown", persistedAsset.getMediaType());
+        assertEquals((long) bytes.length, persistedAsset.getByteSize());
+        assertEquals("watched_folder", persistedAsset.getOrigin());
+        assertEquals("available", persistedAsset.getAvailability());
+        assertEquals("upload://managed-notes.md", response.sourceUri());
+        assertEquals(sourceAssetId, response.sourceAsset().id());
+        assertEquals("managed-notes.md", response.sourceAsset().originalFilename());
+        assertEquals("text/markdown", response.sourceAsset().mediaType());
+        assertEquals((long) bytes.length, response.sourceAsset().byteSize());
+        assertEquals("watched_folder", response.sourceAsset().origin());
+        assertEquals("available", response.sourceAsset().availability());
+
+        String responseJson = new ObjectMapper().findAndRegisterModules().writeValueAsString(response);
+        assertFalse(responseJson.contains(persistedAsset.getContentHash()));
+        assertFalse(responseJson.contains("contentHash"));
+        assertFalse(responseJson.contains("storageKey"));
+        assertFalse(responseJson.contains("/Users/ze/private"));
+    }
+
+    @Test
+    void importUploadShouldRejectUnpairedOrInvalidManagedSourceAssetFieldsBeforeParsing() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeSourceAssetRepository sourceAssetRepository =
+                mock(KnowledgeSourceAssetRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        sourceAssetRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+        MockMultipartFile file =
+                new MockMultipartFile("file", "notes.md", "text/markdown", "body".getBytes());
+
+        assertThrows(
+                BadRequestException.class,
+                () -> service.importUpload(UUID.randomUUID(), file, null, "not-a-uuid", "picker"));
+        assertThrows(
+                BadRequestException.class,
+                () ->
+                        service.importUpload(
+                                UUID.randomUUID(), file, null, null, "watched_folder"));
+        assertThrows(
+                BadRequestException.class,
+                () ->
+                        service.importUpload(
+                                UUID.randomUUID(),
+                                file,
+                                null,
+                                UUID.randomUUID().toString(),
+                                "untrusted_origin"));
+
+        verifyNoInteractions(markItDownService, sourceAssetRepository);
+        verify(itemRepository, never()).insert(any(KnowledgeItem.class));
+    }
+
+    @Test
+    void importUploadShouldBeIdempotentForSameManagedSourceAssetAndBytes() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeSourceAssetRepository sourceAssetRepository =
+                mock(KnowledgeSourceAssetRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        sourceAssetRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID sourceAssetId = UUID.randomUUID();
+        KnowledgeItem existingItem =
+                KnowledgeItem.builder()
+                        .id(itemId)
+                        .userId(userId)
+                        .sourceType("markdown")
+                        .title("notes")
+                        .sourceUri("upload://notes.md")
+                        .rawContent("parsed body")
+                        .status("inbox")
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .build();
+        KnowledgeSourceAsset existingAsset =
+                KnowledgeSourceAsset.builder()
+                        .id(sourceAssetId)
+                        .userId(userId)
+                        .knowledgeItemId(itemId)
+                        .contentHash(
+                                "58100dc8fc06562ce3e578231dc948e083520ee49c4b4ee5a5a28bb4b4003feb")
+                        .originalFilename("notes.md")
+                        .mediaType("text/markdown")
+                        .byteSize(10L)
+                        .origin("picker")
+                        .availability("available")
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .build();
+        when(sourceAssetRepository.selectById(sourceAssetId)).thenReturn(existingAsset);
+        when(sourceAssetRepository.selectOne(any())).thenReturn(existingAsset);
+        when(itemRepository.selectById(itemId)).thenReturn(existingItem);
+        when(itemTagRepository.findTagIdsByKnowledgeItemId(itemId)).thenReturn(List.of());
+
+        var response =
+                service.importUpload(
+                        userId,
+                        new MockMultipartFile(
+                                "file", "notes.md", "text/markdown", "same bytes".getBytes()),
+                        null,
+                        sourceAssetId.toString(),
+                        "picker");
+
+        assertEquals(itemId, response.id());
+        assertEquals(sourceAssetId, response.sourceAsset().id());
+        verifyNoInteractions(markItDownService);
+        verify(itemRepository, never()).selectCount(any());
+        verify(itemRepository, never()).insert(any(KnowledgeItem.class));
+        verify(ingestionJobService, never()).createImportSucceeded(any(), any(), any());
+    }
+
+    @Test
+    void importUploadShouldRejectManagedSourceAssetRetryWhenTrustedMetadataDiffers() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeSourceAssetRepository sourceAssetRepository =
+                mock(KnowledgeSourceAssetRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        sourceAssetRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        mock(UserProfileService.class),
+                        new ObjectMapper());
+        UUID userId = UUID.randomUUID();
+        UUID sourceAssetId = UUID.randomUUID();
+        when(sourceAssetRepository.selectById(sourceAssetId))
+                .thenReturn(
+                        KnowledgeSourceAsset.builder()
+                                .id(sourceAssetId)
+                                .userId(userId)
+                                .knowledgeItemId(UUID.randomUUID())
+                                .contentHash(
+                                        "58100dc8fc06562ce3e578231dc948e083520ee49c4b4ee5a5a28bb4b4003feb")
+                                .originalFilename("notes.md")
+                                .mediaType("text/markdown")
+                                .byteSize(10L)
+                                .origin("picker")
+                                .availability("available")
+                                .build());
+
+        ConflictException exception =
+                assertThrows(
+                        ConflictException.class,
+                        () ->
+                                service.importUpload(
+                                        userId,
+                                        new MockMultipartFile(
+                                                "file",
+                                                "notes.md",
+                                                "text/markdown",
+                                                "same bytes".getBytes()),
+                                        null,
+                                        sourceAssetId.toString(),
+                                        "watched_folder"));
+
+        assertEquals("Managed source asset conflicts with an existing import", exception.getMessage());
+        verifyNoInteractions(markItDownService);
+        verify(itemRepository, never()).insert(any(KnowledgeItem.class));
+    }
+
+    @Test
+    void importFileShouldSanitizeLocalSourceUriBeforePersistingAndResponding() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        mock(MarkItDownService.class),
+                        userProfileService,
+                        new ObjectMapper());
+        UUID userId = UUID.randomUUID();
+        when(itemTagRepository.findTagIdsByKnowledgeItemId(any())).thenReturn(List.of());
+
+        var response =
+                service.importFile(
+                        userId,
+                        new com.agent.mvp.knowledge.dto.ImportFileKnowledgeItemRequest(
+                                null,
+                                "markdown",
+                                "file:///Users/ze/private/legacy-notes.md",
+                                "safe text"));
+
+        ArgumentCaptor<KnowledgeItem> itemCaptor = ArgumentCaptor.forClass(KnowledgeItem.class);
+        verify(itemRepository).insert(itemCaptor.capture());
+        assertEquals("upload://legacy-notes.md", itemCaptor.getValue().getSourceUri());
+        assertEquals("upload://legacy-notes.md", response.sourceUri());
+        ArgumentCaptor<String> jobMetadataCaptor = ArgumentCaptor.forClass(String.class);
+        verify(ingestionJobService)
+                .createImportSucceeded(eq(userId), eq(response.id()), jobMetadataCaptor.capture());
+        assertFalse(jobMetadataCaptor.getValue().contains("/Users/ze/private"));
     }
 
     @Test
@@ -797,6 +1095,37 @@ class KnowledgeItemServiceTest {
         assertTrue(h2Sql.contains("ADD COLUMN content_hash VARCHAR(64)"));
         assertTrue(h2Sql.contains("uq_knowledge_items_user_content_hash"));
         assertTrue(h2Sql.contains("user_id, content_hash"));
+    }
+
+    @Test
+    void sourceAssetMigrationsShouldStoreOnlySafeMetadataForPostgresAndH2() throws Exception {
+        String postgresSql =
+                Files.readString(
+                        Path.of(
+                                "src/main/resources/db/migration/"
+                                        + "V12__knowledge_source_assets.sql"));
+        String h2Sql =
+                Files.readString(
+                        Path.of(
+                                "src/main/resources/db/h2/"
+                                        + "V12__knowledge_source_assets.sql"));
+
+        for (String migration : List.of(postgresSql, h2Sql)) {
+            assertTrue(migration.contains("CREATE TABLE knowledge_source_assets"));
+            assertTrue(migration.contains("user_id UUID NOT NULL"));
+            assertTrue(migration.contains("knowledge_item_id UUID NOT NULL"));
+            assertTrue(migration.contains("content_hash VARCHAR(64)"));
+            assertTrue(migration.contains("original_filename VARCHAR(512) NOT NULL"));
+            assertTrue(migration.contains("media_type VARCHAR(120) NOT NULL"));
+            assertTrue(migration.contains("byte_size BIGINT NOT NULL"));
+            assertTrue(migration.contains("origin IN ('picker', 'watched_folder')"));
+            assertTrue(migration.contains("availability IN ('pending', 'available', 'missing')"));
+            assertTrue(migration.contains("FOREIGN KEY (knowledge_item_id)"));
+            assertTrue(migration.contains("uq_knowledge_source_assets_item"));
+            assertFalse(migration.toLowerCase().contains("storage_key"));
+            assertFalse(migration.toLowerCase().contains("local_path"));
+            assertFalse(migration.toLowerCase().contains("binary"));
+        }
     }
 
     @Test

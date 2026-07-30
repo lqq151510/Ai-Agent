@@ -29,6 +29,9 @@ DESKTOP_DISTRIBUTION_TIMEOUT_SECONDS="${RELEASE_CHECK_DESKTOP_DISTRIBUTION_TIMEO
 NPM_AUDIT_TIMEOUT_SECONDS="${RELEASE_CHECK_NPM_AUDIT_TIMEOUT_SECONDS:-30}"
 MAVEN_SETTINGS_FILE="${RELEASE_CHECK_MAVEN_SETTINGS_FILE:-${ROOT_DIR}/.mvn/settings.xml}"
 MOUNTED_DMG_MOUNTPOINT=""
+MACOS_BUNDLE_ID=""
+MACOS_BUNDLE_SHORT_VERSION=""
+MACOS_BUNDLE_VERSION=""
 
 log() {
   echo "[release-check] $*"
@@ -580,14 +583,28 @@ find_desktop_distributable_for_arch() {
 }
 
 check_formal_macos_artifact_set() {
-  local dmg_path="$1"
-  local zip_path="$2"
+  local arch="$1"
+  local dmg_path="$2"
+  local zip_path="$3"
 
   if ! mac_signing_is_required; then
     return
   fi
 
   local release_dir="${ROOT_DIR}/desktop/release"
+  local unexpected_staging=()
+  local staging_dir
+  while IFS= read -r -d '' staging_dir; do
+    if [[ "${staging_dir}" != "${release_dir}/mac-${arch}" ]]; then
+      unexpected_staging+=("${staging_dir}")
+    fi
+  done < <(find "${release_dir}" -mindepth 1 -maxdepth 1 -type d -name 'mac-*' -print0)
+
+  if [[ ${#unexpected_staging[@]} -gt 0 ]]; then
+    printf '%s\n' "${unexpected_staging[@]}" >&2
+    fail "formal macOS release output contains stale or unexpected macOS staging directories; only mac-${arch} may exist for this candidate"
+  fi
+
   local unexpected=()
   local artifact
   while IFS= read -r -d '' artifact; do
@@ -613,16 +630,14 @@ assert_formal_macos_release_output_is_empty() {
   [[ -d "${release_dir}" ]] || return
 
   local existing=()
-  local artifact
-  while IFS= read -r -d '' artifact; do
-    existing+=("${artifact}")
-  done < <(find "${release_dir}" -maxdepth 1 -type f \( \
-    -iname "*.dmg" -o -iname "*.zip" -o -iname "*.exe" -o \
-    -iname "*.appimage" -o -iname "*.deb" \) -print0)
+  local entry
+  while IFS= read -r -d '' entry; do
+    existing+=("${entry}")
+  done < <(find "${release_dir}" -mindepth 1 -maxdepth 1 -print0)
 
   if [[ ${#existing[@]} -gt 0 ]]; then
     printf '%s\n' "${existing[@]}" >&2
-    fail "formal macOS release requires desktop/release to contain no existing installer artifacts; archive or verify them manually before building a new candidate"
+    fail "formal macOS release requires desktop/release to be empty before building; archive or verify existing output manually without deleting it automatically"
   fi
 }
 
@@ -633,6 +648,51 @@ mac_signing_is_required() {
 
 mac_gatekeeper_is_required() {
   [[ "$(normalize_bool "${REQUIRE_MAC_GATEKEEPER}")" == "true" ]]
+}
+
+load_macos_release_metadata() {
+  if [[ -n "${MACOS_BUNDLE_ID}" && -n "${MACOS_BUNDLE_SHORT_VERSION}" && -n "${MACOS_BUNDLE_VERSION}" ]]; then
+    return
+  fi
+
+  require_cmd node
+  local metadata_output
+  if ! metadata_output="$(node "${ROOT_DIR}/scripts/macos-release-metadata.mjs" --shell)"; then
+    fail "could not load validated macOS release metadata"
+  fi
+
+  local key
+  local value
+  local saw_bundle_id=false
+  local saw_short_version=false
+  local saw_bundle_version=false
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      MACOS_BUNDLE_ID)
+        [[ "${saw_bundle_id}" == false ]] || fail "macOS release metadata contains duplicate ${key}"
+        MACOS_BUNDLE_ID="${value}"
+        saw_bundle_id=true
+        ;;
+      MACOS_BUNDLE_SHORT_VERSION)
+        [[ "${saw_short_version}" == false ]] || fail "macOS release metadata contains duplicate ${key}"
+        MACOS_BUNDLE_SHORT_VERSION="${value}"
+        saw_short_version=true
+        ;;
+      MACOS_BUNDLE_VERSION)
+        [[ "${saw_bundle_version}" == false ]] || fail "macOS release metadata contains duplicate ${key}"
+        MACOS_BUNDLE_VERSION="${value}"
+        saw_bundle_version=true
+        ;;
+      *)
+        fail "macOS release metadata emitted an unexpected key: ${key}"
+        ;;
+    esac
+  done <<< "${metadata_output}"
+
+  if [[ "${saw_bundle_id}" != true || "${saw_short_version}" != true || "${saw_bundle_version}" != true \
+    || -z "${MACOS_BUNDLE_ID}" || -z "${MACOS_BUNDLE_SHORT_VERSION}" || -z "${MACOS_BUNDLE_VERSION}" ]]; then
+    fail "macOS release metadata is incomplete"
+  fi
 }
 
 find_macos_main_executable() {
@@ -734,6 +794,39 @@ verify_macos_app_architecture() {
   verify_macos_node_modules_arm64 "${app_path}" "${source_label}"
 }
 
+verify_macos_bundle_metadata() {
+  local app_path="$1"
+  local source_label="$2"
+  local info_plist="${app_path}/Contents/Info.plist"
+  local bundle_id
+  local bundle_short_version
+  local bundle_version
+
+  load_macos_release_metadata
+  if [[ ! -f "${info_plist}" ]]; then
+    fail "${source_label} is missing Info.plist: ${info_plist}"
+  fi
+  if ! bundle_id="$(plutil -extract CFBundleIdentifier raw -o - "${info_plist}" 2>/dev/null)"; then
+    fail "could not read CFBundleIdentifier from ${source_label}: $(rel_path "${info_plist}")"
+  fi
+  if ! bundle_short_version="$(plutil -extract CFBundleShortVersionString raw -o - "${info_plist}" 2>/dev/null)"; then
+    fail "could not read CFBundleShortVersionString from ${source_label}: $(rel_path "${info_plist}")"
+  fi
+  if ! bundle_version="$(plutil -extract CFBundleVersion raw -o - "${info_plist}" 2>/dev/null)"; then
+    fail "could not read CFBundleVersion from ${source_label}: $(rel_path "${info_plist}")"
+  fi
+
+  if [[ "${bundle_id}" != "${MACOS_BUNDLE_ID}" ]]; then
+    fail "${source_label} CFBundleIdentifier ${bundle_id} does not match expected ${MACOS_BUNDLE_ID}"
+  fi
+  if [[ "${bundle_short_version}" != "${MACOS_BUNDLE_SHORT_VERSION}" ]]; then
+    fail "${source_label} CFBundleShortVersionString ${bundle_short_version} does not match expected ${MACOS_BUNDLE_SHORT_VERSION}"
+  fi
+  if [[ "${bundle_version}" != "${MACOS_BUNDLE_VERSION}" ]]; then
+    fail "${source_label} CFBundleVersion ${bundle_version} does not match expected ${MACOS_BUNDLE_VERSION}"
+  fi
+}
+
 verify_macos_codesign() {
   local app_path="$1"
   local source_label="$2"
@@ -754,6 +847,37 @@ verify_macos_codesign() {
     fail "codesign verification failed for ${source_label}: $(rel_path "${app_path}")"
   else
     log "warning: codesign verification failed for ${source_label}: ${codesign_output}"
+  fi
+}
+
+verify_macos_signing_identity() {
+  local app_path="$1"
+  local source_label="$2"
+  local codesign_details
+
+  if ! mac_signing_is_required; then
+    return
+  fi
+
+  load_macos_release_metadata
+  if [[ -z "${APPLE_TEAM_ID:-}" ]]; then
+    fail "APPLE_TEAM_ID is required to verify the Developer ID signing identity"
+  fi
+  if ! codesign_details="$(codesign -dv --verbose=4 "${app_path}" 2>&1)"; then
+    echo "${codesign_details}" >&2
+    fail "could not inspect the signing identity for ${source_label}: $(rel_path "${app_path}")"
+  fi
+  if ! grep -Fqx "Identifier=${MACOS_BUNDLE_ID}" <<< "${codesign_details}"; then
+    echo "${codesign_details}" >&2
+    fail "Developer ID signing identifier does not match ${MACOS_BUNDLE_ID} for ${source_label}"
+  fi
+  if ! grep -Fqx "TeamIdentifier=${APPLE_TEAM_ID}" <<< "${codesign_details}"; then
+    echo "${codesign_details}" >&2
+    fail "Developer ID signing team does not match APPLE_TEAM_ID for ${source_label}"
+  fi
+  if ! grep -Fq "Authority=Developer ID Application:" <<< "${codesign_details}"; then
+    echo "${codesign_details}" >&2
+    fail "formal macOS release requires a Developer ID Application authority for ${source_label}"
   fi
 }
 
@@ -812,7 +936,7 @@ verify_macos_gatekeeper() {
 }
 
 verify_macos_stapler() {
-  local app_path="$1"
+  local artifact_path="$1"
   local source_label="$2"
   local stapler_output
 
@@ -824,22 +948,91 @@ verify_macos_stapler() {
     return
   fi
 
-  if stapler_output="$(xcrun stapler validate "${app_path}" 2>&1)"; then
-    log "stapler validation passed for ${source_label}: $(rel_path "${app_path}")"
+  if stapler_output="$(xcrun stapler validate "${artifact_path}" 2>&1)"; then
+    log "stapler validation passed for ${source_label}: $(rel_path "${artifact_path}")"
   elif mac_gatekeeper_is_required; then
     echo "${stapler_output}" >&2
-    fail "stapler validation failed for ${source_label}: $(rel_path "${app_path}")"
+    fail "stapler validation failed for ${source_label}: $(rel_path "${artifact_path}")"
   else
     log "warning: stapler validation failed for ${source_label}: ${stapler_output}"
   fi
+}
+
+verify_macos_dmg_gatekeeper() {
+  local dmg_path="$1"
+  local source_label="$2"
+  local spctl_output
+
+  if ! command -v spctl >/dev/null 2>&1; then
+    if mac_gatekeeper_is_required; then
+      fail "spctl is required to validate ${source_label} but is unavailable"
+    fi
+    log "warning: spctl is unavailable; cannot validate ${source_label}"
+    return
+  fi
+
+  if spctl_output="$(spctl --assess --type open --verbose=4 "${dmg_path}" 2>&1)"; then
+    log "Gatekeeper DMG assessment completed for ${source_label}: ${spctl_output}"
+  elif mac_gatekeeper_is_required; then
+    echo "${spctl_output}" >&2
+    fail "Gatekeeper DMG assessment failed for ${source_label}: $(rel_path "${dmg_path}")"
+  else
+    log "warning: Gatekeeper DMG assessment failed for ${source_label}: ${spctl_output}"
+  fi
+}
+
+notarize_macos_dmg() {
+  local dmg_path="$1"
+  local required_secret
+
+  if ! mac_signing_is_required; then
+    return
+  fi
+
+  require_cmd xcrun
+  for required_secret in APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+    if [[ -z "${!required_secret:-}" ]]; then
+      fail "missing required notarization environment variable: ${required_secret}"
+    fi
+  done
+
+  # Do not use run/run_in_with_timeout here: those helpers log all arguments,
+  # while notarytool receives the app-specific password as an argument.
+  log "submitting final DMG for notarization: $(rel_path "${dmg_path}")"
+  if ! xcrun notarytool submit "${dmg_path}" \
+    --apple-id "${APPLE_ID}" \
+    --password "${APPLE_APP_SPECIFIC_PASSWORD}" \
+    --team-id "${APPLE_TEAM_ID}" \
+    --wait; then
+    fail "Apple notarization failed for final DMG: $(rel_path "${dmg_path}")"
+  fi
+  log "stapling final DMG notarization ticket: $(rel_path "${dmg_path}")"
+  if ! xcrun stapler staple "${dmg_path}"; then
+    fail "could not staple final DMG notarization ticket: $(rel_path "${dmg_path}")"
+  fi
+}
+
+notarize_macos_dmg_for_arch() {
+  local arch="$1"
+  local dmg_path
+
+  if ! mac_signing_is_required; then
+    return
+  fi
+  if ! dmg_path="$(find_desktop_distributable_for_arch "${arch}" dmg)"; then
+    fail "desktop distributable missing an unambiguous mac ${arch} DMG for final notarization"
+  fi
+  notarize_macos_dmg "${dmg_path}"
 }
 
 verify_macos_app_release_evidence() {
   local app_path="$1"
   local source_label="$2"
 
+  verify_macos_bundle_metadata "${app_path}" "${source_label}"
   verify_macos_app_architecture "${app_path}" "${source_label}"
   verify_macos_codesign "${app_path}" "${source_label}"
+  verify_macos_signing_identity "${app_path}" "${source_label}"
   verify_macos_gatekeeper "${app_path}" "${source_label}"
   verify_macos_stapler "${app_path}" "${source_label}"
 }
@@ -853,6 +1046,8 @@ check_macos_dmg_release_artifact() {
   if ! hdiutil verify "${dmg_path}"; then
     fail "DMG release artifact verification failed: $(rel_path "${dmg_path}")"
   fi
+  verify_macos_stapler "${dmg_path}" "outer DMG"
+  verify_macos_dmg_gatekeeper "${dmg_path}" "outer DMG"
   if ! hdiutil attach "${dmg_path}" -readonly -nobrowse -mountpoint "${mount_dir}" >/dev/null; then
     fail "could not mount DMG release artifact: $(rel_path "${dmg_path}")"
   fi
@@ -903,24 +1098,34 @@ check_macos_release_trust() {
   if ! dmg_path="$(find_desktop_distributable_for_arch "${arch}" dmg)"; then
     fail "desktop distributable missing an unambiguous mac ${arch} DMG"
   fi
-  check_macos_dmg_release_artifact "${dmg_path}"
-
   local zip_path
   if ! zip_path="$(find_desktop_distributable_for_arch "${arch}" zip)"; then
     fail "desktop distributable missing an unambiguous mac ${arch} ZIP"
   fi
-  check_formal_macos_artifact_set "${dmg_path}" "${zip_path}"
+  check_formal_macos_artifact_set "${arch}" "${dmg_path}" "${zip_path}"
+  check_macos_dmg_release_artifact "${dmg_path}"
   check_macos_zip_release_artifact "${zip_path}"
 }
 
 write_release_manifest() {
+  local arch="${1:-}"
+
   if [[ "$(normalize_bool "${WRITE_RELEASE_MANIFEST}")" != "true" ]]; then
     log "skipping release manifest generation"
     return
   fi
 
   require_cmd node
-  run "${ROOT_DIR}/scripts/release-manifest.sh"
+  if [[ -z "${arch}" ]]; then
+    run "${ROOT_DIR}/scripts/release-manifest.sh"
+    return
+  fi
+  case "${arch}" in
+    arm64|x64) ;;
+    *) fail "unsupported macOS architecture for release manifest: ${arch}" ;;
+  esac
+  log "generating release manifest for macOS ${arch}"
+  RELEASE_MANIFEST_MACOS_ARCH="${arch}" "${ROOT_DIR}/scripts/release-manifest.sh"
 }
 
 RESOLVED_ENV_FILE="$(resolve_env_file)"
@@ -995,8 +1200,9 @@ if [[ "$(normalize_bool "${SKIP_DESKTOP_BUILD}")" != "true" ]]; then
       run_in_with_timeout "${ROOT_DIR}/desktop" "${DESKTOP_DISTRIBUTION_TIMEOUT_SECONDS}" npm run "dist:mac:${desktop_arch}"
     fi
     check_desktop_distributable_output "${desktop_arch}"
+    notarize_macos_dmg_for_arch "${desktop_arch}"
     check_macos_release_trust "${desktop_arch}"
-    write_release_manifest
+    write_release_manifest "${desktop_arch}"
   fi
 else
   log "skipping desktop build"

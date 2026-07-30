@@ -65,7 +65,8 @@ jobs:
     name: Build signed macOS arm64 candidate
     needs: compose-release-config
     runs-on: macos-15
-    timeout-minutes: 60
+    # The formal gate notarizes both the app bundle and the final DMG.
+    timeout-minutes: 75
     environment: release
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -256,6 +257,8 @@ jobs:
           fi
 
           xcrun stapler validate "${app_path}"
+          xcrun stapler validate "${dmg_path}"
+          spctl --assess --type open --verbose=4 "${dmg_path}"
           (
             cd desktop/release
             shasum -a 256 -c SHA256SUMS
@@ -671,6 +674,17 @@ jobs:
           NODE
 
           downloaded_dmg="${release_download_dir}/${dmg_name}"
+          if ! gatekeeper_status="$(spctl --status 2>&1)"; then
+            echo "${gatekeeper_status}" >&2
+            echo "::error::could not determine whether Gatekeeper assessments are enabled"
+            exit 1
+          fi
+          if grep -qi "disabled" <<<"${gatekeeper_status}"; then
+            echo "::error::Gatekeeper assessments are disabled; downloaded-asset assessment is not release evidence"
+            exit 1
+          fi
+          xcrun stapler validate "${downloaded_dmg}"
+          spctl --assess --type open --verbose=4 "${downloaded_dmg}"
           hdiutil verify "${downloaded_dmg}"
           hdiutil attach "${downloaded_dmg}" -readonly -nobrowse -mountpoint "${dmg_mount_dir}" >/dev/null
           mounted_dmg=1
@@ -687,15 +701,6 @@ jobs:
           mounted_app="${mounted_apps[0]}"
 
           codesign --verify --deep --strict --verbose=2 "${mounted_app}"
-          if ! gatekeeper_status="$(spctl --status 2>&1)"; then
-            echo "${gatekeeper_status}" >&2
-            echo "::error::could not determine whether Gatekeeper assessments are enabled"
-            exit 1
-          fi
-          if grep -qi "disabled" <<<"${gatekeeper_status}"; then
-            echo "::error::Gatekeeper assessments are disabled; downloaded-asset assessment is not release evidence"
-            exit 1
-          fi
           spctl --assess --type execute --verbose=4 "${mounted_app}"
           xcrun stapler validate "${mounted_app}"
 

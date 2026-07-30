@@ -47,6 +47,10 @@ npmRebuild: false
 # macOS 配置（首要目标：Apple Silicon / Intel）
 # ---------------------------------------------------------------------------
 mac:
+  # npm prerelease labels are not valid Apple bundle version values. Keep the
+  # user-facing prerelease in package.json while emitting numeric metadata.
+  bundleShortVersion: "0.1.0"
+  bundleVersion: "1"
   category: public.app-category.developer-tools
   target:
     - dmg

@@ -2,6 +2,7 @@ package com.agent.mvp.knowledge;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,8 @@ import com.agent.mvp.common.exception.ConflictException;
 import com.agent.mvp.knowledge.dto.ImportPreflightRequest;
 import com.agent.mvp.knowledge.dto.ImportPreflightResponse;
 import com.agent.mvp.knowledge.dto.KnowledgeItemPageResponse;
+import com.agent.mvp.knowledge.dto.KnowledgeItemResponse;
+import com.agent.mvp.knowledge.dto.KnowledgeSourceAssetResponse;
 import com.agent.mvp.knowledge.service.KnowledgeItemService;
 import java.time.Instant;
 import java.util.Collections;
@@ -131,7 +134,7 @@ class KnowledgeItemControllerTest {
     @Test
     void uploadDuplicateConflictShouldRemainHttp409() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(knowledgeItemService.importUpload(eq(userId), any(), eq("notes")))
+        when(knowledgeItemService.importUpload(eq(userId), any(), eq("notes"), isNull(), isNull()))
                 .thenThrow(new ConflictException("An identical file has already been imported"));
 
         mockMvc.perform(
@@ -147,7 +150,77 @@ class KnowledgeItemControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CONFLICT"));
 
-        verify(knowledgeItemService).importUpload(eq(userId), any(), eq("notes"));
+        verify(knowledgeItemService)
+                .importUpload(eq(userId), any(), eq("notes"), isNull(), isNull());
+    }
+
+    @Test
+    void uploadShouldForwardManagedSourceAssetFieldsAndReturnOnlySafeMetadata() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID sourceAssetId = UUID.randomUUID();
+        KnowledgeItemResponse response =
+                new KnowledgeItemResponse(
+                        itemId,
+                        "markdown",
+                        "notes",
+                        "upload://notes.md",
+                        "body",
+                        null,
+                        null,
+                        "inbox",
+                        "en",
+                        1,
+                        List.of(),
+                        null,
+                        null,
+                        null,
+                        new KnowledgeSourceAssetResponse(
+                                sourceAssetId,
+                                "notes.md",
+                                "text/markdown",
+                                4,
+                                "picker",
+                                "available"));
+        when(
+                        knowledgeItemService.importUpload(
+                                eq(userId),
+                                any(),
+                                eq("notes"),
+                                eq(sourceAssetId.toString()),
+                                eq("picker")))
+                .thenReturn(response);
+
+        mockMvc.perform(
+                        multipart("/api/v1/knowledge-items/import/upload")
+                                .file(
+                                        new MockMultipartFile(
+                                                "file",
+                                                "notes.md",
+                                                "text/markdown",
+                                                "body".getBytes()))
+                                .param("title", "notes")
+                                .param("sourceAssetId", sourceAssetId.toString())
+                                .param("sourceAssetOrigin", "picker")
+                                .principal(authentication(userId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceAsset.id").value(sourceAssetId.toString()))
+                .andExpect(jsonPath("$.sourceAsset.originalFilename").value("notes.md"))
+                .andExpect(jsonPath("$.sourceAsset.mediaType").value("text/markdown"))
+                .andExpect(jsonPath("$.sourceAsset.byteSize").value(4))
+                .andExpect(jsonPath("$.sourceAsset.origin").value("picker"))
+                .andExpect(jsonPath("$.sourceAsset.availability").value("available"))
+                .andExpect(jsonPath("$.sourceAsset.contentHash").doesNotExist())
+                .andExpect(jsonPath("$.sourceAsset.path").doesNotExist())
+                .andExpect(jsonPath("$.sourceAsset.storageKey").doesNotExist());
+
+        verify(knowledgeItemService)
+                .importUpload(
+                        eq(userId),
+                        any(),
+                        eq("notes"),
+                        eq(sourceAssetId.toString()),
+                        eq("picker"));
     }
 
     private Authentication authentication(UUID userId) {

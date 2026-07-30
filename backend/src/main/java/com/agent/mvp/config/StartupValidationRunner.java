@@ -40,6 +40,7 @@ public class StartupValidationRunner implements ApplicationRunner {
 
     private void validateRequiredConfiguration() {
         validateJwtSecret();
+        validateDbPassword();
         validateModelConfig();
     }
 
@@ -78,6 +79,19 @@ public class StartupValidationRunner implements ApplicationRunner {
         if (jwtSecret.length() < 32) {
             throw new IllegalStateException(
                     "JWT_SECRET or security.jwt.secret must be at least 32 characters.");
+        }
+    }
+
+    private void validateDbPassword() {
+        String dbPassword = env.getProperty("spring.datasource.password");
+        if (dbPassword == null || dbPassword.isBlank()) {
+            throw new IllegalStateException(
+                    "PG_PASSWORD or spring.datasource.password is required and must not be"
+                            + " empty.");
+        }
+        if ("change-me".equals(dbPassword)) {
+            throw new IllegalStateException(
+                    "PG_PASSWORD must not be the default 'change-me' value.");
         }
     }
 
