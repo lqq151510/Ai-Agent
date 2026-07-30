@@ -124,6 +124,15 @@ export const toggleFilterValue = (filters: ItemFilters, category: FilterCategory
   return { ...filters, [category]: nextValues };
 };
 
+export const toggleSingleFilterValue = (
+  filters: ItemFilters,
+  category: FilterCategory,
+  value: string,
+): ItemFilters => ({
+  ...filters,
+  [category]: filters[category].includes(value) ? [] : [value],
+});
+
 export const activeFilterCount = (filters: ItemFilters) => (
   filters.source.length + filters.time.length + filters.tag.length
 );
@@ -136,7 +145,10 @@ export const isCommandSearchShortcut = (event: KeyboardShortcutState) => (
   && !event.isComposing
 );
 
-export const buildInboxSegments = (items: KnowledgeItem[]): InboxSegmentDescriptor[] => {
+export const buildInboxSegments = (
+  items: KnowledgeItem[],
+  totals?: Partial<Record<InboxSegment, number>>,
+): InboxSegmentDescriptor[] => {
   const counts = {
     pending: 0,
     processing: 0,
@@ -150,11 +162,17 @@ export const buildInboxSegments = (items: KnowledgeItem[]): InboxSegmentDescript
   });
 
   return [
-    { id: 'all', label: inboxSegmentCopy.all, count: items.length },
-    { id: 'pending', label: inboxSegmentCopy.pending, count: counts.pending },
-    { id: 'processing', label: inboxSegmentCopy.processing, count: counts.processing },
-    { id: 'failed', label: inboxSegmentCopy.failed, count: counts.failed },
+    { id: 'all', label: inboxSegmentCopy.all, count: totals?.all ?? items.length },
+    { id: 'pending', label: inboxSegmentCopy.pending, count: totals?.pending ?? counts.pending },
+    { id: 'processing', label: inboxSegmentCopy.processing, count: totals?.processing ?? counts.processing },
+    { id: 'failed', label: inboxSegmentCopy.failed, count: totals?.failed ?? counts.failed },
   ];
+};
+
+export const inboxStatusesForSegment = (segment: InboxSegment) => {
+  if (segment === 'all') return ['inbox', 'processing', 'failed'] as const;
+  if (segment === 'pending') return ['inbox'] as const;
+  return [segment] as const;
 };
 
 export const filterInboxItems = (items: KnowledgeItem[], segment: InboxSegment) => (
@@ -204,7 +222,7 @@ export const buildWorkflowActions = (item: KnowledgeItem): WorkflowActionDescrip
     ];
   }
   if (item.status === 'processing') {
-    return [{ id: 'archive', label: '归档', tone: 'danger' }];
+    return [];
   }
   if (item.status === 'archived') {
     return [{ id: 'restore', label: '恢复到知识库', tone: 'primary' }];
@@ -244,6 +262,7 @@ export const applySnapshotItemUpdate = (
       recentItems: updateRecentItems(snapshot.dashboard.recentItems, previousItem, nextItem),
     },
     inboxItems: insertVisibleItem(snapshot.inboxItems, previousItem, nextItem, belongsToInbox),
+    inboxTotals: applyInboxTotalDelta(snapshot.inboxTotals, previousItem.status, nextItem.status),
     libraryItems: insertVisibleItem(snapshot.libraryItems, previousItem, nextItem, belongsToLibrary),
     archivedItems: insertVisibleItem(snapshot.archivedItems, previousItem, nextItem, belongsToArchive),
     tags: nextTags,
@@ -338,6 +357,28 @@ const countDelta = (status: KnowledgeItem['status'], delta: number) => {
     archived: status === 'archived' ? delta : 0,
   };
 };
+
+const applyInboxTotalDelta = (
+  totals: KnowledgeDeskSnapshot['inboxTotals'],
+  previousStatus: KnowledgeItem['status'],
+  nextStatus: KnowledgeItem['status'],
+) => {
+  const previousDelta = inboxTotalDelta(previousStatus, -1);
+  const nextDelta = inboxTotalDelta(nextStatus, 1);
+  return {
+    all: clampCount(totals.all + previousDelta.all + nextDelta.all),
+    pending: clampCount(totals.pending + previousDelta.pending + nextDelta.pending),
+    processing: clampCount(totals.processing + previousDelta.processing + nextDelta.processing),
+    failed: clampCount(totals.failed + previousDelta.failed + nextDelta.failed),
+  };
+};
+
+const inboxTotalDelta = (status: KnowledgeItem['status'], delta: number) => ({
+  all: status === 'pending' || status === 'processing' || status === 'failed' ? delta : 0,
+  pending: status === 'pending' ? delta : 0,
+  processing: status === 'processing' ? delta : 0,
+  failed: status === 'failed' ? delta : 0,
+});
 
 const clampCount = (value: number) => Math.max(0, value);
 

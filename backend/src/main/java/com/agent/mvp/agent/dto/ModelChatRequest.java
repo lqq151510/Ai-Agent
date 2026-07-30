@@ -9,4 +9,16 @@ public record ModelChatRequest(
         List<ToolSpec> tools,
         String toolChoice,
         String customBaseUrl,
-        String customApiKey) {}
+        String customApiKey,
+        Long timeoutMs) {
+
+    public ModelChatRequest(
+            String model,
+            List<ModelChatMessage> messages,
+            List<ToolSpec> tools,
+            String toolChoice,
+            String customBaseUrl,
+            String customApiKey) {
+        this(model, messages, tools, toolChoice, customBaseUrl, customApiKey, null);
+    }
+}

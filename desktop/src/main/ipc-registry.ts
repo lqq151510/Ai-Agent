@@ -1,5 +1,5 @@
-import { app, ipcMain, shell, BrowserWindow, dialog, safeStorage, type OpenDialogOptions } from 'electron';
-import { randomBytes, randomUUID } from 'crypto';
+import { app, ipcMain, shell, BrowserWindow, dialog, safeStorage, type OpenDialogOptions, type WebContents } from 'electron';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { BackendManager } from './backend-manager';
@@ -17,9 +17,88 @@ import { ComputerUseManager } from './computer-use-manager';
 import { getDataDir, getCliEntryPath } from './utils/env';
 import { isPathWithinRoot, normalizeTreeDepth, resolveAuthorizedRoot } from './workspace-access';
 
+const MAX_KNOWLEDGE_BACKUP_BYTES = 100 * 1024 * 1024;
+const MAX_KNOWLEDGE_IMPORT_BATCH_FILES = 20;
+const MAX_KNOWLEDGE_IMPORT_FILE_BYTES = 20 * 1024 * 1024;
+const KNOWLEDGE_IMPORT_BATCH_TTL_MS = 10 * 60 * 1000;
+
+type KnowledgeImportCandidateVerdict = 'ready' | 'duplicate_existing' | 'duplicate_in_batch' | 'invalid';
+
+type LocalKnowledgeImportCandidate = {
+  candidateId: string;
+  filePath: string;
+  name: string;
+  size: number;
+  modifiedAtMs: number;
+  contentHash: string | null;
+  verdict: KnowledgeImportCandidateVerdict;
+  reason?: string;
+};
+
+type LocalKnowledgeImportBatch = {
+  senderId: number;
+  expiresAt: number;
+  candidates: LocalKnowledgeImportCandidate[];
+};
+
+type LocalKnowledgeImportFileContent = {
+  content: Buffer;
+  size: number;
+  modifiedAtMs: number;
+};
+
+type PublicKnowledgeImportCandidate = Pick<
+  LocalKnowledgeImportCandidate,
+  'candidateId' | 'name' | 'size' | 'verdict' | 'reason'
+>;
+
+type LocalKnowledgeImportPreflightResponse = {
+  canceled: boolean;
+  batchId?: string;
+  candidates: PublicKnowledgeImportCandidate[];
+};
+
+type LocalKnowledgeImportCommitResponse = {
+  imported: Array<{ candidateId: string; name: string }>;
+  skipped: Array<{ candidateId: string; name: string; reason: string }>;
+  failed: Array<{ candidateId: string; name: string; reason: string }>;
+};
+
+export function redactIngestionJobSnapshots(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactIngestionJobSnapshots);
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => key !== 'inputSnapshot' && key !== 'resultSnapshot')
+      .map(([key, nestedValue]) => [key, redactIngestionJobSnapshots(nestedValue)]),
+  );
+}
+
+export function toSafeLocalKnowledgeImportReason(error: unknown): string {
+  const message = (
+    error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : String(error || '')
+  );
+  if (!message) {
+    return '文件导入失败，请重新预检后重试。';
+  }
+  // Node filesystem errors include absolute paths. Never pass those through the IPC boundary.
+  if (/(?:[A-Za-z]:)?[\\/]/.test(message)) {
+    return '文件导入失败，请重新预检后重试。';
+  }
+  return message;
+}
+
 export class IpcRegistry {
   private desktopAuthTokens: { accessToken: string; refreshToken?: string } | null = null;
   private isLegacyEnabled: boolean;
+  private readonly localKnowledgeImportBatches = new Map<string, LocalKnowledgeImportBatch>();
 
   constructor(
     private backendManager: BackendManager,
@@ -197,16 +276,20 @@ export class IpcRegistry {
       }
 
       const finalPath = normalizedPath + parsedUrl.search;
-
-      return this.backendRequest(finalPath, {
+      const response = await this.backendRequest(finalPath, {
         method,
         body: payload.body === undefined ? undefined : JSON.stringify(payload.body),
       });
+      if (method === 'GET' && normalizedPath === '/api/v1/ingestion-jobs') {
+        return redactIngestionJobSnapshots(response);
+      }
+      return response;
     });
 
-    ipcMain.handle('knowledge:import-local-file', async (_event, payload?: {
+    ipcMain.handle('knowledge:import-local-file', async (event, payload?: {
       title?: string;
     }) => {
+      this.assertKnowledgeSender(event.sender);
       const filePath = await this.selectKnowledgeFile();
       if (!filePath) {
         return { canceled: true };
@@ -214,6 +297,38 @@ export class IpcRegistry {
 
       const item = await this.importKnowledgeLocalFile(filePath, payload?.title);
       return { canceled: false, item };
+    });
+
+    ipcMain.handle('knowledge:preflight-local-file-batch', async (event): Promise<LocalKnowledgeImportPreflightResponse> => {
+      this.assertKnowledgeSender(event.sender);
+      return this.preflightLocalKnowledgeImportBatch(event.sender.id);
+    });
+
+    ipcMain.handle(
+      'knowledge:commit-local-file-batch',
+      async (event, payload?: { batchId?: string; candidateIds?: string[] }): Promise<LocalKnowledgeImportCommitResponse> => {
+        this.assertKnowledgeSender(event.sender);
+        return this.commitLocalKnowledgeImportBatch(event.sender.id, payload);
+      },
+    );
+
+    ipcMain.handle('knowledge:save-backup', async (event, payload?: {
+      content?: string;
+      suggestedName?: string;
+    }) => {
+      const win = this.mainWindowGetter();
+      if (!win || event.sender !== win.webContents) {
+        throw new Error('Unauthorized sender for knowledge:save-backup');
+      }
+      return this.saveKnowledgeBackup(payload?.content, payload?.suggestedName, win);
+    });
+
+    ipcMain.handle('knowledge:select-backup', async (event) => {
+      const win = this.mainWindowGetter();
+      if (!win || event.sender !== win.webContents) {
+        throw new Error('Unauthorized sender for knowledge:select-backup');
+      }
+      return this.selectKnowledgeBackup(win);
     });
 
     // Computer Use Handlers
@@ -754,6 +869,255 @@ export class IpcRegistry {
     return JSON.parse(text);
   }
 
+  private assertKnowledgeSender(sender: WebContents): void {
+    const window = this.mainWindowGetter();
+    if (!window || sender !== window.webContents) {
+      throw new Error('Unauthorized sender for Knowledge Desk file import');
+    }
+  }
+
+  private async preflightLocalKnowledgeImportBatch(senderId: number): Promise<LocalKnowledgeImportPreflightResponse> {
+    this.removeExpiredKnowledgeImportBatches();
+    const filePaths = await this.selectKnowledgeFiles();
+    if (!filePaths) {
+      return { canceled: true, candidates: [] };
+    }
+    if (filePaths.length > MAX_KNOWLEDGE_IMPORT_BATCH_FILES) {
+      throw new Error(`一次最多选择 ${MAX_KNOWLEDGE_IMPORT_BATCH_FILES} 个文件。`);
+    }
+
+    const candidates: LocalKnowledgeImportCandidate[] = [];
+    const firstCandidateIdByHash = new Map<string, string>();
+    for (const filePath of filePaths) {
+      const candidate = await this.inspectLocalKnowledgeImportFile(filePath);
+      if (candidate.verdict === 'ready' && candidate.contentHash) {
+        const firstCandidateId = firstCandidateIdByHash.get(candidate.contentHash);
+        if (firstCandidateId) {
+          candidate.verdict = 'duplicate_in_batch';
+          candidate.reason = '与本次选择的另一份文件内容完全相同，已跳过。';
+        } else {
+          firstCandidateIdByHash.set(candidate.contentHash, candidate.candidateId);
+        }
+      }
+      candidates.push(candidate);
+    }
+
+    const hashes = candidates
+      .filter((candidate) => candidate.verdict === 'ready' && candidate.contentHash)
+      .map((candidate) => candidate.contentHash as string);
+    if (hashes.length > 0) {
+      const preflight = await this.backendRequest('/api/v1/knowledge-items/import/preflight', {
+        method: 'POST',
+        body: JSON.stringify({ contentHashes: hashes }),
+      });
+      const existingContentHashes = this.readExistingContentHashes(preflight);
+      candidates.forEach((candidate) => {
+        if (candidate.verdict === 'ready' && candidate.contentHash && existingContentHashes.has(candidate.contentHash)) {
+          candidate.verdict = 'duplicate_existing';
+          candidate.reason = '此文件内容已在本机知识库中，已跳过。';
+        }
+      });
+    }
+
+    const batchId = randomUUID();
+    this.localKnowledgeImportBatches.set(batchId, {
+      senderId,
+      expiresAt: Date.now() + KNOWLEDGE_IMPORT_BATCH_TTL_MS,
+      candidates,
+    });
+    return {
+      canceled: false,
+      batchId,
+      candidates: candidates.map(({ candidateId, name, size, verdict, reason }) => ({
+        candidateId,
+        name,
+        size,
+        verdict,
+        reason,
+      })),
+    };
+  }
+
+  private async commitLocalKnowledgeImportBatch(
+    senderId: number,
+    payload?: { batchId?: string; candidateIds?: string[] },
+  ): Promise<LocalKnowledgeImportCommitResponse> {
+    this.removeExpiredKnowledgeImportBatches();
+    const batchId = typeof payload?.batchId === 'string' ? payload.batchId : '';
+    const requestedCandidateIds = Array.isArray(payload?.candidateIds) ? payload.candidateIds : [];
+    if (!batchId || requestedCandidateIds.length === 0 || requestedCandidateIds.length > MAX_KNOWLEDGE_IMPORT_BATCH_FILES) {
+      throw new Error('导入批次无效，请重新选择文件。');
+    }
+
+    const batch = this.localKnowledgeImportBatches.get(batchId);
+    if (!batch || batch.senderId !== senderId || batch.expiresAt <= Date.now()) {
+      this.localKnowledgeImportBatches.delete(batchId);
+      throw new Error('导入预检已过期或不属于当前窗口，请重新选择文件。');
+    }
+    // A batch token is intentionally one-time use. A retry always starts from a fresh preflight.
+    this.localKnowledgeImportBatches.delete(batchId);
+
+    const uniqueCandidateIds = [...new Set(requestedCandidateIds)];
+    if (uniqueCandidateIds.length !== requestedCandidateIds.length) {
+      throw new Error('导入批次包含重复条目，请重新选择文件。');
+    }
+    const selectedCandidates = uniqueCandidateIds.map((candidateId) => (
+      batch.candidates.find((candidate) => candidate.candidateId === candidateId)
+    ));
+    if (selectedCandidates.some((candidate) => !candidate)) {
+      throw new Error('导入批次包含未知文件，请重新选择文件。');
+    }
+    const readyCandidates = selectedCandidates as LocalKnowledgeImportCandidate[];
+    if (readyCandidates.some((candidate) => candidate.verdict !== 'ready' || !candidate.contentHash)) {
+      throw new Error('只能导入预检通过的文件，请重新选择文件。');
+    }
+
+    const result: LocalKnowledgeImportCommitResponse = { imported: [], skipped: [], failed: [] };
+    for (const candidate of readyCandidates) {
+      try {
+        const fileContent = await this.readVerifiedLocalKnowledgeImportFile(candidate);
+        await this.importKnowledgeLocalFileContent(candidate.name, fileContent);
+        result.imported.push({ candidateId: candidate.candidateId, name: candidate.name });
+      } catch (error) {
+        const rawReason = error instanceof Error ? error.message : String(error);
+        if (this.isDuplicateKnowledgeImportError(rawReason)) {
+          result.skipped.push({
+            candidateId: candidate.candidateId,
+            name: candidate.name,
+            reason: '此文件内容已在本机知识库中，已跳过。',
+          });
+        } else {
+          result.failed.push({
+            candidateId: candidate.candidateId,
+            name: candidate.name,
+            reason: toSafeLocalKnowledgeImportReason(error),
+          });
+        }
+      }
+    }
+    return result;
+  }
+
+  private async inspectLocalKnowledgeImportFile(filePath: string): Promise<LocalKnowledgeImportCandidate> {
+    const candidate: LocalKnowledgeImportCandidate = {
+      candidateId: randomUUID(),
+      filePath,
+      name: path.basename(filePath),
+      size: 0,
+      modifiedAtMs: 0,
+      contentHash: null,
+      verdict: 'invalid',
+    };
+    if (!this.isSupportedKnowledgeFile(filePath)) {
+      candidate.reason = '仅支持 Markdown、PDF、TXT 或 HTML 文件。';
+      return candidate;
+    }
+    try {
+      const fileContent = await this.readLimitedKnowledgeImportFile(filePath);
+      candidate.size = fileContent.size;
+      candidate.modifiedAtMs = fileContent.modifiedAtMs;
+      candidate.contentHash = createHash('sha256').update(fileContent.content).digest('hex');
+      candidate.verdict = 'ready';
+      return candidate;
+    } catch (error) {
+      candidate.reason = toSafeLocalKnowledgeImportReason(error);
+      return candidate;
+    }
+  }
+
+  private async readVerifiedLocalKnowledgeImportFile(
+    candidate: LocalKnowledgeImportCandidate,
+  ): Promise<Buffer> {
+    if (!this.isSupportedKnowledgeFile(candidate.filePath)) {
+      throw new Error('文件类型在预检后发生变化，请重新选择文件。');
+    }
+    try {
+      const fileContent = await this.readLimitedKnowledgeImportFile(candidate.filePath);
+      const currentHash = createHash('sha256').update(fileContent.content).digest('hex');
+      if (currentHash !== candidate.contentHash) {
+        throw new Error('文件内容在预检后发生变化，请重新选择文件。');
+      }
+      return fileContent.content;
+    } catch (error) {
+      const reason = toSafeLocalKnowledgeImportReason(error);
+      if (
+        reason !== '文件导入失败，请重新预检后重试。'
+        && reason !== '无法读取文件，请检查访问权限后重试。'
+      ) {
+        throw error;
+      }
+      throw new Error('文件在预检后无法读取，请重新选择文件。');
+    }
+  }
+
+  private async readLimitedKnowledgeImportFile(filePath: string): Promise<LocalKnowledgeImportFileContent> {
+    let handle: fs.promises.FileHandle | null = null;
+    try {
+      handle = await fs.promises.open(filePath, 'r');
+      const before = await handle.stat();
+      if (!before.isFile()) {
+        throw new Error('所选路径不是文件。');
+      }
+      if (before.size === 0) {
+        throw new Error('文件为空，无法导入。');
+      }
+      if (before.size > MAX_KNOWLEDGE_IMPORT_FILE_BYTES) {
+        throw new Error('单个文件超过 20 MB 上限。');
+      }
+
+      const content = Buffer.allocUnsafe(before.size);
+      let offset = 0;
+      while (offset < content.length) {
+        const { bytesRead } = await handle.read(content, offset, content.length - offset, offset);
+        if (bytesRead === 0) {
+          break;
+        }
+        offset += bytesRead;
+      }
+      const after = await handle.stat();
+      if (offset !== before.size || after.size !== before.size) {
+        throw new Error('文件在读取时发生变化，请重新选择文件。');
+      }
+      return { content, size: before.size, modifiedAtMs: before.mtimeMs };
+    } catch (error) {
+      const reason = toSafeLocalKnowledgeImportReason(error);
+      if (reason !== '文件导入失败，请重新预检后重试。') {
+        throw error;
+      }
+      throw new Error('无法读取文件，请检查访问权限后重试。');
+    } finally {
+      await handle?.close();
+    }
+  }
+
+  private readExistingContentHashes(response: unknown): Set<string> {
+    if (!response || typeof response !== 'object') {
+      throw new Error('本机服务返回了无效的重复检查结果。');
+    }
+    const rawHashes = (response as { existingContentHashes?: unknown }).existingContentHashes;
+    if (!Array.isArray(rawHashes)) {
+      throw new Error('本机服务返回了无效的重复检查结果。');
+    }
+    return new Set(
+      rawHashes
+        .filter((hash): hash is string => typeof hash === 'string' && /^[a-f0-9]{64}$/i.test(hash))
+        .map((hash) => hash.toLowerCase()),
+    );
+  }
+
+  private removeExpiredKnowledgeImportBatches(): void {
+    const now = Date.now();
+    this.localKnowledgeImportBatches.forEach((batch, batchId) => {
+      if (batch.expiresAt <= now) {
+        this.localKnowledgeImportBatches.delete(batchId);
+      }
+    });
+  }
+
+  private isDuplicateKnowledgeImportError(message: string): boolean {
+    return /duplicate|already imported|已在本机知识库中|已导入|重复/i.test(message);
+  }
+
   private async selectKnowledgeFile(): Promise<string | null> {
     const options: OpenDialogOptions = {
       title: '选择 Markdown 或 PDF 资料',
@@ -781,11 +1145,105 @@ export class IpcRegistry {
     return filePath;
   }
 
+  private async selectKnowledgeFiles(): Promise<string[] | null> {
+    const options: OpenDialogOptions = {
+      title: '选择本机资料（最多 20 个）',
+      buttonLabel: '预检并导入',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Markdown / PDF', extensions: ['md', 'markdown', 'pdf'] },
+        { name: 'Markdown', extensions: ['md', 'markdown', 'txt', 'html', 'htm'] },
+        { name: 'PDF', extensions: ['pdf'] },
+      ],
+    };
+    const window = this.mainWindowGetter();
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths;
+  }
+
+  private async saveKnowledgeBackup(
+    content: unknown,
+    suggestedName: unknown,
+    window: BrowserWindow,
+  ): Promise<{ canceled: boolean; filePath?: string }> {
+    if (typeof content !== 'string' || content.length === 0) {
+      throw new Error('备份内容为空。');
+    }
+    if (Buffer.byteLength(content, 'utf8') > MAX_KNOWLEDGE_BACKUP_BYTES) {
+      throw new Error('备份文件超过 100 MB 上限。');
+    }
+
+    const result = await dialog.showSaveDialog(window, {
+      title: '导出 Knowledge Desk 备份',
+      defaultPath: path.join(app.getPath('downloads'), this.backupFileName(suggestedName)),
+      filters: [{ name: 'Knowledge Desk backup', extensions: ['json'] }],
+    });
+    if (result.canceled || !result.filePath) {
+      return { canceled: true };
+    }
+
+    await fs.promises.writeFile(result.filePath, content, { encoding: 'utf8', mode: 0o600 });
+    await fs.promises.chmod(result.filePath, 0o600);
+    return { canceled: false, filePath: result.filePath };
+  }
+
+  private async selectKnowledgeBackup(
+    window: BrowserWindow,
+  ): Promise<{ canceled: boolean; content?: string; fileName?: string }> {
+    const result = await dialog.showOpenDialog(window, {
+      title: '导入 Knowledge Desk 备份',
+      buttonLabel: '选择备份文件',
+      properties: ['openFile'],
+      filters: [{ name: 'Knowledge Desk backup', extensions: ['json'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true };
+    }
+
+    const filePath = result.filePaths[0];
+    if (path.extname(filePath).toLowerCase() !== '.json') {
+      throw new Error('仅支持 JSON 备份文件。');
+    }
+    const metadata = await fs.promises.stat(filePath);
+    if (!metadata.isFile() || metadata.size > MAX_KNOWLEDGE_BACKUP_BYTES) {
+      throw new Error('备份文件无效或超过 100 MB 上限。');
+    }
+
+    return {
+      canceled: false,
+      content: await fs.promises.readFile(filePath, 'utf8'),
+      fileName: path.basename(filePath),
+    };
+  }
+
+  private backupFileName(value: unknown): string {
+    const raw = typeof value === 'string' ? path.basename(value.trim()) : '';
+    const sanitized = raw.replace(/[^a-zA-Z0-9._-]/g, '-');
+    if (sanitized && sanitized.toLowerCase().endsWith('.json')) {
+      return sanitized;
+    }
+    return 'knowledge-desk-backup.json';
+  }
+
   private async importKnowledgeLocalFile(filePath: string, title?: string): Promise<any> {
     const filename = path.basename(filePath);
-    const fileBuffer = await fs.promises.readFile(filePath);
+    const fileBuffer = (await this.readLimitedKnowledgeImportFile(filePath)).content;
+    return this.importKnowledgeLocalFileContent(filename, fileBuffer, title);
+  }
+
+  private async importKnowledgeLocalFileContent(
+    filename: string,
+    fileBuffer: Buffer,
+    title?: string,
+  ): Promise<any> {
     const formData = new FormData();
-    formData.append('file', new Blob([fileBuffer], { type: this.mimeTypeForKnowledgeFile(filePath) }), filename);
+    formData.append('file', new Blob([fileBuffer], { type: this.mimeTypeForKnowledgeFile(filename) }), filename);
 
     const normalizedTitle = title?.trim();
     if (normalizedTitle) {
@@ -846,6 +1304,11 @@ export class IpcRegistry {
   }
 
   private isKnowledgeApiAllowed(method: string, pathname: string): boolean {
+    if (pathname === '/api/v1/ingestion-jobs') {
+      // The renderer only needs the auditable job list; keep this surface exact and read-only.
+      return method === 'GET';
+    }
+
     const allowedPrefixes = [
       '/api/v1/dashboard',
       '/api/v1/knowledge-items',

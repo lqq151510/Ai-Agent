@@ -8,11 +8,14 @@ import {
   buildSearchSnippet,
   buildSearchStatusOptions,
   buildWorkflowActions,
+  emptyFilters,
   filterLocalItems,
   filterInboxItems,
   filterSearchItemsByStatus,
   isCommandSearchShortcut,
+  inboxStatusesForSegment,
   mergeSearchResults,
+  toggleSingleFilterValue,
 } from './knowledgeDeskViewModel';
 import { fallbackSnapshot } from './knowledgeDeskApi';
 
@@ -149,8 +152,26 @@ describe('knowledgeDeskViewModel', () => {
     ]);
     expect(filterInboxItems(items, 'failed').map((item) => item.id)).toEqual(['failed']);
     expect(buildWorkflowActions(items[0]).map((action) => action.id)).toEqual(['organize', 'archive']);
+    expect(buildWorkflowActions(items[1])).toEqual([]);
     expect(buildWorkflowActions(items[2]).map((action) => action.id)).toEqual(['reprocess', 'archive']);
     expect(buildWorkflowActions(makeItem({ id: 'archived', status: 'archived' })).map((action) => action.id)).toEqual(['restore']);
+  });
+
+  it('uses server-compatible inbox status groups and single-choice list filters', () => {
+    expect(inboxStatusesForSegment('all')).toEqual(['inbox', 'processing', 'failed']);
+    expect(inboxStatusesForSegment('pending')).toEqual(['inbox']);
+    expect(inboxStatusesForSegment('processing')).toEqual(['processing']);
+    expect(inboxStatusesForSegment('failed')).toEqual(['failed']);
+    expect(buildInboxSegments([], { all: 18, pending: 9, processing: 4, failed: 5 })).toEqual([
+      { id: 'all', label: '全部', count: 18 },
+      { id: 'pending', label: '待整理', count: 9 },
+      { id: 'processing', label: '整理中', count: 4 },
+      { id: 'failed', label: '失败重试', count: 5 },
+    ]);
+
+    const selected = toggleSingleFilterValue(emptyFilters, 'source', 'Markdown');
+    expect(selected.source).toEqual(['Markdown']);
+    expect(toggleSingleFilterValue(selected, 'source', 'Markdown').source).toEqual([]);
   });
 
   it('moves a just-organized item from inbox to library and adjusts counts', () => {

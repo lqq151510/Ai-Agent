@@ -83,6 +83,7 @@
 - `GET /knowledge-items?status=inbox&page=1&pageSize=20`
 - `POST /knowledge-items/import/web`
 - `POST /knowledge-items/import/file`
+- `POST /knowledge-items/import/preflight`
 - `POST /knowledge-items/import/upload`
 - `POST /knowledge-items/import/snippet`
 - `POST /knowledge-items/{id}/organize`
@@ -123,7 +124,8 @@
 - `POST /model-sources/{id}/disable`
 - `POST /model-sources/{id}/set-default`
 - `POST /model-sources/{id}/test`
-- `POST /settings/export`
+- `GET /settings/export`
+- `POST /settings/import`
 
 ### 4.7 工作流补充
 
@@ -204,16 +206,62 @@
 }
 ```
 
-### 5.4 `POST /settings/export`
+### 5.4 `GET /settings/export`
 
-当前只是导出任务占位接口。
+返回可由本机保存为 JSON 的备份内容。该请求只读：如果当前用户尚无个人资料，响应使用默认的 `manual / local_first` 偏好，但不会因此创建记录。
+
+备份只包含知识条目、标签和非敏感偏好。它**不会**包含 API Key、登录/认证信息或模型源配置，并固定返回 `modelSourcesIncluded: false`。
 
 响应示例：
 
 ```json
 {
-  "taskId": "4ec1ba8f-c8b4-475a-b0db-3859cc0a9f64",
-  "status": "pending"
+  "schemaVersion": 1,
+  "exportedAt": "2026-07-29T08:00:00Z",
+  "preferences": {
+    "displayName": "泽宝",
+    "avatarUrl": null,
+    "organizeMode": "manual",
+    "privacyMode": "local_first"
+  },
+  "tags": [
+    { "id": "tag-rag", "name": "RAG", "color": "#4F46E5", "createdAt": "2026-07-29T08:00:00Z" }
+  ],
+  "knowledgeItems": [
+    {
+      "id": "item-rag",
+      "sourceType": "markdown",
+      "title": "本机 RAG 笔记",
+      "rawContent": "# RAG",
+      "status": "ready",
+      "wordCount": 2,
+      "createdAt": "2026-07-29T08:00:00Z",
+      "updatedAt": "2026-07-29T08:00:00Z",
+      "tagIds": ["tag-rag"]
+    }
+  ],
+  "modelSourcesIncluded": false
+}
+```
+
+### 5.5 `POST /settings/import`
+
+接收 `GET /settings/export` 的 `schemaVersion: 1` JSON 备份，并在一个事务内完成校验后合并。
+
+- 只会新增知识条目；为导入条目生成新的 ID，不删除或覆盖已有资料
+- 标签按当前用户的名称复用或创建
+- 不恢复偏好、模型源、API Key 或任何认证信息；目标机器需要重新配置本机模型
+- 非法版本、包含模型源、字段/枚举/长度不合法的文件会在写入前失败
+
+响应示例：
+
+```json
+{
+  "importedItems": 1,
+  "createdTags": 0,
+  "preferencesRestored": false,
+  "modelSourcesRestored": false,
+  "message": "已合并 1 条资料。"
 }
 ```
 
@@ -396,6 +444,29 @@
 - 会把 `sourceUri` 写成 `upload://<filename>`
 - 会复用现有 `MarkItDownService -> PythonParseClient` 解析链路
 - 如果用户 `organizeMode=auto`，导入后会继续执行整理
+- 服务端会基于上传的原始字节计算 SHA-256；同一用户重复上传相同字节会在解析前返回 `409`
+
+上传前可由桌面主进程调用 `POST /knowledge-items/import/preflight` 做无内容预检：
+
+```json
+{
+  "contentHashes": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ]
+}
+```
+
+`contentHashes` 必须包含 1 到 20 个 64 位十六进制 SHA-256 值。响应只返回当前用户已经存在的哈希，不返回内容、路径、条目 ID 或其他资料元数据：
+
+```json
+{
+  "existingContentHashes": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ]
+}
+```
+
+预检仅用于避免无效上传；上传接口仍会重新计算哈希并由数据库唯一约束处理并发冲突。相同文件名但不同字节可以导入，不同用户之间的相同文件也不会互相冲突。renderer 只应接收主进程给出的候选结论，不应接收或存储哈希列表。
 
 ### 7.5 `POST /knowledge-items/import/snippet`
 
@@ -408,11 +479,21 @@
 
 查询参数：
 
-- `status`
-- `sourceType`
-- `tag`
-- `page`，默认 `1`
-- `pageSize`，默认 `20`，最大 `100`
+- `status`：可重复传参；例如 `status=inbox&status=failed` 返回任一状态命中的并集。多个值会去重，空值忽略。
+- `sourceType`：可选，取值见 [3.3 知识条目](#33-知识条目)。
+- `tag`：可选，按当前用户的标签名筛选；没有匹配标签时返回空分页结果。
+- `from`：可选 ISO-8601 时间戳，按 `createdAt >= from` 过滤（包含边界）。
+- `to`：可选 ISO-8601 时间戳，按 `createdAt <= to` 过滤（包含边界）。
+- `page`：默认 `1`；小于 `1` 时按 `1` 执行。
+- `pageSize`：默认 `20`；服务端会限制在 `1` 到 `100`。
+
+除 `status` 内部为并集外，其余已提供的筛选条件均同时生效。时间过滤基于 `createdAt`；若同时传入的 `from` 晚于 `to`，结果自然为空。
+
+示例：
+
+```text
+GET /knowledge-items?status=inbox&status=failed&sourceType=markdown&tag=rag&from=2026-07-01T00:00:00Z&to=2026-07-31T23:59:59Z&page=1&pageSize=20
+```
 
 响应示例：
 
@@ -448,6 +529,8 @@
   "pageSize": 20
 }
 ```
+
+分页响应始终包含 `items`、`total`、`page`、`pageSize`；其中 `total` 是应用全部筛选条件后的总数，`page` 与 `pageSize` 是服务端实际采用的分页值。
 
 ### 7.7 `GET /knowledge-items/search`
 
@@ -651,11 +734,12 @@
 
 返回单条 `IngestionJobResponse`
 
+桌面端详情页固定按 `knowledgeItemId` 读取最近 20 条记录，并按服务端的时间线顺序展示 `jobType`、`status`、失败原因和时间。界面不会渲染 `inputSnapshot` 或 `resultSnapshot`；桌面 IPC 对该路径只开放 `GET`。
+
 ---
 
 ## 11. 当前骨架版的明确限制
 
-- `POST /settings/export` 只是占位，不会真的生成导出文件
 - `PUT /settings/profile` 目前不能通过传 `null` 来清空模型源绑定
 - `POST /knowledge-items/import/file` 目前接收的是“文件内容已读好后的文本”，不是服务端直接解析本地文件
 - `POST /knowledge-items/import/upload` 目前还不支持 `docx / pptx` 入知识工作台域，即使底层解析服务具备更广格式能力

@@ -26,6 +26,8 @@ public class KnowledgeItem {
 
     private String sourceUri;
 
+    private String contentHash;
+
     private String rawContent;
 
     private String cleanedContent;

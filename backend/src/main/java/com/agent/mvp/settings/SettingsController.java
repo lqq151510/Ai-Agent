@@ -2,7 +2,10 @@ package com.agent.mvp.settings;
 
 import com.agent.mvp.auth.security.AuthenticatedUser;
 import com.agent.mvp.common.AuthenticatedControllerSupport;
-import com.agent.mvp.settings.dto.ExportTaskResponse;
+import com.agent.mvp.common.context.RequestContext;
+import com.agent.mvp.common.dto.ErrorResponse;
+import com.agent.mvp.settings.dto.SettingsBackupPayload;
+import com.agent.mvp.settings.dto.SettingsImportResponse;
 import com.agent.mvp.settings.dto.SettingsProfileResponse;
 import com.agent.mvp.settings.dto.SettingsStorageResponse;
 import com.agent.mvp.settings.dto.UpdateSettingsProfileRequest;
@@ -10,7 +13,12 @@ import com.agent.mvp.settings.service.SettingsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.Instant;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -52,10 +60,33 @@ public class SettingsController extends AuthenticatedControllerSupport {
         return settingsService.getStorage(user.userId());
     }
 
-    @PostMapping("/export")
-    @Operation(summary = "创建导出任务占位记录")
-    public ExportTaskResponse export(Authentication authentication) {
+    @GetMapping(value = "/export", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "导出本机知识库 JSON 备份")
+    public SettingsBackupPayload exportBackup(Authentication authentication) {
         AuthenticatedUser user = requireAuthenticatedUser(authentication);
-        return settingsService.createExportTask(user.userId());
+        return settingsService.exportBackup(user.userId());
+    }
+
+    @PostMapping(
+            value = "/import",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "合并导入本机知识库 JSON 备份")
+    public SettingsImportResponse importBackup(
+            @Valid @RequestBody SettingsBackupPayload request, Authentication authentication) {
+        AuthenticatedUser user = requireAuthenticatedUser(authentication);
+        return settingsService.importBackup(user.userId(), request);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleMalformedSettingsJson(
+            HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest()
+                .body(
+                        new ErrorResponse(
+                                "BAD_REQUEST",
+                                "Malformed settings JSON",
+                                RequestContext.ensureRequestId(),
+                                Instant.now()));
     }
 }

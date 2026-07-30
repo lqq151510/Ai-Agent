@@ -1,10 +1,5 @@
 import type { ElementType, ReactNode } from 'react';
-import {
-  AlertTriangle,
-  Loader2,
-  FolderOpen,
-  Upload,
-} from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import type { KnowledgeItem } from './knowledgeDeskApi';
 import { activeFilterCount, type ItemFilters, typeCopy } from './knowledgeDeskViewModel';
 import { formatCount, sourceIcon } from './knowledgeDeskDisplay';
@@ -122,11 +117,13 @@ export const MetaLine = ({ item }: { item: KnowledgeItem }) => (
 export const FilterGroup = ({
   activeValues,
   onToggle,
+  selectionMode = 'multiple',
   title,
   values,
 }: {
   activeValues: string[];
   onToggle: (value: string) => void;
+  selectionMode?: 'multiple' | 'single';
   title: string;
   values: string[];
 }) => (
@@ -134,7 +131,12 @@ export const FilterGroup = ({
     <h3>{title}</h3>
     {values.map((value) => (
       <label key={value}>
-        <input checked={activeValues.includes(value)} onChange={() => onToggle(value)} type="checkbox" />
+        <input
+          checked={activeValues.includes(value)}
+          name={selectionMode === 'single' ? `filter-${title}` : undefined}
+          onChange={() => onToggle(value)}
+          type={selectionMode === 'single' ? 'radio' : 'checkbox'}
+        />
         {value}
       </label>
     ))}
@@ -178,17 +180,25 @@ export const PreferenceRow = ({ label, value }: { label: string; value: string }
   </div>
 );
 
-export const ToggleRow = ({ label, checked }: { label: string; checked: boolean }) => (
+export const ToggleRow = ({
+  label,
+  checked,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange?: (checked: boolean) => void;
+}) => (
   <label className="kd-toggle-row">
     <span>{label}</span>
-    <input defaultChecked={checked} type="checkbox" />
+    <input
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange ? (event) => onChange(event.target.checked) : undefined}
+      readOnly={!onChange}
+      type="checkbox"
+    />
   </label>
-);
-
-export const StateStrip = () => (
-  <div className="kd-state-strip">
-    <span><Upload size={16} /> 导入中：课程资料包.pdf</span>
-    <span><Loader2 size={16} /> 整理中：图神经网络推荐系统</span>
-    <span><AlertTriangle size={16} /> 失败重试：Transformer 论文摘录</span>
-  </div>
 );

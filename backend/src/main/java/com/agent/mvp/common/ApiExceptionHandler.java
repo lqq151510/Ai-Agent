@@ -16,6 +16,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -59,6 +60,13 @@ public class ApiExceptionHandler {
                         .collect(Collectors.joining("; "));
 
         return ResponseEntity.badRequest().body(error("BAD_REQUEST", message));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.badRequest()
+                .body(error("BAD_REQUEST", "Invalid value for parameter: " + ex.getName()));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

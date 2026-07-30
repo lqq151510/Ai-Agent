@@ -105,6 +105,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('knowledge:request', payload),
     importLocalFile: (payload?: { title?: string }) =>
       ipcRenderer.invoke('knowledge:import-local-file', payload),
+    preflightLocalFileBatch: () =>
+      ipcRenderer.invoke('knowledge:preflight-local-file-batch'),
+    commitLocalFileBatch: (payload: { batchId: string; candidateIds: string[] }) =>
+      ipcRenderer.invoke('knowledge:commit-local-file-batch', payload),
+    saveBackup: (payload: { content: string; suggestedName: string }) =>
+      ipcRenderer.invoke('knowledge:save-backup', payload),
+    selectBackup: () => ipcRenderer.invoke('knowledge:select-backup'),
   },
 
   terminal: {

@@ -264,11 +264,14 @@ backend/src/main/java/com/agent/mvp/
 - `GET /api/v1/settings/profile`
 - `PUT /api/v1/settings/profile`
 - `GET /api/v1/settings/storage`
-- `POST /api/v1/settings/export`
+- `GET /api/v1/settings/export`
+- `POST /api/v1/settings/import`
 
 说明：
 
-- `export` 一期先留骨架接口，先返回任务已创建
+- `export` 返回 `schemaVersion: 1` 的本机 JSON 备份：知识条目、标签和非敏感偏好；不含 API Key、认证信息或模型源，且固定 `modelSourcesIncluded: false`
+- `import` 只接受该版本的无模型源备份，在事务内先校验再合并：标签按名称复用或创建，知识条目只新增并使用新 ID，不删除或覆盖已有资料
+- 导入响应固定声明 `preferencesRestored: false`、`modelSourcesRestored: false`；目标机器需重新配置本机模型
 
 ### 7.2 Model Sources
 
@@ -311,7 +314,8 @@ backend/src/main/java/com/agent/mvp/
 
 说明：
 
-- `GET /api/v1/knowledge-items` 通过 `status`、`sourceType`、`tag`、分页参数支撑 `Inbox` 与 `Library`
+- `GET /api/v1/knowledge-items` 通过可重复的 `status`、`sourceType`、`tag`、`from`、`to` 与分页参数支撑 `Inbox` 与 `Library`：重复 `status` 取并集，其余筛选条件同时生效；`from <= createdAt <= to`，两端均包含
+- 列表分页默认 `page=1`、`pageSize=20`，服务端将 `page` 归一化到不小于 `1`、将 `pageSize` 限制在 `1..100`；响应保持 `items`、`total`、`page`、`pageSize`
 - `search` 一期只做结构化过滤和文本检索
 
 ### 7.5 Jobs
@@ -322,6 +326,7 @@ backend/src/main/java/com/agent/mvp/
 说明：
 
 - 一期不开放复杂任务编排接口
+- 桌面端详情页仅通过 `GET /api/v1/ingestion-jobs?knowledgeItemId=...&limit=20` 展示真实处理记录；IPC 对该路径只读开放，渲染层只使用类型、状态、失败原因和时间，不展示输入/结果快照
 
 ## 8. 状态流与执行策略
 

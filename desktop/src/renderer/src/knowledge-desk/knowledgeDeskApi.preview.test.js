@@ -5,6 +5,7 @@ import {
   fallbackSnapshot,
   organizeKnowledgeItem,
   restoreKnowledgeItem,
+  updateKnowledgeItem,
   withPreviewItems,
 } from './knowledgeDeskApi';
 
@@ -133,5 +134,35 @@ describe('knowledgeDeskApi preview fallback', () => {
 
     expect(result.status).toBe('done');
     expect(stored[0].status).toBe('done');
+  });
+
+  it('updates preview metadata without dropping the stored knowledge item', async () => {
+    const previewItem = {
+      id: 'preview-pending',
+      title: '原始标题',
+      source: '本地预览',
+      type: 'markdown',
+      time: '刚刚',
+      summary: '原始摘要。',
+      tags: ['旧标签'],
+      status: 'pending',
+    };
+    window.localStorage.setItem('knowledge-desk-preview-items', JSON.stringify([previewItem]));
+
+    const result = await updateKnowledgeItem(previewItem, {
+      title: '校正后的标题',
+      summary: '校正后的摘要。',
+      tags: ['RAG', 'RAG', '检索'],
+    });
+    const stored = JSON.parse(window.localStorage.getItem('knowledge-desk-preview-items'));
+
+    expect(result).toMatchObject({
+      id: 'preview-pending',
+      title: '校正后的标题',
+      summary: '校正后的摘要。',
+      tags: ['RAG', '检索'],
+    });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject(result);
   });
 });

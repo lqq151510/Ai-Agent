@@ -14,20 +14,42 @@ import {
 } from 'lucide-react';
 import {
   archiveKnowledgeItem,
+  canUseDesktopBackupPicker,
+  canUseDesktopBatchFileImport,
   fallbackSnapshot,
   canUseDesktopFilePicker,
+  commitLocalKnowledgeFileBatch,
+  createModelSource,
+  exportKnowledgeDeskBackup,
   importBrowserKnowledgeFile,
+  importKnowledgeDeskBackup,
   importKnowledgeItem,
   importLocalKnowledgeFile,
+  listIngestionJobs,
+  listKnowledgeItems,
   loadKnowledgeItemDetail,
   loadKnowledgeDeskSnapshot,
   organizeKnowledgeItem,
   organizeKnowledgeItems,
   reprocessKnowledgeItem,
   restoreKnowledgeItem,
+  pickKnowledgeDeskBackup,
+  preflightLocalKnowledgeFileBatch,
+  saveKnowledgeDeskBackup,
+  testModelSource,
+  updateKnowledgeDeskSettingsProfile,
+  updateKnowledgeItem,
   type ImportKnowledgeDraft,
+  type ImportModelSourceDraft,
+  type KnowledgeIngestionJob,
   type KnowledgeDeskSnapshot,
+  type KnowledgeDeskBackup,
   type KnowledgeItem,
+  type LocalFileBatchCommitResult,
+  type LocalFileBatchPreflight,
+  type ListKnowledgeItemsParams,
+  type ModelProvider,
+  type UpdateKnowledgeItemDraft,
 } from './knowledgeDeskApi';
 import { Button } from '../components/ui';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -63,13 +85,21 @@ const KnowledgeDeskApp = () => {
     isLoading: false,
     error: null,
   });
+  const [detailJobs, setDetailJobs] = useState<KnowledgeIngestionJob[]>([]);
+  const [detailJobsFetch, setDetailJobsFetch] = useState<{ isLoading: boolean; error: string | null }>({
+    isLoading: false,
+    error: null,
+  });
   const [importMode, setImportMode] = useState<ImportMode | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
   const [itemActionState, setItemActionState] = useState<{ itemId: string; action: KnowledgeWorkflowAction } | null>(null);
   const [notice, setNotice] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const detailRequestRef = useRef(0);
+  const detailJobsRequestRef = useRef(0);
   const desktopFilePickerAvailable = canUseDesktopFilePicker();
+  const desktopBatchFileImportAvailable = canUseDesktopBatchFileImport();
+  const desktopBackupPickerAvailable = canUseDesktopBackupPicker();
 
   useEffect(() => {
     let cancelled = false;
@@ -101,19 +131,45 @@ const KnowledgeDeskApp = () => {
 
   const refreshSnapshot = useCallback(async () => {
     setIsLoadingSnapshot(true);
-    const nextSnapshot = await loadKnowledgeDeskSnapshot();
-    startTransition(() => {
-      setSnapshot(nextSnapshot);
-      setSelectedItem((current) => current ?? nextSnapshot.libraryItems[0] ?? nextSnapshot.inboxItems[0] ?? nextSnapshot.archivedItems[0] ?? null);
+    try {
+      const nextSnapshot = await loadKnowledgeDeskSnapshot();
+      startTransition(() => {
+        setSnapshot(nextSnapshot);
+        setSelectedItem((current) => current ?? nextSnapshot.libraryItems[0] ?? nextSnapshot.inboxItems[0] ?? nextSnapshot.archivedItems[0] ?? null);
+        setIsLoadingSnapshot(false);
+      });
+      return nextSnapshot;
+    } catch (error) {
       setIsLoadingSnapshot(false);
-    });
-    return nextSnapshot;
+      throw error;
+    }
   }, []);
 
   const showNotice = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotice({ message, type });
     window.setTimeout(() => setNotice(null), 3200);
   };
+
+  const loadDetailJobs = useCallback(async (itemId: string) => {
+    const requestId = detailJobsRequestRef.current + 1;
+    detailJobsRequestRef.current = requestId;
+    setDetailJobs([]);
+    setDetailJobsFetch({ isLoading: true, error: null });
+    try {
+      const jobs = await listIngestionJobs({ knowledgeItemId: itemId, limit: 20 });
+      if (detailJobsRequestRef.current !== requestId) return;
+      startTransition(() => {
+        setDetailJobs(jobs);
+        setDetailJobsFetch({ isLoading: false, error: null });
+      });
+    } catch (error) {
+      if (detailJobsRequestRef.current !== requestId) return;
+      setDetailJobsFetch({
+        isLoading: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, []);
 
   const handleImportSubmit = useCallback(async (draft: ImportKnowledgeDraft) => {
     setIsImporting(true);
@@ -149,6 +205,31 @@ const KnowledgeDeskApp = () => {
     } catch (error) {
       setImportMode(null);
       showNotice(error instanceof Error ? error.message : String(error), 'error');
+    } finally {
+      setIsImporting(false);
+    }
+  }, [refreshSnapshot]);
+
+  const handlePreflightLocalFileBatch = useCallback(async (): Promise<LocalFileBatchPreflight> => (
+    preflightLocalKnowledgeFileBatch()
+  ), []);
+
+  const handleCommitLocalFileBatch = useCallback(async (
+    batchId: string,
+    candidateIds: string[],
+  ): Promise<LocalFileBatchCommitResult> => {
+    setIsImporting(true);
+    try {
+      const result = await commitLocalKnowledgeFileBatch(batchId, candidateIds);
+      if (result.imported.length > 0) {
+        await refreshSnapshot();
+        setActivePage('inbox');
+      }
+      showNotice(
+        `本机导入完成：成功 ${result.imported.length} 个，跳过 ${result.skipped.length} 个，失败 ${result.failed.length} 个。`,
+        result.failed.length > 0 ? 'info' : 'success',
+      );
+      return result;
     } finally {
       setIsImporting(false);
     }
@@ -201,18 +282,156 @@ const KnowledgeDeskApp = () => {
         setSelectedItem((current) => (current?.id === item.id ? refreshedItem : current));
       }
 
+      if (
+        (action === 'organize' || action === 'reprocess')
+        && (snapshot.status === 'ok' || snapshot.status === 'degraded')
+      ) {
+        void loadDetailJobs(nextItem.id);
+      }
+
       showNotice(workflowNotice(action, nextItem.title));
     } catch (error) {
+      const shouldRefreshFailedOrganize = (
+        (action === 'organize' || action === 'reprocess')
+        && (snapshot.status === 'ok' || snapshot.status === 'degraded')
+      );
+      if (shouldRefreshFailedOrganize) {
+        const nextSnapshot = await refreshSnapshot().catch(() => null);
+        const refreshedItem = nextSnapshot ? findSnapshotItem(nextSnapshot, item.id) : undefined;
+        if (refreshedItem) {
+          setSelectedItem((current) => (current?.id === item.id ? refreshedItem : current));
+        }
+        void loadDetailJobs(item.id);
+      }
       showNotice(error instanceof Error ? error.message : String(error), 'error');
     } finally {
       setItemActionState(null);
     }
+  }, [snapshot, refreshSnapshot, loadDetailJobs]);
+
+  const handleItemUpdate = useCallback(async (item: KnowledgeItem, draft: UpdateKnowledgeItemDraft) => {
+    const nextItem = await updateKnowledgeItem(item, draft);
+
+    if (snapshot.status === 'error' || snapshot.status === 'unknown') {
+      const nextSnapshot = applySnapshotItemUpdate(snapshot, item, nextItem);
+      startTransition(() => {
+        setSnapshot(nextSnapshot);
+        setSelectedItem((current) => (current?.id === item.id ? nextItem : current));
+      });
+    } else {
+      const nextSnapshot = await refreshSnapshot();
+      const refreshedItem = findSnapshotItem(nextSnapshot, nextItem.id) ?? nextItem;
+      setSelectedItem((current) => (current?.id === item.id ? refreshedItem : current));
+    }
+
+    showNotice('知识条目已更新。');
   }, [snapshot, refreshSnapshot]);
+
+  const handleCreateLocalModel = useCallback(async (
+    draft: Pick<ImportModelSourceDraft, 'name' | 'baseUrl' | 'defaultModel' | 'apiKey'>,
+  ) => {
+    try {
+      const source = await createModelSource({
+        ...draft,
+        providerType: 'local_compatible',
+        apiKey: draft.apiKey.trim() || 'local',
+        enabled: true,
+        isDefault: false,
+      });
+      await testModelSource(source.id);
+      await updateKnowledgeDeskSettingsProfile({
+        defaultModelSourceId: source.id,
+        summaryModelSourceId: source.id,
+      });
+      await refreshSnapshot();
+      showNotice(`${source.provider} 已通过测试，并设为本机知识整理模型。`);
+    } catch (error) {
+      await refreshSnapshot().catch(() => undefined);
+      const message = error instanceof Error ? error.message : String(error);
+      showNotice(message, 'error');
+      throw error;
+    }
+  }, [refreshSnapshot]);
+
+  const handleTestModel = useCallback(async (provider: ModelProvider) => {
+    try {
+      const result = await testModelSource(provider.id);
+      await refreshSnapshot();
+      const message = result.message || `${provider.provider} 可以用于本机整理。`;
+      showNotice(message);
+      return message;
+    } catch (error) {
+      await refreshSnapshot().catch(() => undefined);
+      const message = error instanceof Error ? error.message : String(error);
+      showNotice(message, 'error');
+      throw error;
+    }
+  }, [refreshSnapshot]);
+
+  const handleUseForOrganization = useCallback(async (provider: ModelProvider) => {
+    if (provider.providerType !== 'local_compatible' || provider.lastCheckStatus !== 'ok') {
+      const error = new Error('请先通过本机聊天模型测试，再将它用于知识整理。');
+      showNotice(error.message, 'error');
+      throw error;
+    }
+    try {
+      await updateKnowledgeDeskSettingsProfile({
+        defaultModelSourceId: provider.id,
+        summaryModelSourceId: provider.id,
+      });
+      await refreshSnapshot();
+      showNotice(`${provider.provider} 已设为知识整理模型。`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showNotice(message, 'error');
+      throw error;
+    }
+  }, [refreshSnapshot]);
+
+  const handleOrganizeModeChange = useCallback(async (mode: 'manual' | 'auto') => {
+    try {
+      await updateKnowledgeDeskSettingsProfile({ organizeMode: mode });
+      await refreshSnapshot();
+      showNotice(mode === 'auto' ? '已开启导入后自动整理。' : '已改为手动整理。');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showNotice(message, 'error');
+      throw error;
+    }
+  }, [refreshSnapshot]);
+
+  const handleLoadKnowledgeItemsPage = useCallback((params: ListKnowledgeItemsParams) => (
+    listKnowledgeItems(params)
+  ), []);
+
+  const handleExportBackup = useCallback(async () => {
+    const backup = await exportKnowledgeDeskBackup();
+    const savedPath = await saveKnowledgeDeskBackup(backup);
+    showNotice(savedPath ? `本机备份已保存：${savedPath}` : '已取消备份保存。', savedPath ? 'success' : 'info');
+    return savedPath !== null;
+  }, []);
+
+  const handleImportBackup = useCallback(async (backup: KnowledgeDeskBackup) => {
+    const result = await importKnowledgeDeskBackup(backup);
+    await refreshSnapshot();
+    showNotice(result.message || `已合并导入 ${result.importedItems} 条资料。`);
+  }, [refreshSnapshot]);
+
+  const handlePickDesktopBackup = useCallback(async () => {
+    const backup = await pickKnowledgeDeskBackup();
+    if (!backup) {
+      showNotice('已取消选择备份文件。', 'info');
+      return false;
+    }
+    await handleImportBackup(backup);
+    return true;
+  }, [handleImportBackup]);
 
   const currentTitle = activePage === 'settings' ? '个人中心' : pages.find((page) => page.id === activePage)?.label ?? '工作台';
   const inboxItems = snapshot.inboxItems;
   const libraryItems = snapshot.libraryItems;
   const archivedItems = snapshot.archivedItems;
+  const apiEnabled = snapshot.status === 'ok' || snapshot.status === 'degraded';
   const searchableItems = useMemo(() => buildSearchCorpus(libraryItems, archivedItems, inboxItems), [libraryItems, archivedItems, inboxItems]);
   const tags = useMemo(() => (snapshot.tags.length > 0 ? snapshot.tags : snapshot.dashboard.topTags.map((tag) => tag.name)), [snapshot.tags, snapshot.dashboard.topTags]);
   const detailItem = useMemo(() => selectedItem ?? libraryItems[0] ?? inboxItems[0] ?? archivedItems[0] ?? fallbackSnapshot.libraryItems[0], [selectedItem, libraryItems, inboxItems, archivedItems]);
@@ -246,9 +465,13 @@ const KnowledgeDeskApp = () => {
     setActivePage('detail');
     if (snapshot.status !== 'ok' && snapshot.status !== 'degraded') {
       setDetailFetch({ isLoading: false, error: null });
+      detailJobsRequestRef.current += 1;
+      setDetailJobs([]);
+      setDetailJobsFetch({ isLoading: false, error: null });
       return;
     }
 
+    void loadDetailJobs(item.id);
     setDetailFetch({ isLoading: true, error: null });
     void loadKnowledgeItemDetail(item.id)
       .then((fullItem) => {
@@ -265,7 +488,7 @@ const KnowledgeDeskApp = () => {
           error: error instanceof Error ? error.message : String(error),
         });
       });
-  }, [snapshot.status]);
+  }, [snapshot.status, loadDetailJobs]);
 
   return (
     <div className="kd-app">
@@ -352,7 +575,19 @@ const KnowledgeDeskApp = () => {
         </header>
 
         {activePage === 'settings' ? (
-          <SettingsPage activeTab={settingsTab} onTabChange={setSettingsTab} snapshot={snapshot} />
+          <SettingsPage
+            activeTab={settingsTab}
+            canUseDesktopBackupPicker={desktopBackupPickerAvailable}
+            onCreateLocalModel={handleCreateLocalModel}
+            onExportBackup={handleExportBackup}
+            onImportBackup={handleImportBackup}
+            onOrganizeModeChange={handleOrganizeModeChange}
+            onPickDesktopBackup={handlePickDesktopBackup}
+            onTabChange={setSettingsTab}
+            onTestModel={handleTestModel}
+            onUseForOrganization={handleUseForOrganization}
+            snapshot={snapshot}
+          />
         ) : (
           <div className="kd-content-grid">
             {snapshot.status === 'error' || snapshot.status === 'unknown' || snapshot.status === 'degraded' ? (
@@ -382,10 +617,13 @@ const KnowledgeDeskApp = () => {
                   <InboxPage
                     actionState={itemActionState}
                     activeSegment={activeInboxSegment}
+                    apiEnabled={apiEnabled}
+                    inboxTotals={snapshot.inboxTotals}
                     isLoading={isLoadingSnapshot}
                     isOrganizing={isOrganizing}
                     items={inboxItems}
                     onItemAction={handleItemAction}
+                    onLoadPage={handleLoadKnowledgeItemsPage}
                     onOpenDetail={openDetail}
                     onOrganizeBatch={handleOrganizeBatch}
                     onSegmentChange={setActiveInboxSegment}
@@ -395,13 +633,14 @@ const KnowledgeDeskApp = () => {
               {activePage === 'library' ? (
                 <PageErrorBoundary label="知识库" onReset={() => setActivePage('library')}>
                   <LibraryPage
+                    apiEnabled={apiEnabled}
                     isLoading={isLoadingSnapshot}
                     items={libraryItems}
                     mode={libraryMode}
+                    onLoadPage={handleLoadKnowledgeItemsPage}
                     onModeChange={setLibraryMode}
                     onOpenDetail={openDetail}
                     tags={tags}
-                    totalItems={snapshot.storage.readyItems}
                   />
                 </PageErrorBoundary>
               ) : null}
@@ -409,12 +648,13 @@ const KnowledgeDeskApp = () => {
                 <PageErrorBoundary label="归档库" onReset={() => setActivePage('archive')}>
                   <ArchivePage
                     actionState={itemActionState}
+                    apiEnabled={apiEnabled}
                     isLoading={isLoadingSnapshot}
                     items={archivedItems}
                     onItemAction={handleItemAction}
+                    onLoadPage={handleLoadKnowledgeItemsPage}
                     onOpenDetail={openDetail}
                     tags={tags}
-                    totalItems={snapshot.storage.archivedItems}
                   />
                 </PageErrorBoundary>
               ) : null}
@@ -425,13 +665,25 @@ const KnowledgeDeskApp = () => {
                     error={detailFetch.error}
                     isLoading={detailFetch.isLoading}
                     item={detailItem}
+                    jobHistoryEnabled={apiEnabled}
+                    key={detailItem.id}
+                    jobs={detailJobs}
+                    jobsError={detailJobsFetch.error}
+                    jobsLoading={detailJobsFetch.isLoading}
                     onAction={handleItemAction}
+                    onRetryJobs={() => void loadDetailJobs(detailItem.id)}
+                    onUpdate={handleItemUpdate}
                   />
                 </PageErrorBoundary>
               ) : null}
               {activePage === 'search' ? (
                 <PageErrorBoundary label="全局搜索" onReset={() => setActivePage('search')}>
-                  <SearchPage apiEnabled={snapshot.status === 'ok' || snapshot.status === 'degraded'} searchableItems={searchableItems} onOpenDetail={openDetail} />
+                  <SearchPage
+                    apiEnabled={apiEnabled}
+                    availableTags={snapshot.tags}
+                    searchableItems={searchableItems}
+                    onOpenDetail={openDetail}
+                  />
                 </PageErrorBoundary>
               ) : null}
             </section>
@@ -444,7 +696,10 @@ const KnowledgeDeskApp = () => {
           isSubmitting={isImporting}
           mode={importMode}
           onClose={() => setImportMode(null)}
+          canUseDesktopBatchFileImport={desktopBatchFileImportAvailable}
           canUseDesktopFilePicker={desktopFilePickerAvailable}
+          onCommitLocalFileBatch={handleCommitLocalFileBatch}
+          onPreflightLocalFileBatch={handlePreflightLocalFileBatch}
           onUploadBrowserFile={handleBrowserFileImport}
           onImportLocalFile={handleLocalFileImport}
           onSubmit={handleImportSubmit}

@@ -20,14 +20,19 @@ const getElectronApi = () =>
   (window as unknown as { electronAPI?: DesktopElectronApi }).electronAPI;
 
 export const App = () => {
+  const startsWithoutBackendBridge = import.meta.env.DEV && !getElectronApi();
   const [backendStatus, setBackendStatus] = useState<BackendStatusPayload | null>(null);
-  const [isBackendReady, setIsBackendReady] = useState(false);
+  const [isBackendReady, setIsBackendReady] = useState(startsWithoutBackendBridge);
   const [showSplash, setShowSplash] = useState(true);
 
   // Track backend readiness so the splash screen can hide once the local service is connectable.
   useEffect(() => {
     const api = getElectronApi();
-    if (!api) return;
+    if (!api) {
+      // A Vite-only preview has no Electron IPC bridge to report backend status.
+      // Show the Knowledge Desk fallback immediately instead of trapping local UI work behind a splash screen.
+      return;
+    }
 
     if (api.backendStatus) {
       api

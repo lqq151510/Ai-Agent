@@ -3,6 +3,7 @@ package com.agent.mvp.knowledge.service;
 import com.agent.mvp.agent.dto.ParsedDocument;
 import com.agent.mvp.agent.service.MarkItDownService;
 import com.agent.mvp.common.exception.BadRequestException;
+import com.agent.mvp.common.exception.ConflictException;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.ingestion.IngestionJobStatus;
@@ -17,6 +18,8 @@ import com.agent.mvp.knowledge.dto.DashboardRecentItemResponse;
 import com.agent.mvp.knowledge.dto.DashboardSummaryResponse;
 import com.agent.mvp.knowledge.dto.DashboardTagSummaryResponse;
 import com.agent.mvp.knowledge.dto.ImportFileKnowledgeItemRequest;
+import com.agent.mvp.knowledge.dto.ImportPreflightRequest;
+import com.agent.mvp.knowledge.dto.ImportPreflightResponse;
 import com.agent.mvp.knowledge.dto.ImportSnippetKnowledgeItemRequest;
 import com.agent.mvp.knowledge.dto.ImportWebKnowledgeItemRequest;
 import com.agent.mvp.knowledge.dto.KnowledgeItemPageResponse;
@@ -41,10 +44,14 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,8 +59,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,6 +78,10 @@ public class KnowledgeItemService {
     private static final String SEARCH_VECTOR_SQL =
             "to_tsvector('simple', COALESCE(title, '') || ' ' || COALESCE(summary, '') || ' ' || "
                     + "COALESCE(NULLIF(cleaned_content, ''), raw_content, ''))";
+    private static final int MAX_IMPORT_PREFLIGHT_HASHES = 20;
+    private static final Pattern SHA_256_HEX = Pattern.compile("^[0-9a-fA-F]{64}$");
+    private static final String CONTENT_HASH_UNIQUE_CONSTRAINT =
+            "uq_knowledge_items_user_content_hash";
 
     private final KnowledgeItemRepository knowledgeItemRepository;
     private final KnowledgeTagRepository knowledgeTagRepository;
@@ -165,7 +179,8 @@ public class KnowledgeItemService {
                         resolvedTitle,
                         request.url(),
                         request.content(),
-                        toJson(Map.of("url", request.url(), "title", resolvedTitle)));
+                        toJson(Map.of("url", request.url(), "title", resolvedTitle)),
+                        null);
         return finalizeImportedItem(userId, item, profile);
     }
 
@@ -188,7 +203,8 @@ public class KnowledgeItemService {
                                 Map.of(
                                         "sourceType", sourceType,
                                         "sourceUri", request.sourceUri(),
-                                        "title", resolvedTitle)));
+                                        "title", resolvedTitle)),
+                        null);
         return finalizeImportedItem(userId, item, profile);
     }
 
@@ -202,6 +218,10 @@ public class KnowledgeItemService {
         try {
             tempFile = createTempFile(originalFilename);
             file.transferTo(tempFile);
+            String contentHash = calculateSha256(tempFile);
+            if (contentHashExists(userId, contentHash)) {
+                throw duplicateUploadConflict();
+            }
 
             // Parse outside the transaction — markItDown may be slow and should not hold a DB
             // connection.
@@ -228,20 +248,52 @@ public class KnowledgeItemService {
                                     "sourceUri", sourceUri,
                                     "filename", sanitizeFilename(originalFilename),
                                     "title", resolvedTitle));
-            KnowledgeItem item =
-                    createImportedItem(
-                            userId,
-                            sourceType,
-                            resolvedTitle,
-                            sourceUri,
-                            parsed.markdown(),
-                            jobMetadata);
+            KnowledgeItem item;
+            try {
+                item =
+                        createImportedItem(
+                                userId,
+                                sourceType,
+                                resolvedTitle,
+                                sourceUri,
+                                parsed.markdown(),
+                                jobMetadata,
+                                contentHash);
+            } catch (DuplicateKeyException ex) {
+                throw duplicateUploadConflict();
+            } catch (DataIntegrityViolationException ex) {
+                if (isContentHashConstraintViolation(ex)) {
+                    throw duplicateUploadConflict();
+                }
+                throw ex;
+            }
             return finalizeImportedItem(userId, item, profile);
         } catch (IOException ex) {
             throw new BadRequestException("Failed to read uploaded file");
         } finally {
             deleteQuietly(tempFile);
         }
+    }
+
+    public ImportPreflightResponse preflightImport(
+            UUID userId, ImportPreflightRequest request) {
+        userProfileService.requireUser(userId);
+        List<String> contentHashes = normalizeContentHashes(request.contentHashes());
+        List<String> existingContentHashes =
+                knowledgeItemRepository
+                        .selectList(
+                                new QueryWrapper<KnowledgeItem>()
+                                        .select("content_hash")
+                                        .eq("user_id", userId)
+                                        .in("content_hash", contentHashes))
+                        .stream()
+                        .map(KnowledgeItem::getContentHash)
+                        .filter(contentHash -> contentHash != null && !contentHash.isBlank())
+                        .map(contentHash -> contentHash.toLowerCase(Locale.ROOT))
+                        .distinct()
+                        .toList();
+        return new ImportPreflightResponse(
+                contentHashes.stream().filter(existingContentHashes::contains).toList());
     }
 
     public KnowledgeItemResponse importSnippet(
@@ -255,15 +307,32 @@ public class KnowledgeItemService {
                         resolvedTitle,
                         null,
                         request.content(),
-                        toJson(Map.of("title", resolvedTitle, "sourceType", "snippet")));
+                        toJson(Map.of("title", resolvedTitle, "sourceType", "snippet")),
+                        null);
         return finalizeImportedItem(userId, item, profile);
     }
 
     public KnowledgeItemPageResponse listItems(
-            UUID userId, String status, String sourceType, String tag, long page, long pageSize) {
+            UUID userId,
+            List<String> statuses,
+            String sourceType,
+            String tag,
+            Instant from,
+            Instant to,
+            long page,
+            long pageSize) {
         Page<KnowledgeItem> itemPage =
-                queryItems(userId, null, status, sourceType, tag, null, null, page, pageSize);
-        return toPageResponse(itemPage, page, pageSize);
+                queryItems(
+                        userId,
+                        null,
+                        normalizeStatuses(statuses),
+                        sourceType,
+                        tag,
+                        from,
+                        to,
+                        page,
+                        pageSize);
+        return toPageResponse(itemPage);
     }
 
     public KnowledgeItemResponse getItem(UUID userId, UUID itemId) {
@@ -298,6 +367,7 @@ public class KnowledgeItemService {
     public KnowledgeItemPageResponse search(
             UUID userId,
             String query,
+            String status,
             String tag,
             String sourceType,
             Instant from,
@@ -305,8 +375,17 @@ public class KnowledgeItemService {
             long page,
             long pageSize) {
         Page<KnowledgeItem> itemPage =
-                queryItems(userId, query, null, sourceType, tag, from, to, page, pageSize);
-        return toPageResponse(itemPage, page, pageSize);
+                queryItems(
+                        userId,
+                        query,
+                        normalizeStatuses(status == null ? List.of() : List.of(status)),
+                        sourceType,
+                        tag,
+                        from,
+                        to,
+                        page,
+                        pageSize);
+        return toPageResponse(itemPage);
     }
 
     public KnowledgeItemResponse organize(UUID userId, UUID itemId) {
@@ -421,6 +500,7 @@ public class KnowledgeItemService {
                                     "summary", result.summary(),
                                     "language", result.language(),
                                     "wordCount", result.wordCount(),
+                                    "organizationStrategy", result.organizationStrategy(),
                                     "status", IngestionJobStatus.SUCCEEDED.value()));
             // Item, tags and job reach their success terminal state atomically.
             txWrite(
@@ -492,7 +572,8 @@ public class KnowledgeItemService {
             String title,
             String sourceUri,
             String content,
-            String jobMetadata) {
+            String jobMetadata,
+            String contentHash) {
         return txReturn(
                 status -> {
                     KnowledgeItem item =
@@ -502,7 +583,8 @@ public class KnowledgeItemService {
                                     title,
                                     sourceUri,
                                     content,
-                                    KnowledgeItemStatus.INBOX.value());
+                                    KnowledgeItemStatus.INBOX.value(),
+                                    contentHash);
                     ingestionJobService.createImportSucceeded(userId, item.getId(), jobMetadata);
                     return item;
                 });
@@ -531,10 +613,21 @@ public class KnowledgeItemService {
     @Transactional
     public KnowledgeItemResponse archive(UUID userId, UUID itemId) {
         KnowledgeItem item = requireOwnedItem(userId, itemId);
+        Instant archivedAt = Instant.now();
+        UpdateWrapper<KnowledgeItem> wrapper =
+                new UpdateWrapper<KnowledgeItem>()
+                        .eq("id", itemId)
+                        .eq("user_id", userId)
+                        .ne("status", KnowledgeItemStatus.PROCESSING.value())
+                        .set("status", KnowledgeItemStatus.ARCHIVED.value())
+                        .set("archived_at", archivedAt)
+                        .set("updated_at", archivedAt);
+        if (knowledgeItemRepository.update(null, wrapper) == 0) {
+            throw new BadRequestException("Processing item cannot be archived");
+        }
         item.setStatus(KnowledgeItemStatus.ARCHIVED.value());
-        item.setArchivedAt(Instant.now());
-        item.touch();
-        knowledgeItemRepository.updateById(item);
+        item.setArchivedAt(archivedAt);
+        item.setUpdatedAt(archivedAt);
         return toResponse(item);
     }
 
@@ -637,13 +730,77 @@ public class KnowledgeItemService {
                                 count -> count.getItemCount() == null ? 0L : count.getItemCount()));
     }
 
+    private boolean contentHashExists(UUID userId, String contentHash) {
+        Long matches =
+                knowledgeItemRepository.selectCount(
+                        new QueryWrapper<KnowledgeItem>()
+                                .eq("user_id", userId)
+                                .eq("content_hash", contentHash));
+        return matches != null && matches > 0;
+    }
+
+    private String calculateSha256(Path file) throws IOException {
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 must be available", ex);
+        }
+        try (InputStream input = Files.newInputStream(file)) {
+            byte[] buffer = new byte[8 * 1024];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private List<String> normalizeContentHashes(List<String> contentHashes) {
+        if (contentHashes == null
+                || contentHashes.isEmpty()
+                || contentHashes.size() > MAX_IMPORT_PREFLIGHT_HASHES) {
+            throw new BadRequestException("contentHashes must contain 1 to 20 SHA-256 hashes");
+        }
+        return contentHashes.stream()
+                .map(
+                        contentHash -> {
+                            if (contentHash == null || !SHA_256_HEX.matcher(contentHash).matches()) {
+                                throw new BadRequestException(
+                                        "content hash must be a 64-character hexadecimal SHA-256");
+                            }
+                            return contentHash.toLowerCase(Locale.ROOT);
+                        })
+                .distinct()
+                .toList();
+    }
+
+    private ConflictException duplicateUploadConflict() {
+        return new ConflictException("An identical file has already been imported");
+    }
+
+    private boolean isContentHashConstraintViolation(DataIntegrityViolationException exception) {
+        Throwable cause = exception;
+        while (cause != null) {
+            String message = cause.getMessage();
+            if (message != null
+                    && message.toLowerCase(Locale.ROOT)
+                            .contains(CONTENT_HASH_UNIQUE_CONSTRAINT)) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
+    }
+
     private KnowledgeItem createItem(
             UUID userId,
             String sourceType,
             String title,
             String sourceUri,
             String content,
-            String status) {
+            String status,
+            String contentHash) {
         String cleanedTitle = (title == null || title.isBlank()) ? "Untitled" : title.trim();
         KnowledgeItem item =
                 KnowledgeItem.builder()
@@ -651,6 +808,7 @@ public class KnowledgeItemService {
                         .sourceType(sourceType)
                         .title(cleanedTitle)
                         .sourceUri(sourceUri)
+                        .contentHash(contentHash)
                         .rawContent(content.trim())
                         .status(status)
                         .language(detectLanguage(content))
@@ -664,7 +822,7 @@ public class KnowledgeItemService {
     private Page<KnowledgeItem> queryItems(
             UUID userId,
             String query,
-            String status,
+            List<String> statuses,
             String sourceType,
             String tag,
             Instant from,
@@ -693,8 +851,8 @@ public class KnowledgeItemService {
         if (query != null && !query.isBlank()) {
             applyKeywordSearch(wrapper, query.trim());
         }
-        if (status != null && !status.isBlank()) {
-            wrapper.eq("status", KnowledgeItemStatus.from(status).value());
+        if (!statuses.isEmpty()) {
+            wrapper.in("status", statuses);
         }
         if (sourceType != null && !sourceType.isBlank()) {
             wrapper.eq("source_type", KnowledgeItemSourceType.from(sourceType).value());
@@ -722,6 +880,17 @@ public class KnowledgeItemService {
         }
         wrapper.orderByDesc("updated_at");
         return knowledgeItemRepository.selectPage(pagination, wrapper);
+    }
+
+    private List<String> normalizeStatuses(List<String> rawStatuses) {
+        if (rawStatuses == null || rawStatuses.isEmpty()) {
+            return List.of();
+        }
+        return rawStatuses.stream()
+                .filter(status -> status != null && !status.isBlank())
+                .map(status -> KnowledgeItemStatus.from(status.trim()).value())
+                .distinct()
+                .toList();
     }
 
     private void applyKeywordSearch(QueryWrapper<KnowledgeItem> wrapper, String query) {
@@ -791,8 +960,7 @@ public class KnowledgeItemService {
                 .toList();
     }
 
-    private KnowledgeItemPageResponse toPageResponse(
-            Page<KnowledgeItem> itemPage, long page, long pageSize) {
+    private KnowledgeItemPageResponse toPageResponse(Page<KnowledgeItem> itemPage) {
         Map<UUID, List<TagResponse>> tagsByItemId =
                 getTagsByItemIds(itemPage.getRecords().stream().map(KnowledgeItem::getId).toList());
         return new KnowledgeItemPageResponse(
@@ -804,8 +972,8 @@ public class KnowledgeItemService {
                                                 tagsByItemId.getOrDefault(item.getId(), List.of())))
                         .toList(),
                 itemPage.getTotal(),
-                page,
-                pageSize);
+                itemPage.getCurrent(),
+                itemPage.getSize());
     }
 
     private Map<UUID, List<TagResponse>> getTagsByItemIds(List<UUID> itemIds) {

@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   AlertTriangle,
   Archive,
@@ -14,18 +14,27 @@ import {
   Library,
   ListFilter,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
+  Save,
   Search,
   Tags,
   Network,
   Cpu,
+  X,
 } from 'lucide-react';
 import type {
   DashboardSummary,
   ImportKnowledgeDraft,
+  KnowledgeIngestionJob,
   KnowledgeDeskSnapshot,
   KnowledgeItem,
+  KnowledgeItemPage,
+  LocalFileBatchCandidate,
+  LocalFileBatchCommitResult,
+  LocalFileBatchPreflight,
+  ListKnowledgeItemsParams,
 } from './knowledgeDeskApi';
 import { searchKnowledgeItems } from './knowledgeDeskApi';
 import type { ImportMode, MainPage } from './knowledgeDeskTypes';
@@ -36,15 +45,14 @@ import {
   buildSourceOptions,
   buildTagOptions,
   buildInboxSegments,
-  buildSearchStatusOptions,
   buildWorkflowActions,
   buildSearchCorpus,
   emptyFilters,
   filterInboxItems,
   filterLocalItems,
   filterSearchItemsByStatus,
-  mergeSearchResults,
-  toggleFilterValue,
+  inboxStatusesForSegment,
+  toggleSingleFilterValue,
   type InboxSegment,
   type ItemFilters,
   type KnowledgeWorkflowAction,
@@ -72,11 +80,123 @@ import {
   MetaLine,
   MetricCard,
   Panel,
-  StateStrip,
   StatusPill,
   TimelineItem,
 } from './knowledgeDeskShared';
 import { formatCount, sourceIcon, toPercent } from './knowledgeDeskDisplay';
+
+const LIST_PAGE_SIZE = 20;
+
+type ListPageLoader = (params: ListKnowledgeItemsParams) => Promise<KnowledgeItemPage>;
+
+const buildLocalKnowledgeItemPage = (
+  items: KnowledgeItem[],
+  requestedPage: number,
+  pageSize = LIST_PAGE_SIZE,
+): KnowledgeItemPage => {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const page = Math.min(Math.max(requestedPage, 1), totalPages);
+  const start = (page - 1) * pageSize;
+  return {
+    items: items.slice(start, start + pageSize),
+    total: items.length,
+    page,
+    pageSize,
+  };
+};
+
+const usePagedKnowledgeItems = ({
+  apiEnabled,
+  fallbackItems,
+  loadPage,
+  params,
+}: {
+  apiEnabled: boolean;
+  fallbackItems: KnowledgeItem[];
+  loadPage: ListPageLoader;
+  params: Omit<ListKnowledgeItemsParams, 'page' | 'pageSize'>;
+}) => {
+  const [pageData, setPageData] = useState<KnowledgeItemPage>(() => buildLocalKnowledgeItemPage(fallbackItems, 1));
+  const [isPageLoading, setIsPageLoading] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const requestRef = useRef(0);
+
+  const requestPage = useCallback(async (requestedPage: number) => {
+    const requestId = requestRef.current + 1;
+    requestRef.current = requestId;
+    const localPage = buildLocalKnowledgeItemPage(fallbackItems, requestedPage);
+
+    if (!apiEnabled) {
+      setPageError(null);
+      setPageData(localPage);
+      return;
+    }
+
+    setIsPageLoading(true);
+    setPageError(null);
+    try {
+      const nextPage = await loadPage({ ...params, page: requestedPage, pageSize: LIST_PAGE_SIZE });
+      if (requestRef.current === requestId) {
+        setPageData(nextPage);
+      }
+    } catch (error) {
+      if (requestRef.current === requestId) {
+        setPageError(error instanceof Error ? error.message : String(error));
+        setPageData((current) => (current.items.length > 0 ? current : localPage));
+      }
+    } finally {
+      if (requestRef.current === requestId) {
+        setIsPageLoading(false);
+      }
+    }
+  }, [apiEnabled, fallbackItems, loadPage, params]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.resolve().then(() => {
+      if (!cancelled) return requestPage(1);
+      return undefined;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requestPage]);
+
+  return { isPageLoading, pageData, pageError, requestPage };
+};
+
+const CollectionPagination = ({
+  currentPage,
+  isLoading,
+  label,
+  onPageChange,
+  pageSize,
+  total,
+}: {
+  currentPage: number;
+  isLoading: boolean;
+  label: string;
+  onPageChange: (page: number) => void;
+  pageSize: number;
+  total: number;
+}) => {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (totalPages <= 1) return null;
+
+  return (
+    <nav className="kd-search-pagination" aria-label={label}>
+      <button disabled={isLoading || currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} type="button">
+        上一页
+      </button>
+      <span>第 {currentPage} / {totalPages} 页</span>
+      <button disabled={isLoading || currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} type="button">
+        下一页
+      </button>
+    </nav>
+  );
+};
 
 export const ConnectionBanner = ({
   error,
@@ -187,27 +307,47 @@ export const DashboardPage = ({
 export const InboxPage = ({
   actionState,
   activeSegment,
+  apiEnabled,
+  inboxTotals,
   isLoading,
   isOrganizing,
   items,
   onItemAction,
+  onLoadPage,
   onOpenDetail,
   onOrganizeBatch,
   onSegmentChange,
 }: {
   actionState: { itemId: string; action: KnowledgeWorkflowAction } | null;
   activeSegment: InboxSegment;
+  apiEnabled: boolean;
+  inboxTotals: KnowledgeDeskSnapshot['inboxTotals'];
   isLoading?: boolean;
   isOrganizing: boolean;
   items: KnowledgeItem[];
   onItemAction: (item: KnowledgeItem, action: KnowledgeWorkflowAction) => Promise<void>;
+  onLoadPage: ListPageLoader;
   onOpenDetail: (item: KnowledgeItem) => void;
   onOrganizeBatch: () => void;
   onSegmentChange: (segment: InboxSegment) => void;
 }) => {
-  const visibleItems = useMemo(() => filterInboxItems(items, activeSegment), [items, activeSegment]);
+  const fallbackItems = useMemo(() => filterInboxItems(items, activeSegment), [items, activeSegment]);
+  const serverStatuses = useMemo(() => inboxStatusesForSegment(activeSegment), [activeSegment]);
+  const pageParams = useMemo<ListKnowledgeItemsParams>(() => ({
+    statuses: [...serverStatuses],
+  }), [serverStatuses]);
+  const { isPageLoading, pageData, pageError, requestPage } = usePagedKnowledgeItems({
+    apiEnabled,
+    fallbackItems,
+    loadPage: onLoadPage,
+    params: pageParams,
+  });
+  const visibleItems = pageData.items;
   const shouldVirtualize = useShouldVirtualize(visibleItems.length);
-  const inboxSegments = useMemo(() => buildInboxSegments(items), [items]);
+  const inboxSegments = useMemo(
+    () => buildInboxSegments(items, apiEnabled ? inboxTotals : undefined),
+    [apiEnabled, inboxTotals, items],
+  );
   const emptyState = useMemo(() => (
     <EmptyState
       icon={Inbox}
@@ -275,14 +415,25 @@ export const InboxPage = ({
           ))}
         </div>
         <div className="kd-tool-actions">
-          <button disabled={isOrganizing || items.length === 0} onClick={onOrganizeBatch} type="button">
+          <button disabled={isOrganizing || visibleItems.length === 0} onClick={onOrganizeBatch} type="button">
             <RefreshCw size={16} /> {isOrganizing ? '整理中' : '批量整理'}
           </button>
           <span className="kd-tool-note">
-            当前显示 {visibleItems.length} 条，需要优先处理的失败条目会保留在这里。
+            {apiEnabled ? `当前页 ${visibleItems.length} / ${pageData.total} 条` : `当前已加载 ${pageData.total} 条`}
+            ，需要优先处理的失败条目会保留在这里。
           </span>
         </div>
       </div>
+
+      {pageError ? (
+        <ErrorCard
+          description="服务端分页暂不可用，当前保留已加载条目。"
+          error={pageError}
+          onRetry={() => void requestPage(pageData.page)}
+          retryLabel="重试加载"
+          title="收集箱加载失败"
+        />
+      ) : null}
 
       <section className="kd-inbox-board">
         {shouldVirtualize ? (
@@ -300,7 +451,14 @@ export const InboxPage = ({
         )}
       </section>
 
-      <StateStrip />
+      <CollectionPagination
+        currentPage={pageData.page}
+        isLoading={isPageLoading}
+        label="收集箱分页"
+        onPageChange={(page) => void requestPage(page)}
+        pageSize={pageData.pageSize}
+        total={pageData.total}
+      />
     </div>
   );
 };
@@ -308,18 +466,24 @@ export const InboxPage = ({
 type ImportPanelStatus = 'idle' | 'submitting' | 'success' | 'error';
 
 export const ImportPanel = ({
+  canUseDesktopBatchFileImport,
   canUseDesktopFilePicker,
   isSubmitting,
   mode,
   onClose,
+  onCommitLocalFileBatch,
+  onPreflightLocalFileBatch,
   onUploadBrowserFile,
   onImportLocalFile,
   onSubmit,
 }: {
+  canUseDesktopBatchFileImport: boolean;
   canUseDesktopFilePicker: boolean;
   isSubmitting: boolean;
   mode: ImportMode;
   onClose: () => void;
+  onCommitLocalFileBatch: (batchId: string, candidateIds: string[]) => Promise<LocalFileBatchCommitResult>;
+  onPreflightLocalFileBatch: () => Promise<LocalFileBatchPreflight>;
   onUploadBrowserFile: (file: File, title?: string) => Promise<void>;
   onImportLocalFile: (title?: string) => Promise<void>;
   onSubmit: (draft: ImportKnowledgeDraft) => Promise<void>;
@@ -330,11 +494,20 @@ export const ImportPanel = ({
   const [content, setContent] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [localBatch, setLocalBatch] = useState<LocalFileBatchPreflight | null>(null);
+  const [selectedBatchCandidateIds, setSelectedBatchCandidateIds] = useState<string[]>([]);
+  const [batchResult, setBatchResult] = useState<LocalFileBatchCommitResult | null>(null);
   const [status, setStatus] = useState<ImportPanelStatus>('idle');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const isFileMode = mode === 'file';
   const sourceRequired = mode === 'web';
   const isBusy = isSubmitting || status === 'submitting';
+  const readyBatchCandidateIds = localBatch?.candidates
+    .filter((candidate) => candidate.verdict === 'ready')
+    .map((candidate) => candidate.candidateId) ?? [];
+  const selectedReadyBatchCandidateIds = selectedBatchCandidateIds.filter((candidateId) => (
+    readyBatchCandidateIds.includes(candidateId)
+  ));
 
   const resetStatus = () => {
     setStatus('idle');
@@ -347,7 +520,68 @@ export const ImportPanel = ({
     resetStatus();
   };
 
+  const handlePreflightLocalBatch = async () => {
+    resetStatus();
+    setBatchResult(null);
+    setLocalBatch(null);
+    setSelectedBatchCandidateIds([]);
+    setStatus('submitting');
+    setStatusMessage('正在检查文件类型、大小和重复内容…');
+    try {
+      const batch = await onPreflightLocalFileBatch();
+      if (batch.canceled) {
+        setStatus('idle');
+        setStatusMessage('已取消文件选择。');
+        return;
+      }
+      setLocalBatch(batch);
+      setSelectedBatchCandidateIds(
+        batch.candidates
+          .filter((candidate) => candidate.verdict === 'ready')
+          .map((candidate) => candidate.candidateId),
+      );
+      setStatus('idle');
+      setStatusMessage(null);
+    } catch (submitError) {
+      setStatus('error');
+      setStatusMessage(submitError instanceof Error ? submitError.message : String(submitError));
+    }
+  };
+
+  const handleCommitLocalBatch = async () => {
+    if (!localBatch?.batchId) {
+      await handlePreflightLocalBatch();
+      return;
+    }
+    if (selectedReadyBatchCandidateIds.length === 0) {
+      setValidationError('请至少选择一份预检通过的文件。');
+      return;
+    }
+
+    setValidationError(null);
+    setStatus('submitting');
+    setStatusMessage(`正在依次导入 ${selectedReadyBatchCandidateIds.length} 份文件…`);
+    try {
+      const result = await onCommitLocalFileBatch(localBatch.batchId, selectedReadyBatchCandidateIds);
+      setLocalBatch(null);
+      setSelectedBatchCandidateIds([]);
+      setBatchResult(result);
+      setStatus('success');
+      setStatusMessage(`导入完成：成功 ${result.imported.length} 个，跳过 ${result.skipped.length} 个，失败 ${result.failed.length} 个。`);
+    } catch (submitError) {
+      // The main-process token is single-use, so a failed commit must start with a new preflight.
+      setLocalBatch(null);
+      setSelectedBatchCandidateIds([]);
+      setStatus('error');
+      setStatusMessage(submitError instanceof Error ? submitError.message : String(submitError));
+    }
+  };
+
   const handleChooseFile = async () => {
+    if (canUseDesktopBatchFileImport) {
+      await handlePreflightLocalBatch();
+      return;
+    }
     if (!canUseDesktopFilePicker) {
       browserFileInputRef.current?.click();
       return;
@@ -388,6 +622,10 @@ export const ImportPanel = ({
     resetStatus();
 
     if (isFileMode) {
+      if (canUseDesktopBatchFileImport) {
+        await handleCommitLocalBatch();
+        return;
+      }
       if (selectedFile && !canUseDesktopFilePicker) {
         setStatus('submitting');
         setStatusMessage(`正在上传 ${selectedFile.name}…`);
@@ -447,35 +685,69 @@ export const ImportPanel = ({
           <button className="kd-icon-button" disabled={isBusy} onClick={onClose} type="button" aria-label="关闭导入面板">×</button>
         </header>
 
-        <label className="kd-field">
-          <span>标题</span>
-          <input
-            disabled={isBusy}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder={isFileMode ? '可选，留空则使用文件名' : '可选，留空则按来源自动命名'}
-            value={title}
-          />
-        </label>
+        {!isFileMode || !canUseDesktopBatchFileImport ? (
+          <label className="kd-field">
+            <span>标题</span>
+            <input
+              disabled={isBusy}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder={isFileMode ? '可选，留空则使用文件名' : '可选，留空则按来源自动命名'}
+              value={title}
+            />
+          </label>
+        ) : null}
 
         {isFileMode ? (
           <div className="kd-import-file-area">
-            <FileDropZone
-              accept=".md,.markdown,.pdf,.txt,.html,text/markdown,application/pdf,text/plain,text/html"
-              description="支持 .md、.markdown、.pdf，也兼容 txt/html 文本资料。"
-              disabled={isBusy}
-              file={selectedFile}
-              onFileSelect={handleFileSelect}
-              title={canUseDesktopFilePicker ? '点击打开系统文件选择器，或拖拽文件到此处' : '拖拽文件到此处，或点击选择文件'}
-            />
-            {!canUseDesktopFilePicker ? (
-              <input
-                ref={browserFileInputRef}
-                accept=".md,.markdown,.pdf,.txt,.html,text/markdown,application/pdf,text/plain,text/html"
-                className="kd-hidden-file-input"
-                onChange={(event) => void handleBrowserFileSelected(event)}
-                type="file"
-              />
-            ) : null}
+            {canUseDesktopBatchFileImport ? (
+              <>
+                <button
+                  className="kd-batch-file-picker"
+                  disabled={isBusy}
+                  onClick={() => void handlePreflightLocalBatch()}
+                  type="button"
+                >
+                  <FolderOpen size={20} />
+                  <span>{localBatch ? '重新选择并预检文件' : '选择本机文件并预检'}</span>
+                  <small>最多 20 个，每个不超过 20 MB</small>
+                </button>
+                {localBatch ? (
+                  <LocalFileBatchPreflightList
+                    candidates={localBatch.candidates}
+                    disabled={isBusy}
+                    selectedCandidateIds={selectedReadyBatchCandidateIds}
+                    onToggle={(candidateId, checked) => {
+                      setSelectedBatchCandidateIds((current) => (
+                        checked
+                          ? Array.from(new Set([...current, candidateId]))
+                          : current.filter((id) => id !== candidateId)
+                      ));
+                    }}
+                  />
+                ) : null}
+                {batchResult ? <LocalFileBatchResult result={batchResult} /> : null}
+              </>
+            ) : (
+              <>
+                <FileDropZone
+                  accept=".md,.markdown,.pdf,.txt,.html,text/markdown,application/pdf,text/plain,text/html"
+                  description="支持 .md、.markdown、.pdf，也兼容 txt/html 文本资料。"
+                  disabled={isBusy}
+                  file={selectedFile}
+                  onFileSelect={handleFileSelect}
+                  title={canUseDesktopFilePicker ? '点击打开系统文件选择器，或拖拽文件到此处' : '拖拽文件到此处，或点击选择文件'}
+                />
+                {!canUseDesktopFilePicker ? (
+                  <input
+                    ref={browserFileInputRef}
+                    accept=".md,.markdown,.pdf,.txt,.html,text/markdown,application/pdf,text/plain,text/html"
+                    className="kd-hidden-file-input"
+                    onChange={(event) => void handleBrowserFileSelected(event)}
+                    type="file"
+                  />
+                ) : null}
+              </>
+            )}
             <div className="kd-import-file-types">
               <span><FileText size={13} /> Markdown</span>
               <span><FileText size={13} /> PDF</span>
@@ -536,19 +808,29 @@ export const ImportPanel = ({
         <footer>
           <p>
             {isFileMode
-              ? '文件解析在后端完成，不需要手写路径。导入后内容会先进入收集箱。'
+              ? canUseDesktopBatchFileImport
+                ? '文件路径和 SHA-256 仅保留在本机主进程。预检会跳过批内重复与已入库的同字节文件，再逐个导入收集箱。'
+                : '文件解析在后端完成，不需要手写路径。导入后内容会先进入收集箱。'
               : '内容会先进入收集箱，后续可批量整理为摘要、标签与可检索知识条目。'}
           </p>
           <div>
             <button className="kd-secondary-button" disabled={isBusy} onClick={onClose} type="button">取消</button>
-            <button className="kd-primary-button" disabled={isBusy} type="submit">
+            <button
+              className="kd-primary-button"
+              disabled={isBusy || (isFileMode && canUseDesktopBatchFileImport && Boolean(localBatch?.batchId) && selectedReadyBatchCandidateIds.length === 0)}
+              type="submit"
+            >
               {isBusy ? (
                 <>
                   <Loader2 size={15} className="animate-spin" />
                   导入中
                 </>
               ) : isFileMode ? (
-                canUseDesktopFilePicker ? '选择文件并导入' : '上传文件到收集箱'
+                canUseDesktopBatchFileImport
+                  ? localBatch?.batchId
+                    ? `导入已选 ${selectedReadyBatchCandidateIds.length} 个`
+                    : '选择文件并预检'
+                  : canUseDesktopFilePicker ? '选择文件并导入' : '上传文件到收集箱'
               ) : (
                 '导入收集箱'
               )}
@@ -560,27 +842,140 @@ export const ImportPanel = ({
   );
 };
 
+const localFileBatchVerdictCopy: Record<LocalFileBatchCandidate['verdict'], string> = {
+  ready: '可导入',
+  duplicate_existing: '已入库',
+  duplicate_in_batch: '批内重复',
+  invalid: '不可导入',
+};
+
+const LocalFileBatchPreflightList = ({
+  candidates,
+  disabled,
+  onToggle,
+  selectedCandidateIds,
+}: {
+  candidates: LocalFileBatchCandidate[];
+  disabled: boolean;
+  onToggle: (candidateId: string, checked: boolean) => void;
+  selectedCandidateIds: string[];
+}) => {
+  const readyCount = candidates.filter((candidate) => candidate.verdict === 'ready').length;
+  const skippedCount = candidates.length - readyCount;
+  return (
+    <section className="kd-batch-preflight" aria-label="本机文件预检清单">
+      <header>
+        <div>
+          <strong>预检清单</strong>
+          <span>可导入 {readyCount} 个，已跳过 {skippedCount} 个</span>
+        </div>
+        <span>{candidates.length} 个文件</span>
+      </header>
+      <ul>
+        {candidates.map((candidate) => {
+          const ready = candidate.verdict === 'ready';
+          return (
+            <li className={`kd-batch-candidate kd-batch-candidate-${candidate.verdict}`} key={candidate.candidateId}>
+              {ready ? (
+                <input
+                  aria-label={`选择 ${candidate.name}`}
+                  checked={selectedCandidateIds.includes(candidate.candidateId)}
+                  disabled={disabled}
+                  onChange={(event) => onToggle(candidate.candidateId, event.target.checked)}
+                  type="checkbox"
+                />
+              ) : (
+                <AlertTriangle aria-hidden="true" size={16} />
+              )}
+              <div>
+                <strong title={candidate.name}>{candidate.name}</strong>
+                <span>{formatFileSize(candidate.size)} · {localFileBatchVerdictCopy[candidate.verdict]}</span>
+                {candidate.reason ? <small>{candidate.reason}</small> : null}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+};
+
+const LocalFileBatchResult = ({ result }: { result: LocalFileBatchCommitResult }) => (
+  <section className="kd-batch-result" aria-label="本机文件导入结果">
+    <header>
+      <CheckCircle2 size={18} />
+      <div>
+        <strong>本次导入结果</strong>
+        <span>成功 {result.imported.length} 个，跳过 {result.skipped.length} 个，失败 {result.failed.length} 个</span>
+      </div>
+    </header>
+    {result.skipped.length > 0 || result.failed.length > 0 ? (
+      <ul>
+        {result.skipped.map((entry) => (
+          <li key={`skipped-${entry.candidateId}`}>
+            <span>{entry.name}</span>
+            <small>已跳过：{entry.reason}</small>
+          </li>
+        ))}
+        {result.failed.map((entry) => (
+          <li className="kd-batch-result-failed" key={`failed-${entry.candidateId}`}>
+            <span>{entry.name}</span>
+            <small>失败：{entry.reason}</small>
+          </li>
+        ))}
+      </ul>
+    ) : null}
+  </section>
+);
+
+const formatFileSize = (size: number) => {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 102.4) / 10} KB`;
+  return `${Math.round(size / (1024 * 102.4)) / 10} MB`;
+};
+
 export const LibraryPage = ({
+  apiEnabled,
   items,
   isLoading,
   mode,
+  onLoadPage,
   onModeChange,
   onOpenDetail,
   tags,
-  totalItems,
 }: {
+  apiEnabled: boolean;
   items: KnowledgeItem[];
   isLoading?: boolean;
   mode: 'list' | 'cards';
+  onLoadPage: ListPageLoader;
   onModeChange: (mode: 'list' | 'cards') => void;
   onOpenDetail: (item: KnowledgeItem) => void;
   tags: string[];
-  totalItems: number;
 }) => {
   const [filters, setFilters] = useState<ItemFilters>(emptyFilters);
-  const sourceOptions = useMemo(() => buildSourceOptions(items, ['网页摘录', 'PDF', 'Markdown', '粘贴内容']), [items]);
-  const tagOptions = useMemo(() => buildTagOptions(items, tags), [items, tags]);
-  const filteredItems = useMemo(() => applyItemFilters(items, filters), [items, filters]);
+  const sourceOptions = useMemo(
+    () => Array.from(new Set(['网页摘录', 'PDF', 'Markdown', '粘贴内容', ...buildSourceOptions(items, [])])),
+    [items],
+  );
+  const tagOptions = useMemo(
+    () => Array.from(new Set([...tags, ...buildTagOptions(items, [])])).slice(0, 8),
+    [items, tags],
+  );
+  const fallbackItems = useMemo(() => applyItemFilters(items, filters), [items, filters]);
+  const pageParams = useMemo<ListKnowledgeItemsParams>(() => ({
+    statuses: ['ready'],
+    sourceType: serverSearchSourceType(filters.source[0]),
+    tag: filters.tag[0],
+    ...serverSearchDateRange(filters.time),
+  }), [filters.source, filters.tag, filters.time]);
+  const { isPageLoading, pageData, pageError, requestPage } = usePagedKnowledgeItems({
+    apiEnabled,
+    fallbackItems,
+    loadPage: onLoadPage,
+    params: pageParams,
+  });
+  const filteredItems = pageData.items;
   const hasActiveFilters = activeFilterCount(filters) > 0;
   const shouldVirtualizeList = useShouldVirtualize(filteredItems.length) && mode === 'list';
   const emptyState = useMemo(() => (
@@ -611,19 +1006,22 @@ export const LibraryPage = ({
       <aside className="kd-filter-rail">
         <FilterGroup
           activeValues={filters.source}
-          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'source', value))}
+          onToggle={(value) => setFilters((current) => toggleSingleFilterValue(current, 'source', value))}
+          selectionMode="single"
           title="来源"
           values={sourceOptions}
         />
         <FilterGroup
           activeValues={filters.time}
-          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'time', value))}
+          onToggle={(value) => setFilters((current) => toggleSingleFilterValue(current, 'time', value))}
+          selectionMode="single"
           title="时间"
           values={['今天', '本周', '本月', '更早']}
         />
         <FilterGroup
           activeValues={filters.tag}
-          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'tag', value))}
+          onToggle={(value) => setFilters((current) => toggleSingleFilterValue(current, 'tag', value))}
+          selectionMode="single"
           title="主题"
           values={tagOptions}
         />
@@ -631,16 +1029,18 @@ export const LibraryPage = ({
           filters={filters}
           onClear={() => setFilters(emptyFilters)}
           resultCount={filteredItems.length}
-          totalCount={items.length}
+          totalCount={pageData.total}
         />
       </aside>
 
       <div className="kd-stack">
         <div className="kd-page-tools">
           <div>
-            <h2 className="kd-section-title">{formatCount(filteredItems.length)} / {formatCount(totalItems)} 条知识条目</h2>
+            <h2 className="kd-section-title">当前页 {formatCount(filteredItems.length)} / {formatCount(pageData.total)} 条知识条目</h2>
             <p className="kd-muted">
-              {hasActiveFilters ? '已按当前筛选条件收窄结果。' : '按来源、标签、时间和文档类型找回内容。'}
+              {apiEnabled
+                ? (hasActiveFilters ? '筛选和分页均来自本机服务端全库。' : '按来源、标签、时间和文档类型找回全库内容。')
+                : '后端未连接，当前仅筛选已加载条目。'}
             </p>
           </div>
           <div className="kd-segmented">
@@ -652,6 +1052,16 @@ export const LibraryPage = ({
             </button>
           </div>
         </div>
+
+        {pageError ? (
+          <ErrorCard
+            description="服务端分页暂不可用，当前保留已加载条目。"
+            error={pageError}
+            onRetry={() => void requestPage(pageData.page)}
+            retryLabel="重试加载"
+            title="知识库加载失败"
+          />
+        ) : null}
 
         <div className={mode === 'list' ? 'kd-library-list' : 'kd-library-cards'}>
           {mode === 'list' && shouldVirtualizeList ? (
@@ -668,6 +1078,15 @@ export const LibraryPage = ({
             </>
           )}
         </div>
+
+        <CollectionPagination
+          currentPage={pageData.page}
+          isLoading={isPageLoading}
+          label="知识库分页"
+          onPageChange={(page) => void requestPage(page)}
+          pageSize={pageData.pageSize}
+          total={pageData.total}
+        />
       </div>
     </div>
   );
@@ -675,25 +1094,46 @@ export const LibraryPage = ({
 
 export const ArchivePage = ({
   actionState,
+  apiEnabled,
   items,
   isLoading,
   onItemAction,
+  onLoadPage,
   onOpenDetail,
   tags,
-  totalItems,
 }: {
   actionState: { itemId: string; action: KnowledgeWorkflowAction } | null;
+  apiEnabled: boolean;
   items: KnowledgeItem[];
   isLoading?: boolean;
   onItemAction: (item: KnowledgeItem, action: KnowledgeWorkflowAction) => Promise<void>;
+  onLoadPage: ListPageLoader;
   onOpenDetail: (item: KnowledgeItem) => void;
   tags: string[];
-  totalItems: number;
 }) => {
   const [filters, setFilters] = useState<ItemFilters>(emptyFilters);
-  const sourceOptions = useMemo(() => buildSourceOptions(items, ['网页摘录', 'PDF', 'Markdown', '粘贴内容']), [items]);
-  const tagOptions = useMemo(() => buildTagOptions(items, tags), [items, tags]);
-  const filteredItems = useMemo(() => applyItemFilters(items, filters), [items, filters]);
+  const sourceOptions = useMemo(
+    () => Array.from(new Set(['网页摘录', 'PDF', 'Markdown', '粘贴内容', ...buildSourceOptions(items, [])])),
+    [items],
+  );
+  const tagOptions = useMemo(
+    () => Array.from(new Set([...tags, ...buildTagOptions(items, [])])).slice(0, 8),
+    [items, tags],
+  );
+  const fallbackItems = useMemo(() => applyItemFilters(items, filters), [items, filters]);
+  const pageParams = useMemo<ListKnowledgeItemsParams>(() => ({
+    statuses: ['archived'],
+    sourceType: serverSearchSourceType(filters.source[0]),
+    tag: filters.tag[0],
+    ...serverSearchDateRange(filters.time),
+  }), [filters.source, filters.tag, filters.time]);
+  const { isPageLoading, pageData, pageError, requestPage } = usePagedKnowledgeItems({
+    apiEnabled,
+    fallbackItems,
+    loadPage: onLoadPage,
+    params: pageParams,
+  });
+  const filteredItems = pageData.items;
   const hasActiveFilters = activeFilterCount(filters) > 0;
   const shouldVirtualize = useShouldVirtualize(filteredItems.length);
   const emptyState = useMemo(() => (
@@ -743,19 +1183,22 @@ export const ArchivePage = ({
       <aside className="kd-filter-rail">
         <FilterGroup
           activeValues={filters.source}
-          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'source', value))}
+          onToggle={(value) => setFilters((current) => toggleSingleFilterValue(current, 'source', value))}
+          selectionMode="single"
           title="来源"
           values={sourceOptions}
         />
         <FilterGroup
           activeValues={filters.time}
-          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'time', value))}
+          onToggle={(value) => setFilters((current) => toggleSingleFilterValue(current, 'time', value))}
+          selectionMode="single"
           title="时间"
           values={['今天', '本周', '本月', '更早']}
         />
         <FilterGroup
           activeValues={filters.tag}
-          onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'tag', value))}
+          onToggle={(value) => setFilters((current) => toggleSingleFilterValue(current, 'tag', value))}
+          selectionMode="single"
           title="主题"
           values={tagOptions}
         />
@@ -763,19 +1206,31 @@ export const ArchivePage = ({
           filters={filters}
           onClear={() => setFilters(emptyFilters)}
           resultCount={filteredItems.length}
-          totalCount={items.length}
+          totalCount={pageData.total}
         />
       </aside>
 
       <div className="kd-stack">
         <div className="kd-page-tools">
           <div>
-            <h2 className="kd-section-title">{formatCount(filteredItems.length)} / {formatCount(totalItems)} 条归档资料</h2>
+            <h2 className="kd-section-title">当前页 {formatCount(filteredItems.length)} / {formatCount(pageData.total)} 条归档资料</h2>
             <p className="kd-muted">
-              {hasActiveFilters ? '已按当前筛选条件收窄归档结果。' : '归档不会丢失资料，只是从主知识流中移出，后续仍可恢复。'}
+              {apiEnabled
+                ? (hasActiveFilters ? '筛选和分页均来自本机服务端全库。' : '归档不会丢失资料，后续仍可恢复。')
+                : '后端未连接，当前仅筛选已加载条目。'}
             </p>
           </div>
         </div>
+
+        {pageError ? (
+          <ErrorCard
+            description="服务端分页暂不可用，当前保留已加载条目。"
+            error={pageError}
+            onRetry={() => void requestPage(pageData.page)}
+            retryLabel="重试加载"
+            title="归档库加载失败"
+          />
+        ) : null}
 
         <div className="kd-library-list">
           {shouldVirtualize ? (
@@ -792,9 +1247,105 @@ export const ArchivePage = ({
             </>
           )}
         </div>
+
+        <CollectionPagination
+          currentPage={pageData.page}
+          isLoading={isPageLoading}
+          label="归档库分页"
+          onPageChange={(page) => void requestPage(page)}
+          pageSize={pageData.pageSize}
+          total={pageData.total}
+        />
       </div>
     </div>
   );
+};
+
+const ingestionJobTypeCopy: Record<KnowledgeIngestionJob['jobType'], string> = {
+  import: '导入资料',
+  organize: '整理资料',
+  reprocess: '重新整理',
+  unknown: '未知操作',
+};
+
+const ingestionJobStatusCopy: Record<KnowledgeIngestionJob['status'], string> = {
+  pending: '等待处理',
+  running: '处理中',
+  succeeded: '已完成',
+  failed: '处理失败',
+  unknown: '未知状态',
+};
+
+const IngestionHistory = ({
+  error,
+  isLoading,
+  jobs,
+  onRetry,
+}: {
+  error?: string | null;
+  isLoading: boolean;
+  jobs: KnowledgeIngestionJob[];
+  onRetry: () => void;
+}) => (
+  <section aria-labelledby="kd-ingestion-history-title" className="kd-ingestion-history">
+    <div className="kd-ingestion-history__header">
+      <div>
+        <h3 id="kd-ingestion-history-title">处理记录</h3>
+        <p>仅显示这条资料在本机的导入、整理与重试结果。</p>
+      </div>
+      {isLoading ? <span className="kd-ingestion-history__loading"><Loader2 size={14} className="animate-spin" /> 同步中</span> : null}
+    </div>
+
+    {error ? (
+      <ErrorCard
+        className="kd-ingestion-history__error"
+        description="处理记录暂时无法读取，正文与现有操作不受影响。"
+        error={error}
+        onRetry={onRetry}
+        retryLabel="重新读取"
+        title="处理记录加载失败"
+      />
+    ) : null}
+
+    {isLoading && jobs.length === 0 ? (
+      <p className="kd-ingestion-history__empty"><Loader2 size={15} className="animate-spin" /> 正在读取这条资料的处理记录…</p>
+    ) : null}
+    {!isLoading && !error && jobs.length === 0 ? (
+      <p className="kd-ingestion-history__empty">暂无处理记录；早期导入的资料可能没有历史任务。</p>
+    ) : null}
+    {jobs.length > 0 ? (
+      <ol className="kd-ingestion-history__list">
+        {jobs.map((job) => {
+          const JobIcon = job.status === 'succeeded'
+            ? CheckCircle2
+            : job.status === 'failed'
+              ? AlertTriangle
+              : job.status === 'running'
+                ? Loader2
+                : Clock3;
+          return (
+            <li className={`kd-ingestion-history__item kd-ingestion-history__item--${job.status}`} key={job.id}>
+              <JobIcon className={job.status === 'running' ? 'animate-spin' : undefined} size={17} />
+              <div>
+                <div className="kd-ingestion-history__title">
+                  <strong>{ingestionJobTypeCopy[job.jobType]}</strong>
+                  <span>{ingestionJobStatusCopy[job.status]}</span>
+                </div>
+                <p>{formatIngestionJobTime(job)}</p>
+                {job.errorMessage ? <p className="kd-ingestion-history__failure">失败原因：{job.errorMessage}</p> : null}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    ) : null}
+  </section>
+);
+
+const formatIngestionJobTime = (job: KnowledgeIngestionJob) => {
+  const value = job.finishedAt || job.startedAt || job.createdAt;
+  if (!value || Number.isNaN(Date.parse(value))) return '未记录处理时间';
+  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 };
 
 export const DetailPage = ({
@@ -802,14 +1353,34 @@ export const DetailPage = ({
   error,
   isLoading,
   item,
+  jobHistoryEnabled,
+  jobs,
+  jobsError,
+  jobsLoading,
   onAction,
+  onRetryJobs,
+  onUpdate,
 }: {
   actionState: { itemId: string; action: KnowledgeWorkflowAction } | null;
   error?: string | null;
   isLoading?: boolean;
   item: KnowledgeItem;
+  jobHistoryEnabled: boolean;
+  jobs: KnowledgeIngestionJob[];
+  jobsError?: string | null;
+  jobsLoading: boolean;
   onAction: (item: KnowledgeItem, action: KnowledgeWorkflowAction) => Promise<void>;
+  onRetryJobs: () => void;
+  onUpdate: (item: KnowledgeItem, draft: { title: string; summary: string; tags: string[] }) => Promise<void>;
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    title: item.title,
+    summary: item.summary,
+    tags: item.tags.join(', '),
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const body = item.cleanedContent || item.rawContent || item.summary;
   const paragraphs = body
     .split('\n')
@@ -817,6 +1388,43 @@ export const DetailPage = ({
     .filter(Boolean)
     .slice(0, 4);
   const workflowActions = buildWorkflowActions(item);
+  const itemTagDraft = item.tags.join(', ');
+
+  const startEditing = () => {
+    setEditError(null);
+    setDraft({ title: item.title, summary: item.summary, tags: itemTagDraft });
+    setIsEditing(true);
+  };
+
+  const submitEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = draft.title.trim();
+    const summary = draft.summary.trim();
+    const tags = Array.from(new Set(draft.tags.split(',').map((tag) => tag.trim()).filter(Boolean)));
+    if (!title) {
+      setEditError('标题不能为空。');
+      return;
+    }
+    if (title.length > 240) {
+      setEditError('标题不能超过 240 个字符。');
+      return;
+    }
+    if (tags.length > 12 || tags.some((tag) => tag.length > 80)) {
+      setEditError('最多保留 12 个标签，每个标签不超过 80 个字符。');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setEditError(null);
+    try {
+      await onUpdate(item, { title, summary, tags });
+      setIsEditing(false);
+    } catch (updateError) {
+      setEditError(updateError instanceof Error ? updateError.message : String(updateError));
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   if (isLoading) {
     return <DetailSkeleton />;
@@ -826,26 +1434,73 @@ export const DetailPage = ({
     <article className="kd-detail">
       <div className="kd-detail-header">
         <div className="kd-breadcrumb">{item.status === 'archived' ? '归档库' : '知识库'} / {item.tags[0] ?? '未分类'} / {typeCopy[item.type]}</div>
-        {workflowActions.length > 0 ? (
-          <div className="kd-inline-actions">
-            {workflowActions.map((action) => {
-              const isPendingAction = actionState?.itemId === item.id && actionState.action === action.id;
-              return (
-                <button
-                  className={`kd-action-button kd-action-button--${action.tone}`}
-                  disabled={isPendingAction}
-                  key={action.id}
-                  onClick={() => void onAction(item, action.id)}
-                  type="button"
-                >
-                  {isPendingAction ? '处理中' : action.label}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+        <div className="kd-inline-actions">
+          {workflowActions.length > 0 ? (
+            <>
+              {workflowActions.map((action) => {
+                const isPendingAction = actionState?.itemId === item.id && actionState.action === action.id;
+                return (
+                  <button
+                    className={`kd-action-button kd-action-button--${action.tone}`}
+                    disabled={isPendingAction}
+                    key={action.id}
+                    onClick={() => void onAction(item, action.id)}
+                    type="button"
+                  >
+                    {isPendingAction ? '处理中' : action.label}
+                  </button>
+                );
+              })}
+            </>
+          ) : null}
+          <button
+            className="kd-action-button"
+            disabled={isSavingEdit || isEditing}
+            onClick={startEditing}
+            type="button"
+          >
+            <Pencil size={15} /> 编辑
+          </button>
+        </div>
       </div>
-      <h2>{item.title}</h2>
+      {isEditing ? (
+        <form className="kd-detail-editor" onSubmit={(event) => void submitEdit(event)}>
+          <label className="kd-field">
+            <span>标题</span>
+            <input
+              maxLength={240}
+              onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+              value={draft.title}
+            />
+          </label>
+          <label className="kd-field">
+            <span>摘要</span>
+            <textarea
+              onChange={(event) => setDraft((current) => ({ ...current, summary: event.target.value }))}
+              rows={4}
+              value={draft.summary}
+            />
+          </label>
+          <label className="kd-field">
+            <span>标签（使用逗号分隔）</span>
+            <input
+              onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))}
+              placeholder="例如 RAG, 向量检索"
+              value={draft.tags}
+            />
+          </label>
+          {editError ? <p className="kd-form-error">{editError}</p> : null}
+          <div className="kd-inline-actions">
+            <button className="kd-action-button" disabled={isSavingEdit} onClick={() => setIsEditing(false)} type="button">
+              <X size={15} /> 取消
+            </button>
+            <button className="kd-action-button kd-action-button--primary" disabled={isSavingEdit} type="submit">
+              {isSavingEdit ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+              {isSavingEdit ? '保存中' : '保存修改'}
+            </button>
+          </div>
+        </form>
+      ) : <h2>{item.title}</h2>}
       <div className="kd-detail-meta">
         <span>{sourceIcon(item.type)} {typeCopy[item.type]}</span>
         <span><Clock3 size={16} /> {item.time} 整理</span>
@@ -880,6 +1535,15 @@ export const DetailPage = ({
         />
       ) : null}
 
+      {jobHistoryEnabled ? (
+        <IngestionHistory
+          error={jobsError}
+          isLoading={jobsLoading}
+          jobs={jobs}
+          onRetry={onRetryJobs}
+        />
+      ) : null}
+
       {paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
       {paragraphs.length === 0 ? <p>这条知识还没有可展示正文，整理完成后会补充清洗后的内容。</p> : null}
       <blockquote>
@@ -891,6 +1555,76 @@ export const DetailPage = ({
 
 const SEARCH_HISTORY_KEY = 'kd:search-history';
 const MAX_HISTORY = 6;
+const SEARCH_PAGE_SIZE = 12;
+
+const serverSearchStatus = (status: SearchStatusFilter) => {
+  if (status === 'pending') return 'inbox';
+  if (status === 'done') return 'ready';
+  return status === 'all' ? undefined : status;
+};
+
+const serverSearchSourceType = (source: string | undefined) => {
+  if (source === '网页摘录') return 'web';
+  if (source === 'PDF') return 'pdf';
+  if (source === 'Markdown') return 'markdown';
+  if (source === '粘贴内容') return 'snippet';
+  return undefined;
+};
+
+const serverSearchDateRange = (ranges: string[]) => {
+  const range = ranges[0];
+  if (!range) return {};
+
+  const now = new Date();
+  const from = new Date(now);
+  from.setHours(0, 0, 0, 0);
+
+  if (range === '更早') {
+    const endOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    endOfPreviousMonth.setMilliseconds(-1);
+    return { to: endOfPreviousMonth.toISOString() };
+  }
+  if (range === '本周') {
+    from.setDate(from.getDate() - ((from.getDay() + 6) % 7));
+  } else if (range === '本月') {
+    from.setDate(1);
+  } else if (range !== '今天') {
+    return {};
+  }
+
+  return { from: from.toISOString(), to: now.toISOString() };
+};
+
+const buildLocalSearchPage = (
+  items: KnowledgeItem[],
+  query: string,
+  filters: ItemFilters,
+  statusFilter: SearchStatusFilter,
+  requestedPage: number,
+): KnowledgeItemPage => {
+  const filtered = applyItemFilters(
+    filterSearchItemsByStatus(filterLocalItems(items, query), statusFilter),
+    filters,
+  );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / SEARCH_PAGE_SIZE));
+  const page = Math.min(Math.max(requestedPage, 1), totalPages);
+  const start = (page - 1) * SEARCH_PAGE_SIZE;
+  return {
+    items: filtered.slice(start, start + SEARCH_PAGE_SIZE),
+    total: filtered.length,
+    page,
+    pageSize: SEARCH_PAGE_SIZE,
+  };
+};
+
+const searchStatusOptions: Array<{ id: SearchStatusFilter; label: string }> = [
+  { id: 'all', label: '全部资料' },
+  { id: 'pending', label: '待整理' },
+  { id: 'processing', label: '整理中' },
+  { id: 'done', label: '知识库' },
+  { id: 'failed', label: '需重试' },
+  { id: 'archived', label: '归档' },
+];
 
 const loadSearchHistory = (): string[] => {
   try {
@@ -913,33 +1647,39 @@ const saveSearchHistory = (history: string[]) => {
 
 export const SearchPage = ({
   apiEnabled,
+  availableTags,
   searchableItems,
   onOpenDetail,
 }: {
   apiEnabled: boolean;
+  availableTags: string[];
   searchableItems: KnowledgeItem[];
   onOpenDetail: (item: KnowledgeItem) => void;
 }) => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<KnowledgeItem[] | null>(null);
+  const [resultPage, setResultPage] = useState<KnowledgeItemPage | null>(null);
   const [filters, setFilters] = useState<ItemFilters>(emptyFilters);
   const [statusFilter, setStatusFilter] = useState<SearchStatusFilter>('all');
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchHistory, setSearchHistory] = useState<string[]>(loadSearchHistory);
+  const [hasSearched, setHasSearched] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchRequestIdRef = useRef(0);
-  const deferredQuery = useDeferredValue(query);
   const searchCorpus = useMemo(() => buildSearchCorpus(searchableItems), [searchableItems]);
-  const localResults = useMemo(() => filterLocalItems(searchCorpus, deferredQuery), [searchCorpus, deferredQuery]);
-  const baseResults = results ?? localResults;
-  const statusOptions = useMemo(() => buildSearchStatusOptions(baseResults), [baseResults]);
-  const statusFilteredResults = useMemo(() => filterSearchItemsByStatus(baseResults, statusFilter), [baseResults, statusFilter]);
-  const filteredResults = useMemo(() => applyItemFilters(statusFilteredResults, filters), [statusFilteredResults, filters]);
-  const visibleResults = useMemo(() => filteredResults.slice(0, 12), [filteredResults]);
-  const sourceOptions = useMemo(() => buildSourceOptions(baseResults, ['网页摘录', 'PDF', 'Markdown']), [baseResults]);
-  const tagOptions = useMemo(() => buildTagOptions(baseResults, searchCorpus.flatMap((item) => item.tags)), [baseResults, searchCorpus]);
-  const hasSearched = results !== null || query.trim().length > 0;
+  const visibleResults = useMemo(() => resultPage?.items ?? [], [resultPage]);
+  const totalResults = resultPage?.total ?? 0;
+  const currentPage = resultPage?.page ?? 1;
+  const currentPageSize = resultPage?.pageSize ?? SEARCH_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(totalResults / currentPageSize));
+  const sourceOptions = useMemo(
+    () => buildSourceOptions(visibleResults, ['网页摘录', 'PDF', 'Markdown', '粘贴内容']),
+    [visibleResults],
+  );
+  const tagOptions = useMemo(
+    () => buildTagOptions(visibleResults, availableTags),
+    [availableTags, visibleResults],
+  );
   const suggestedTags = useMemo(() => Array.from(new Set(searchCorpus.flatMap((item) => item.tags))).slice(0, 6), [searchCorpus]);
   const suggestedSources = useMemo(() => Array.from(new Set(searchCorpus.map((item) => item.source))).slice(0, 4), [searchCorpus]);
 
@@ -952,38 +1692,82 @@ export const SearchPage = ({
     });
   }, []);
 
-  const runSearch = useCallback(async (overrideQuery?: string) => {
-    const nextQuery = (overrideQuery ?? query).trim();
-    const fallbackResults = filterLocalItems(searchCorpus, nextQuery);
+  const runSearch = useCallback(async ({
+    nextFilters = filters,
+    nextPage = 1,
+    nextQuery = query,
+    nextStatus = statusFilter,
+  }: {
+    nextFilters?: ItemFilters;
+    nextPage?: number;
+    nextQuery?: string;
+    nextStatus?: SearchStatusFilter;
+  } = {}) => {
+    const normalizedQuery = nextQuery.trim();
     const requestId = ++searchRequestIdRef.current;
     setIsSearching(true);
     setSearchError(null);
+    setHasSearched(true);
     try {
-      if (apiEnabled && nextQuery) {
-        const apiResults = await searchKnowledgeItems(nextQuery);
+      if (apiEnabled) {
+        const dateRange = serverSearchDateRange(nextFilters.time);
+        const apiResult = await searchKnowledgeItems({
+          query: normalizedQuery,
+          tag: nextFilters.tag[0],
+          sourceType: serverSearchSourceType(nextFilters.source[0]),
+          status: serverSearchStatus(nextStatus),
+          page: nextPage,
+          pageSize: SEARCH_PAGE_SIZE,
+          ...dateRange,
+        });
         if (searchRequestIdRef.current !== requestId) return;
-        setResults(mergeSearchResults(apiResults, fallbackResults));
+        setResultPage(apiResult);
       } else {
-        setResults(fallbackResults);
+        setResultPage(buildLocalSearchPage(searchCorpus, normalizedQuery, nextFilters, nextStatus, nextPage));
       }
-      addToHistory(nextQuery);
+      addToHistory(normalizedQuery);
     } catch (error) {
       if (searchRequestIdRef.current !== requestId) return;
-      setResults(fallbackResults);
+      setResultPage(buildLocalSearchPage(searchCorpus, normalizedQuery, nextFilters, nextStatus, nextPage));
       setSearchError(error instanceof Error ? error.message : String(error));
-      addToHistory(nextQuery);
+      addToHistory(normalizedQuery);
     } finally {
       if (searchRequestIdRef.current === requestId) {
         setIsSearching(false);
       }
     }
-  }, [query, searchCorpus, apiEnabled, addToHistory]);
+  }, [query, filters, statusFilter, searchCorpus, apiEnabled, addToHistory]);
 
   const applySuggestion = useCallback((term: string) => {
     setQuery(term);
-    setResults(null);
-    void runSearch(term);
+    void runSearch({ nextQuery: term });
   }, [runSearch]);
+
+  const updateFilters = useCallback((category: keyof ItemFilters, value: string) => {
+    const currentValues = filters[category];
+    const nextFilters = {
+      ...filters,
+      [category]: currentValues.includes(value) ? [] : [value],
+    };
+    setFilters(nextFilters);
+    if (hasSearched) {
+      void runSearch({ nextFilters });
+    }
+  }, [filters, hasSearched, runSearch]);
+
+  const updateStatusFilter = useCallback((nextStatus: SearchStatusFilter) => {
+    setStatusFilter(nextStatus);
+    if (hasSearched) {
+      void runSearch({ nextStatus });
+    }
+  }, [hasSearched, runSearch]);
+
+  const clearFilters = useCallback(() => {
+    setFilters(emptyFilters);
+    if (hasSearched) {
+      void runSearch({ nextFilters: emptyFilters });
+    }
+  }, [hasSearched, runSearch]);
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -998,8 +1782,9 @@ export const SearchPage = ({
           onChange={(event) => {
             searchRequestIdRef.current += 1;
             setQuery(event.target.value);
-            setResults(null);
+            setResultPage(null);
             setSearchError(null);
+            setHasSearched(false);
             setIsSearching(false);
           }}
           onKeyDown={(event) => {
@@ -1058,22 +1843,21 @@ export const SearchPage = ({
         <>
           <div className="kd-search-toolbar">
             <div className="kd-segmented kd-search-status-filter" aria-label="搜索状态筛选">
-              {statusOptions.map((option) => (
+              {searchStatusOptions.map((option) => (
                 <button
                   className={statusFilter === option.id ? 'is-active' : ''}
                   key={option.id}
-                  onClick={() => setStatusFilter(option.id)}
+                  onClick={() => updateStatusFilter(option.id)}
                   type="button"
                 >
                   {option.label}
-                  <span className="kd-segment-count">{option.count}</span>
                 </button>
               ))}
             </div>
             <div className="kd-search-scope" aria-live="polite">
-              <strong>{filteredResults.length}</strong>
-              <span>/ {baseResults.length} 条</span>
-              <span>收集箱 + 知识库 + 归档库</span>
+              <strong>{formatCount(totalResults)}</strong>
+              <span>条符合条件</span>
+              <span>{apiEnabled ? '服务端全库检索' : '当前已加载条目'}</span>
             </div>
           </div>
 
@@ -1081,27 +1865,30 @@ export const SearchPage = ({
             <aside className="kd-filter-rail">
               <FilterGroup
                 activeValues={filters.source}
-                onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'source', value))}
+                onToggle={(value) => updateFilters('source', value)}
+                selectionMode="single"
                 title="来源"
                 values={sourceOptions}
               />
               <FilterGroup
                 activeValues={filters.tag}
-                onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'tag', value))}
+                onToggle={(value) => updateFilters('tag', value)}
+                selectionMode="single"
                 title="标签"
                 values={tagOptions}
               />
               <FilterGroup
                 activeValues={filters.time}
-                onToggle={(value) => setFilters((current) => toggleFilterValue(current, 'time', value))}
+                onToggle={(value) => updateFilters('time', value)}
+                selectionMode="single"
                 title="时间"
                 values={['今天', '本周', '本月']}
               />
               <FilterSummary
                 filters={filters}
-                onClear={() => setFilters(emptyFilters)}
+                onClear={clearFilters}
                 resultCount={visibleResults.length}
-                totalCount={statusFilteredResults.length}
+                totalCount={totalResults}
               />
             </aside>
             <section className="kd-search-results">
@@ -1109,7 +1896,7 @@ export const SearchPage = ({
                 <ErrorCard
                   description="数据库搜索暂不可用，已使用当前可见条目过滤。"
                   error={searchError}
-                  onRetry={() => void runSearch()}
+                  onRetry={() => void runSearch({ nextPage: currentPage })}
                   retryLabel="重试搜索"
                   title="搜索服务异常"
                 />
@@ -1147,11 +1934,30 @@ export const SearchPage = ({
                 <EmptyState
                   className="min-h-[240px]"
                   icon={Search}
-                  title={query.trim() ? '未找到匹配结果' : '请输入搜索关键词'}
+                  title={query.trim() ? '未找到匹配结果' : '还没有符合条件的资料'}
                   description={query.trim()
                     ? '尝试更换关键词、清空筛选条件，或从左侧选择其他来源和标签。'
-                    : '输入主题、来源、标签或关键句，开始在知识库中检索。'}
+                    : '可输入主题、来源、标签或关键句，也可直接按筛选条件浏览全库。'}
                 />
+              ) : null}
+              {totalPages > 1 ? (
+                <nav className="kd-search-pagination" aria-label="搜索结果分页">
+                  <button
+                    disabled={isSearching || currentPage <= 1}
+                    onClick={() => void runSearch({ nextPage: currentPage - 1 })}
+                    type="button"
+                  >
+                    上一页
+                  </button>
+                  <span>第 {currentPage} / {totalPages} 页</span>
+                  <button
+                    disabled={isSearching || currentPage >= totalPages}
+                    onClick={() => void runSearch({ nextPage: currentPage + 1 })}
+                    type="button"
+                  >
+                    下一页
+                  </button>
+                </nav>
               ) : null}
             </section>
           </div>

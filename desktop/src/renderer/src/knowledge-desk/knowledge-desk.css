@@ -496,6 +496,7 @@
 .kd-inbox-row,
 .kd-model-card,
 .kd-profile-band,
+.kd-backup-card,
 .kd-preference-list,
 .kd-danger-zone,
 .kd-filter-rail,
@@ -923,22 +924,6 @@
   opacity: 0.6;
 }
 
-.kd-state-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 12px;
-  background: var(--accent);
-  color: var(--text-inverse);
-  border-radius: 8px;
-}
-
-.kd-state-strip span {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
 .kd-library-layout,
 .kd-search-layout {
   display: grid;
@@ -1080,6 +1065,22 @@
   line-height: 1.2;
 }
 
+.kd-detail-editor {
+  display: grid;
+  gap: 14px;
+  margin: 6px 0 24px;
+  padding: 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-page);
+}
+
+.kd-detail-editor textarea {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+}
+
 .kd-detail h3 {
   margin-top: 28px;
   font-size: 20px;
@@ -1132,6 +1133,104 @@
 .kd-detail-status--error {
   border-color: var(--border-error);
   background: var(--error-alpha-8);
+  color: var(--error);
+}
+
+.kd-ingestion-history {
+  margin: 28px 0;
+  padding: 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-page);
+}
+
+.kd-ingestion-history__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.kd-ingestion-history__header h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.kd-ingestion-history__header p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.kd-ingestion-history__loading,
+.kd-ingestion-history__empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.kd-ingestion-history__empty {
+  margin: 18px 0 0;
+}
+
+.kd-ingestion-history__error {
+  margin-top: 16px;
+}
+
+.kd-ingestion-history__list {
+  display: grid;
+  gap: 14px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kd-ingestion-history__item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+.kd-ingestion-history__item > svg {
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.kd-ingestion-history__item--failed > svg {
+  color: var(--error);
+}
+
+.kd-ingestion-history__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kd-ingestion-history__title strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.kd-ingestion-history__title span {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-card);
+  font-size: 12px;
+}
+
+.kd-ingestion-history__item p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.kd-ingestion-history__item .kd-ingestion-history__failure {
   color: var(--error);
 }
 
@@ -1211,6 +1310,35 @@
   color: var(--text-secondary);
 }
 
+.kd-search-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0 2px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.kd-search-pagination button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+}
+
+.kd-search-pagination button:not(:disabled):hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.kd-search-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .kd-settings {
   min-height: 0;
   display: grid;
@@ -1257,6 +1385,27 @@
   padding: 18px;
 }
 
+.kd-backup-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.kd-backup-card h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.kd-backup-card p {
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.kd-backup-actions {
+  align-items: center;
+}
+
 .kd-profile-avatar {
   width: 72px;
   height: 72px;
@@ -1299,6 +1448,12 @@
 
 .kd-model-card {
   padding: 15px;
+}
+
+.kd-local-model-form {
+  display: grid;
+  gap: 12px;
+  align-content: start;
 }
 
 .kd-model-card-head {
@@ -1527,6 +1682,144 @@
 .kd-import-file-area {
   display: grid;
   gap: 10px;
+}
+
+.kd-batch-file-picker {
+  min-height: 108px;
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  border: 1px dashed var(--accent-alpha-40);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--accent-alpha-10);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+}
+
+.kd-batch-file-picker:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-alpha-15);
+}
+
+.kd-batch-file-picker span {
+  font-weight: 800;
+}
+
+.kd-batch-file-picker small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.kd-batch-preflight,
+.kd-batch-result {
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  background: var(--surface-secondary);
+  overflow: hidden;
+}
+
+.kd-batch-preflight > header,
+.kd-batch-result > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.kd-batch-preflight > header div,
+.kd-batch-result > header div {
+  display: grid;
+  gap: 2px;
+}
+
+.kd-batch-preflight > header span,
+.kd-batch-result > header span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.kd-batch-preflight ul,
+.kd-batch-result ul {
+  max-height: 236px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kd-batch-candidate,
+.kd-batch-result li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.kd-batch-candidate:last-child,
+.kd-batch-result li:last-child {
+  border-bottom: 0;
+}
+
+.kd-batch-candidate input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.kd-batch-candidate > div,
+.kd-batch-result li {
+  min-width: 0;
+}
+
+.kd-batch-candidate strong,
+.kd-batch-candidate span,
+.kd-batch-candidate small,
+.kd-batch-result li span,
+.kd-batch-result li small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kd-batch-candidate strong,
+.kd-batch-result li span {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.kd-batch-candidate span,
+.kd-batch-candidate small,
+.kd-batch-result li small {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.kd-batch-candidate-duplicate_existing,
+.kd-batch-candidate-duplicate_in_batch,
+.kd-batch-candidate-invalid {
+  background: var(--warning-alpha-15);
+}
+
+.kd-batch-candidate-invalid {
+  color: var(--error);
+  background: var(--error-alpha-15);
+}
+
+.kd-batch-result > header {
+  color: var(--accent);
+  background: var(--accent-alpha-10);
+}
+
+.kd-batch-result-failed small {
+  color: var(--error) !important;
 }
 
 .kd-import-file-types {

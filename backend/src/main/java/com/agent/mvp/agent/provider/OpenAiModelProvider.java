@@ -55,6 +55,8 @@ public class OpenAiModelProvider implements ModelProvider {
                 Math.max(0, appProperties.getModelRuntime().getIdempotentRetries());
         HttpClient httpClient =
                 HttpClient.create()
+                        // Custom local model sources must never be redirected to another host.
+                        .followRedirect(false)
                         .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) connectTimeoutMs)
                         .responseTimeout(readTimeout);
         this.webClient =
@@ -74,6 +76,7 @@ public class OpenAiModelProvider implements ModelProvider {
     public ModelChatResponse chat(ModelChatRequest request) {
         String apiKey = resolveApiKey(request);
         String requestUrl = resolveBaseUrl(request) + "/chat/completions";
+        Duration requestTimeout = resolveRequestTimeout(request);
 
         Instant start = Instant.now();
         Map<String, Object> body =
@@ -97,7 +100,7 @@ public class OpenAiModelProvider implements ModelProvider {
                                             .bodyValue(body)
                                             .retrieve()
                                             .bodyToMono(JsonNode.class)
-                                            .timeout(totalTimeout)
+                                            .timeout(requestTimeout)
                                             .block());
         } catch (WebClientRequestException ex) {
             throw new BadRequestException("Cannot connect to OpenAI at " + baseUrl);
@@ -135,6 +138,7 @@ public class OpenAiModelProvider implements ModelProvider {
     public ModelChatResponse stream(ModelChatRequest request, Consumer<String> chunkConsumer) {
         String apiKey = resolveApiKey(request);
         String requestUrl = resolveBaseUrl(request) + "/chat/completions";
+        Duration requestTimeout = resolveRequestTimeout(request);
 
         Instant start = Instant.now();
         StringBuilder content = new StringBuilder();
@@ -162,7 +166,7 @@ public class OpenAiModelProvider implements ModelProvider {
                     .bodyValue(body)
                     .retrieve()
                     .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
-                    .timeout(totalTimeout)
+                    .timeout(requestTimeout)
                     .doOnNext(
                             event -> {
                                 String data = event.data();
@@ -341,6 +345,15 @@ public class OpenAiModelProvider implements ModelProvider {
             return request.customBaseUrl();
         }
         return this.baseUrl;
+    }
+
+    private Duration resolveRequestTimeout(ModelChatRequest request) {
+        Long requestedTimeoutMs = request.timeoutMs();
+        if (requestedTimeoutMs == null || requestedTimeoutMs <= 0) {
+            return totalTimeout;
+        }
+        return Duration.ofMillis(
+                Math.min(totalTimeout.toMillis(), Math.max(1_000L, requestedTimeoutMs)));
     }
 
     private String resolveApiKey(ModelChatRequest request) {

@@ -6,7 +6,7 @@ public enum ModelSourceProviderType {
     OPENAI("openai", true, "/models"),
     DEEPSEEK("deepseek", true, "/models"),
     OPENROUTER("openrouter", true, "/models"),
-    LOCAL_COMPATIBLE("local_compatible", true, "/models"),
+    LOCAL_COMPATIBLE("local_compatible", true, "/chat/completions"),
     ANTHROPIC("anthropic", false, "/v1/models");
 
     private final String value;

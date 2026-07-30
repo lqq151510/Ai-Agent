@@ -14,14 +14,86 @@ export type KnowledgeItem = {
   status?: KnowledgeStatus;
 };
 
+export type KnowledgeItemPage = {
+  items: KnowledgeItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type KnowledgeIngestionJob = {
+  id: string;
+  knowledgeItemId: string;
+  jobType: 'import' | 'organize' | 'reprocess' | 'unknown';
+  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown';
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  createdAt?: string | null;
+};
+
+export type KnowledgeListStatus = 'inbox' | 'processing' | 'ready' | 'failed' | 'archived';
+
+export type ListKnowledgeItemsParams = {
+  statuses?: KnowledgeListStatus[];
+  tag?: string;
+  sourceType?: 'web' | 'pdf' | 'markdown' | 'snippet';
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type ListIngestionJobsParams = {
+  knowledgeItemId: string;
+  limit?: number;
+};
+
+export type LocalFileBatchCandidateVerdict = 'ready' | 'duplicate_existing' | 'duplicate_in_batch' | 'invalid';
+
+export type LocalFileBatchCandidate = {
+  candidateId: string;
+  name: string;
+  size: number;
+  verdict: LocalFileBatchCandidateVerdict;
+  reason?: string;
+};
+
+export type LocalFileBatchPreflight = {
+  canceled: boolean;
+  batchId?: string;
+  candidates: LocalFileBatchCandidate[];
+};
+
+export type LocalFileBatchCommitResult = {
+  imported: Array<{ candidateId: string; name: string }>;
+  skipped: Array<{ candidateId: string; name: string; reason: string }>;
+  failed: Array<{ candidateId: string; name: string; reason: string }>;
+};
+
+export type SearchKnowledgeItemsParams = {
+  query?: string;
+  tag?: string;
+  sourceType?: 'web' | 'pdf' | 'markdown' | 'snippet';
+  status?: 'inbox' | 'processing' | 'ready' | 'failed' | 'archived';
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+};
+
 export type ModelProvider = {
   id: string;
+  providerType: string;
   provider: string;
   baseUrl: string;
   keyState: string;
   model: string;
   state: 'connected' | 'testing' | 'local' | 'failed';
+  enabled: boolean;
   isDefault: boolean;
+  lastCheckStatus?: string | null;
+  lastCheckMessage?: string | null;
 };
 
 export type SettingsProfile = {
@@ -29,6 +101,9 @@ export type SettingsProfile = {
   email: string;
   organizeMode: string;
   privacyMode: string;
+  defaultModelSourceId?: string | null;
+  summaryModelSourceId?: string | null;
+  taggingModelSourceId?: string | null;
 };
 
 export type StorageSummary = {
@@ -54,6 +129,12 @@ export type KnowledgeDeskSnapshot = {
   status: 'ok' | 'degraded' | 'error' | 'unknown';
   error?: string;
   dashboard: DashboardSummary;
+  inboxTotals: {
+    all: number;
+    pending: number;
+    processing: number;
+    failed: number;
+  };
   inboxItems: KnowledgeItem[];
   libraryItems: KnowledgeItem[];
   archivedItems: KnowledgeItem[];
@@ -72,10 +153,58 @@ export type ImportKnowledgeDraft = {
   content: string;
 };
 
+export type UpdateKnowledgeItemDraft = {
+  title?: string;
+  summary?: string;
+  tags?: string[];
+};
+
 export type BatchOrganizeResult = {
   total: number;
   succeeded: number;
   failed: number;
+};
+
+export type KnowledgeDeskBackup = {
+  schemaVersion: number;
+  exportedAt: string;
+  preferences: {
+    displayName?: string | null;
+    avatarUrl?: string | null;
+    organizeMode?: string | null;
+    privacyMode?: string | null;
+  };
+  tags: Array<{
+    id: string;
+    name: string;
+    color?: string | null;
+    createdAt: string;
+  }>;
+  knowledgeItems: Array<{
+    id: string;
+    sourceType: string;
+    title: string;
+    sourceUri?: string | null;
+    rawContent: string;
+    cleanedContent?: string | null;
+    summary?: string | null;
+    status: string;
+    language?: string | null;
+    wordCount: number;
+    createdAt: string;
+    updatedAt: string;
+    archivedAt?: string | null;
+    tagIds: string[];
+  }>;
+  modelSourcesIncluded: false;
+};
+
+export type KnowledgeDeskBackupImportResult = {
+  importedItems: number;
+  createdTags: number;
+  preferencesRestored: false;
+  modelSourcesRestored: false;
+  message: string;
 };
 
 const WORKFLOW_STATUS_PRIORITY: Record<string, number> = {
@@ -114,6 +243,17 @@ type BackendKnowledgePage = {
   pageSize: number;
 };
 
+type BackendIngestionJob = {
+  id: string;
+  knowledgeItemId: string;
+  jobType: string;
+  status: string;
+  errorMessage?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  createdAt?: string | null;
+};
+
 type BackendDashboard = {
   totalItems: number;
   inboxItems: number;
@@ -133,6 +273,7 @@ type BackendModelSource = {
   enabled: boolean;
   isDefault: boolean;
   lastCheckStatus?: string | null;
+  lastCheckMessage?: string | null;
 };
 
 export type ImportModelSourceDraft = {
@@ -145,11 +286,32 @@ export type ImportModelSourceDraft = {
   isDefault?: boolean;
 };
 
+export type UpdateSettingsProfileDraft = {
+  organizeMode?: 'manual' | 'auto';
+  privacyMode?: 'local_first' | 'cloud_first';
+  defaultModelSourceId?: string;
+  summaryModelSourceId?: string;
+  taggingModelSourceId?: string;
+  clearDefaultModelSource?: boolean;
+  clearSummaryModelSource?: boolean;
+  clearTaggingModelSource?: boolean;
+};
+
+export type ModelSourceTestResult = {
+  id: string;
+  status: string;
+  message: string;
+  checkedAt?: string;
+};
+
 type BackendProfile = {
   email?: string | null;
   displayName?: string | null;
   organizeMode?: string | null;
   privacyMode?: string | null;
+  defaultModelSourceId?: string | null;
+  summaryModelSourceId?: string | null;
+  taggingModelSourceId?: string | null;
 };
 
 type BackendStorage = {
@@ -176,10 +338,26 @@ type BackendLocalFileImportResponse = {
   item?: BackendKnowledgeItem;
 };
 
+type BackendLocalFileBatchPreflight = {
+  canceled?: unknown;
+  batchId?: unknown;
+  candidates?: unknown;
+};
+
+type BackendLocalFileBatchCommitResult = {
+  imported?: unknown;
+  skipped?: unknown;
+  failed?: unknown;
+};
+
 type KnowledgeElectronApi = {
   knowledge?: {
     request: <T>(payload: { method?: string; path: string; body?: unknown }) => Promise<T>;
     importLocalFile?: (payload?: { title?: string }) => Promise<BackendLocalFileImportResponse>;
+    preflightLocalFileBatch?: () => Promise<BackendLocalFileBatchPreflight>;
+    commitLocalFileBatch?: (payload: { batchId: string; candidateIds: string[] }) => Promise<BackendLocalFileBatchCommitResult>;
+    saveBackup?: (payload: { content: string; suggestedName: string }) => Promise<{ canceled: boolean; filePath?: string }>;
+    selectBackup?: () => Promise<{ canceled: boolean; content?: string; fileName?: string }>;
   };
 };
 
@@ -196,6 +374,16 @@ const hasKnowledgeBridge = () => {
 export const canUseDesktopFilePicker = () => {
   const electronApi = getElectronApi();
   return Boolean(electronApi?.knowledge?.importLocalFile);
+};
+
+export const canUseDesktopBatchFileImport = () => {
+  const electronApi = getElectronApi();
+  return Boolean(electronApi?.knowledge?.preflightLocalFileBatch && electronApi?.knowledge?.commitLocalFileBatch);
+};
+
+export const canUseDesktopBackupPicker = () => {
+  const electronApi = getElectronApi();
+  return Boolean(electronApi?.knowledge?.saveBackup && electronApi?.knowledge?.selectBackup);
 };
 
 const canUseDirectBackend = () => (
@@ -294,14 +482,94 @@ const requestLocalFileImport = async (title?: string): Promise<BackendLocalFileI
   throw new Error('桌面文件选择桥不可用，请在桌面端重启后重试。');
 };
 
+const toLocalFileBatchCandidate = (value: unknown): LocalFileBatchCandidate => {
+  if (!value || typeof value !== 'object') {
+    throw new Error('本机文件预检返回了无效条目。');
+  }
+  const candidate = value as Record<string, unknown>;
+  const verdict = candidate.verdict;
+  if (
+    typeof candidate.candidateId !== 'string'
+    || typeof candidate.name !== 'string'
+    || typeof candidate.size !== 'number'
+    || !['ready', 'duplicate_existing', 'duplicate_in_batch', 'invalid'].includes(String(verdict))
+  ) {
+    throw new Error('本机文件预检返回了无效条目。');
+  }
+  return {
+    candidateId: candidate.candidateId,
+    name: candidate.name,
+    size: candidate.size,
+    verdict: verdict as LocalFileBatchCandidateVerdict,
+    reason: typeof candidate.reason === 'string' ? candidate.reason : undefined,
+  };
+};
+
+const toLocalFileBatchCommitEntries = (value: unknown, includeReason: boolean) => {
+  if (!Array.isArray(value)) {
+    throw new Error('本机文件导入返回了无效结果。');
+  }
+  return value.map((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error('本机文件导入返回了无效结果。');
+    }
+    const record = entry as Record<string, unknown>;
+    if (typeof record.candidateId !== 'string' || typeof record.name !== 'string') {
+      throw new Error('本机文件导入返回了无效结果。');
+    }
+    if (includeReason && typeof record.reason !== 'string') {
+      throw new Error('本机文件导入返回了无效结果。');
+    }
+    return includeReason
+      ? { candidateId: record.candidateId, name: record.name, reason: record.reason as string }
+      : { candidateId: record.candidateId, name: record.name };
+  });
+};
+
+export const preflightLocalKnowledgeFileBatch = async (): Promise<LocalFileBatchPreflight> => {
+  const preflight = getElectronApi()?.knowledge?.preflightLocalFileBatch;
+  if (!preflight) {
+    throw new Error('本机批量文件选择桥不可用，请在桌面端重启后重试。');
+  }
+  const result = await preflight();
+  const candidates = Array.isArray(result?.candidates) ? result.candidates.map(toLocalFileBatchCandidate) : null;
+  if (!candidates || typeof result?.canceled !== 'boolean') {
+    throw new Error('本机文件预检返回了无效结果。');
+  }
+  if (!result.canceled && typeof result.batchId !== 'string') {
+    throw new Error('本机文件预检没有返回有效批次。');
+  }
+  return {
+    canceled: result.canceled,
+    batchId: typeof result.batchId === 'string' ? result.batchId : undefined,
+    candidates,
+  };
+};
+
+export const commitLocalKnowledgeFileBatch = async (
+  batchId: string,
+  candidateIds: string[],
+): Promise<LocalFileBatchCommitResult> => {
+  const commit = getElectronApi()?.knowledge?.commitLocalFileBatch;
+  if (!commit) {
+    throw new Error('本机批量文件导入桥不可用，请在桌面端重启后重试。');
+  }
+  const result = await commit({ batchId, candidateIds });
+  return {
+    imported: toLocalFileBatchCommitEntries(result?.imported, false) as LocalFileBatchCommitResult['imported'],
+    skipped: toLocalFileBatchCommitEntries(result?.skipped, true) as LocalFileBatchCommitResult['skipped'],
+    failed: toLocalFileBatchCommitEntries(result?.failed, true) as LocalFileBatchCommitResult['failed'],
+  };
+};
+
 export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot> => {
   const results = await Promise.allSettled([
     request<BackendDashboard>('/api/v1/dashboard/summary'),
-    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=inbox&page=1&pageSize=12'),
-    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=processing&page=1&pageSize=12'),
-    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=failed&page=1&pageSize=12'),
-    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=ready&page=1&pageSize=16'),
-    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=archived&page=1&pageSize=12'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=inbox&page=1&pageSize=20'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=processing&page=1&pageSize=20'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=failed&page=1&pageSize=20'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=ready&page=1&pageSize=20'),
+    request<BackendKnowledgePage>('/api/v1/knowledge-items?status=archived&page=1&pageSize=20'),
     request<BackendTag[]>('/api/v1/tags'),
     request<BackendModelSource[]>('/api/v1/model-sources'),
     request<BackendProfile>('/api/v1/settings/profile'),
@@ -361,17 +629,18 @@ export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot
         color: tag.color,
       })),
     },
+    inboxTotals: {
+      all: inbox.total + processing.total + failed.total,
+      pending: inbox.total,
+      processing: processing.total,
+      failed: failed.total,
+    },
     inboxItems,
     libraryItems,
     archivedItems: archived.items.map(toKnowledgeItem),
     tags: tags.map((tag) => tag.name),
     modelProviders: modelSources.map(toModelProvider),
-    profile: {
-      displayName: profile.displayName || '泽宝',
-      email: profile.email || 'desktop@example.com',
-      organizeMode: profile.organizeMode || 'manual',
-      privacyMode: profile.privacyMode || 'local_first',
-    },
+    profile: toSettingsProfile(profile),
     storage: {
       totalItems: storage.totalItems ?? dashboard.totalItems,
       inboxItems: storage.inboxItems ?? dashboard.inboxItems,
@@ -384,14 +653,84 @@ export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot
   };
 };
 
-export const searchKnowledgeItems = async (query: string): Promise<KnowledgeItem[]> => {
-  const params = new URLSearchParams({ q: query, page: '1', pageSize: '10' });
-  const page = await request<BackendKnowledgePage>(`/api/v1/knowledge-items/search?${params.toString()}`);
-  return page.items.map(toKnowledgeItem);
+export const listKnowledgeItems = async ({
+  from,
+  page = 1,
+  pageSize = 20,
+  sourceType,
+  statuses,
+  tag,
+  to,
+}: ListKnowledgeItemsParams): Promise<KnowledgeItemPage> => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  statuses?.forEach((status) => params.append('status', status));
+  if (tag?.trim()) params.set('tag', tag.trim());
+  if (sourceType) params.set('sourceType', sourceType);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+
+  return toKnowledgeItemPage(
+    await request<BackendKnowledgePage>(`/api/v1/knowledge-items?${params.toString()}`),
+  );
+};
+
+export const listIngestionJobs = async ({
+  knowledgeItemId,
+  limit = 20,
+}: ListIngestionJobsParams): Promise<KnowledgeIngestionJob[]> => {
+  const params = new URLSearchParams({ knowledgeItemId, limit: String(limit) });
+  const jobs = await request<BackendIngestionJob[]>(`/api/v1/ingestion-jobs?${params.toString()}`);
+  return jobs.map(toKnowledgeIngestionJob);
+};
+
+export const searchKnowledgeItems = async ({
+  from,
+  page = 1,
+  pageSize = 12,
+  query,
+  sourceType,
+  status,
+  tag,
+  to,
+}: SearchKnowledgeItemsParams): Promise<KnowledgeItemPage> => {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (query?.trim()) params.set('q', query.trim());
+  if (tag?.trim()) params.set('tag', tag.trim());
+  if (sourceType) params.set('sourceType', sourceType);
+  if (status) params.set('status', status);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+
+  return toKnowledgeItemPage(
+    await request<BackendKnowledgePage>(`/api/v1/knowledge-items/search?${params.toString()}`),
+  );
 };
 
 export const loadKnowledgeItemDetail = async (id: string): Promise<KnowledgeItem> => {
   return toKnowledgeItem(await request<BackendKnowledgeItem>(`/api/v1/knowledge-items/${encodeURIComponent(id)}`));
+};
+
+export const updateKnowledgeItem = async (
+  item: KnowledgeItem,
+  draft: UpdateKnowledgeItemDraft,
+): Promise<KnowledgeItem> => {
+  if (isPreviewOnlyMode()) {
+    const nextItem: KnowledgeItem = {
+      ...item,
+      title: draft.title?.trim() || item.title,
+      summary: draft.summary === undefined ? item.summary : draft.summary.trim(),
+      tags: draft.tags ? normalizePreviewTags(draft.tags) : item.tags,
+      time: '刚刚',
+    };
+    syncPreviewItem(nextItem);
+    return nextItem;
+  }
+
+  return toKnowledgeItem(await request<BackendKnowledgeItem>(
+    `/api/v1/knowledge-items/${encodeURIComponent(item.id)}`,
+    'PUT',
+    draft,
+  ));
 };
 
 export const importKnowledgeItem = async (draft: ImportKnowledgeDraft): Promise<KnowledgeItem> => {
@@ -480,8 +819,84 @@ export const disableModelSource = async (id: string): Promise<ModelProvider> => 
   return toModelProvider(result);
 };
 
-export const testModelSource = async (id: string): Promise<{ success: boolean; message: string }> => {
-  return request<{ success: boolean; message: string }>(`/api/v1/model-sources/${id}/test`, 'POST');
+export const testModelSource = async (id: string): Promise<ModelSourceTestResult> => {
+  return request<ModelSourceTestResult>(`/api/v1/model-sources/${id}/test`, 'POST');
+};
+
+export const updateKnowledgeDeskSettingsProfile = async (
+  draft: UpdateSettingsProfileDraft,
+): Promise<SettingsProfile> => {
+  const result = await request<BackendProfile>('/api/v1/settings/profile', 'PUT', draft);
+  return toSettingsProfile(result);
+};
+
+export const exportKnowledgeDeskBackup = async (): Promise<KnowledgeDeskBackup> => {
+  return request<KnowledgeDeskBackup>('/api/v1/settings/export');
+};
+
+export const importKnowledgeDeskBackup = async (
+  backup: KnowledgeDeskBackup,
+): Promise<KnowledgeDeskBackupImportResult> => {
+  return request<KnowledgeDeskBackupImportResult>('/api/v1/settings/import', 'POST', backup);
+};
+
+export const saveKnowledgeDeskBackup = async (backup: KnowledgeDeskBackup): Promise<string | null> => {
+  const content = JSON.stringify(backup, null, 2);
+  const suggestedName = backupFileName(backup.exportedAt);
+  const saveBackup = getElectronApi()?.knowledge?.saveBackup;
+  if (saveBackup) {
+    const result = await saveBackup({ content, suggestedName });
+    return result.canceled ? null : result.filePath ?? suggestedName;
+  }
+
+  if (typeof document === 'undefined') {
+    throw new Error('当前环境不支持本地备份下载。');
+  }
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = suggestedName;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  return suggestedName;
+};
+
+export const pickKnowledgeDeskBackup = async (): Promise<KnowledgeDeskBackup | null> => {
+  const selectBackup = getElectronApi()?.knowledge?.selectBackup;
+  if (!selectBackup) {
+    throw new Error('请在桌面端使用“导入备份”，或从浏览器选择 JSON 文件。');
+  }
+  const result = await selectBackup();
+  if (result.canceled) return null;
+  if (!result.content) {
+    throw new Error('备份文件为空或无法读取。');
+  }
+  return parseKnowledgeDeskBackup(result.content);
+};
+
+export const parseKnowledgeDeskBackup = (content: string): KnowledgeDeskBackup => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new Error('备份文件不是有效的 JSON。');
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('备份文件格式无效。');
+  }
+  const backup = parsed as Partial<KnowledgeDeskBackup>;
+  if (
+    backup.schemaVersion !== 1
+    || backup.modelSourcesIncluded !== false
+    || !isValidKnowledgeDeskBackupShape(backup)
+  ) {
+    throw new Error('不支持该备份版本，或备份包含不允许恢复的模型配置。');
+  }
+  return backup as KnowledgeDeskBackup;
 };
 
 export const organizeKnowledgeItems = async (includeFailed = true): Promise<BatchOrganizeResult> => {
@@ -567,23 +982,69 @@ const toKnowledgeItem = (item: BackendKnowledgeItem): KnowledgeItem => ({
   status: toStatus(item.status),
 });
 
+const toKnowledgeItemPage = (page: BackendKnowledgePage): KnowledgeItemPage => ({
+  items: page.items.map(toKnowledgeItem),
+  total: page.total,
+  page: page.page,
+  pageSize: page.pageSize,
+});
+
+const toKnowledgeIngestionJob = (job: BackendIngestionJob): KnowledgeIngestionJob => ({
+  id: job.id,
+  knowledgeItemId: job.knowledgeItemId,
+  jobType: toIngestionJobType(job.jobType),
+  status: toIngestionJobStatus(job.status),
+  errorMessage: job.errorMessage?.trim() || null,
+  startedAt: job.startedAt,
+  finishedAt: job.finishedAt,
+  createdAt: job.createdAt,
+});
+
+const toIngestionJobType = (jobType: string): KnowledgeIngestionJob['jobType'] => {
+  if (jobType === 'import' || jobType === 'organize' || jobType === 'reprocess') return jobType;
+  return 'unknown';
+};
+
+const toIngestionJobStatus = (status: string): KnowledgeIngestionJob['status'] => {
+  if (status === 'pending' || status === 'running' || status === 'succeeded' || status === 'failed') return status;
+  return 'unknown';
+};
+
 const toModelProvider = (source: BackendModelSource): ModelProvider => ({
   id: source.id,
+  providerType: source.providerType,
   provider: source.name || source.providerType,
   baseUrl: source.baseUrl,
   keyState: source.apiKeyMasked || '未设置',
   model: source.defaultModel,
   state: toProviderState(source),
+  enabled: source.enabled,
   isDefault: source.isDefault,
+  lastCheckStatus: source.lastCheckStatus,
+  lastCheckMessage: source.lastCheckMessage,
 });
 
 const toProviderState = (source: BackendModelSource): ModelProvider['state'] => {
-  if (source.providerType === 'local_compatible') return 'local';
   if (!source.enabled) return 'failed';
-  if (source.lastCheckStatus === 'failed') return 'failed';
-  if (source.lastCheckStatus === 'success') return 'connected';
+  if (source.lastCheckStatus === 'error' || source.lastCheckStatus === 'failed') return 'failed';
+  if (source.providerType === 'local_compatible') {
+    return source.lastCheckStatus === 'ok' || source.lastCheckStatus === 'success'
+      ? 'local'
+      : 'testing';
+  }
+  if (source.lastCheckStatus === 'ok' || source.lastCheckStatus === 'success') return 'connected';
   return 'testing';
 };
+
+const toSettingsProfile = (profile: BackendProfile): SettingsProfile => ({
+  displayName: profile.displayName || '泽宝',
+  email: profile.email || 'desktop@example.com',
+  organizeMode: profile.organizeMode || 'manual',
+  privacyMode: profile.privacyMode || 'local_first',
+  defaultModelSourceId: profile.defaultModelSourceId,
+  summaryModelSourceId: profile.summaryModelSourceId,
+  taggingModelSourceId: profile.taggingModelSourceId,
+});
 
 const toSourceType = (sourceType: string): KnowledgeSourceType => {
   const normalized = sourceType.toLowerCase();
@@ -627,6 +1088,47 @@ const emptyToUndefined = (value?: string) => {
   return trimmed ? trimmed : undefined;
 };
 
+const backupFileName = (exportedAt: string) => {
+  const timestamp = Number.isNaN(Date.parse(exportedAt)) ? new Date() : new Date(exportedAt);
+  const compact = timestamp.toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '');
+  return `knowledge-desk-backup-${compact}.json`;
+};
+
+const isValidKnowledgeDeskBackupShape = (backup: Partial<KnowledgeDeskBackup>) => (
+  isNonEmptyString(backup.exportedAt)
+  && isBackupPreferences(backup.preferences)
+  && Array.isArray(backup.tags)
+  && backup.tags.every((tag) => (
+    isNonEmptyString(tag?.id)
+    && isNonEmptyString(tag?.name)
+    && isNonEmptyString(tag?.createdAt)
+  ))
+  && Array.isArray(backup.knowledgeItems)
+  && backup.knowledgeItems.every((item) => (
+    isNonEmptyString(item?.id)
+    && isNonEmptyString(item?.sourceType)
+    && isNonEmptyString(item?.title)
+    && typeof item?.rawContent === 'string'
+    && isNonEmptyString(item?.status)
+    && typeof item?.wordCount === 'number'
+    && Number.isFinite(item.wordCount)
+    && isNonEmptyString(item?.createdAt)
+    && isNonEmptyString(item?.updatedAt)
+    && Array.isArray(item?.tagIds)
+    && item.tagIds.every(isNonEmptyString)
+  ))
+);
+
+const isBackupPreferences = (preferences: KnowledgeDeskBackup['preferences'] | undefined) => (
+  preferences != null
+  && isNonEmptyString(preferences.organizeMode)
+  && isNonEmptyString(preferences.privacyMode)
+);
+
+const isNonEmptyString = (value: unknown): value is string => (
+  typeof value === 'string' && value.trim().length > 0
+);
+
 const readPreviewItems = (): KnowledgeItem[] => {
   try {
     const raw = window.localStorage.getItem(PREVIEW_ITEMS_KEY);
@@ -668,6 +1170,9 @@ export const withPreviewItems = (snapshot: KnowledgeDeskSnapshot): KnowledgeDesk
   if (previews.length === 0) return snapshot;
 
   const previewInbox = previews.filter((item) => item.status !== 'done' && item.status !== 'archived');
+  const previewPending = previews.filter((item) => item.status === 'pending');
+  const previewProcessing = previews.filter((item) => item.status === 'processing');
+  const previewFailed = previews.filter((item) => item.status === 'failed');
   const previewLibrary = previews.filter((item) => item.status === 'done');
   const previewArchived = previews.filter((item) => item.status === 'archived');
   return {
@@ -678,6 +1183,12 @@ export const withPreviewItems = (snapshot: KnowledgeDeskSnapshot): KnowledgeDesk
       inboxItems: snapshot.dashboard.inboxItems + previewInbox.length,
       readyItems: snapshot.dashboard.readyItems + previewLibrary.length,
       recentItems: [...previewLibrary, ...snapshot.dashboard.recentItems].slice(0, 8),
+    },
+    inboxTotals: {
+      all: snapshot.inboxTotals.all + previewInbox.length,
+      pending: snapshot.inboxTotals.pending + previewPending.length,
+      processing: snapshot.inboxTotals.processing + previewProcessing.length,
+      failed: snapshot.inboxTotals.failed + previewFailed.length,
     },
     inboxItems: [...previewInbox, ...snapshot.inboxItems],
     libraryItems: [...previewLibrary, ...snapshot.libraryItems],
@@ -771,6 +1282,10 @@ const syncPreviewItem = (item: KnowledgeItem) => {
   writePreviewItems([item, ...current]);
 };
 
+const normalizePreviewTags = (tags: string[]) => (
+  Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean))).slice(0, 12)
+);
+
 export const fallbackSnapshot: KnowledgeDeskSnapshot = {
   status: 'unknown',
   dashboard: {
@@ -780,6 +1295,12 @@ export const fallbackSnapshot: KnowledgeDeskSnapshot = {
     failedItems: 0,
     recentItems: [],
     topTags: [],
+  },
+  inboxTotals: {
+    all: 0,
+    pending: 0,
+    processing: 0,
+    failed: 0,
   },
   inboxItems: [],
   libraryItems: [],

@@ -3,6 +3,7 @@ package com.agent.mvp.knowledge.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -10,13 +11,17 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.agent.mvp.agent.dto.ParsedDocument;
 import com.agent.mvp.agent.service.MarkItDownService;
 import com.agent.mvp.auth.entity.User;
+import com.agent.mvp.common.exception.BadRequestException;
+import com.agent.mvp.common.exception.ConflictException;
 import com.agent.mvp.ingestion.entity.IngestionJob;
 import com.agent.mvp.ingestion.service.IngestionJobService;
+import com.agent.mvp.knowledge.dto.ImportPreflightRequest;
 import com.agent.mvp.knowledge.dto.ImportSnippetKnowledgeItemRequest;
 import com.agent.mvp.knowledge.entity.KnowledgeItem;
 import com.agent.mvp.knowledge.entity.KnowledgeTag;
@@ -29,6 +34,7 @@ import com.agent.mvp.knowledge.repo.KnowledgeTagUsageSummaryView;
 import com.agent.mvp.settings.entity.UserProfile;
 import com.agent.mvp.settings.service.UserProfileService;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
@@ -36,11 +42,13 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.mock.web.MockMultipartFile;
 
 class KnowledgeItemServiceTest {
@@ -95,7 +103,241 @@ class KnowledgeItemServiceTest {
         ArgumentCaptor<KnowledgeItem> itemCaptor = ArgumentCaptor.forClass(KnowledgeItem.class);
         verify(itemRepository).insert(itemCaptor.capture());
         assertEquals("markdown", itemCaptor.getValue().getSourceType());
+        assertEquals(
+                "5f5762850052fac61f58ed36def304edd152378016ed1ade7e284fd1d19ac7eb",
+                itemCaptor.getValue().getContentHash());
         verify(ingestionJobService).createImportSucceeded(eq(userId), eq(response.id()), any());
+    }
+
+    @Test
+    void importUploadShouldRejectExistingBytesBeforeParsing() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        MockMultipartFile file =
+                new MockMultipartFile("file", "notes.md", "text/markdown", "same bytes".getBytes());
+        when(itemRepository.selectCount(any())).thenReturn(1L);
+
+        ConflictException exception =
+                assertThrows(ConflictException.class, () -> service.importUpload(userId, file, null));
+
+        assertEquals("An identical file has already been imported", exception.getMessage());
+        verifyNoInteractions(markItDownService);
+        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(itemRepository).selectCount(wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getCustomSqlSegment();
+        assertTrue(sqlSegment.contains("user_id"));
+        assertTrue(sqlSegment.contains("content_hash"));
+        assertTrue(wrapperCaptor.getValue().getParamNameValuePairs().containsValue(userId));
+        assertTrue(
+                wrapperCaptor
+                        .getValue()
+                        .getParamNameValuePairs()
+                        .containsValue(
+                                "58100dc8fc06562ce3e578231dc948e083520ee49c4b4ee5a5a28bb4b4003feb"));
+        verify(itemRepository, never()).insert(any(KnowledgeItem.class));
+    }
+
+    @Test
+    void importUploadShouldAllowSameFilenameWhenBytesDiffer() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        when(itemRepository.selectCount(any())).thenReturn(0L);
+        when(markItDownService.parseDocument(any()))
+                .thenReturn(new ParsedDocument("notes.md", "notes", "md", Map.of()));
+        when(itemTagRepository.findTagIdsByKnowledgeItemId(any())).thenReturn(List.of());
+
+        service.importUpload(
+                userId,
+                new MockMultipartFile(
+                        "file", "notes.md", "text/markdown", "first version".getBytes()),
+                null);
+        service.importUpload(
+                userId,
+                new MockMultipartFile(
+                        "file", "notes.md", "text/markdown", "second version".getBytes()),
+                null);
+
+        ArgumentCaptor<KnowledgeItem> itemCaptor = ArgumentCaptor.forClass(KnowledgeItem.class);
+        verify(itemRepository, Mockito.times(2)).insert(itemCaptor.capture());
+        assertEquals(
+                List.of(
+                        "80d8f975e768eecac59d22a788bf8e811e51ca85e309ee47f1e821e3e58280f2",
+                        "ebfa015966891a400bf353bdf8ef30444a71b1751e2808ef6c014db34d168d85"),
+                itemCaptor.getAllValues().stream().map(KnowledgeItem::getContentHash).toList());
+    }
+
+    @Test
+    void importUploadShouldAllowSameBytesForDifferentUsers() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID firstUserId = UUID.randomUUID();
+        UUID secondUserId = UUID.randomUUID();
+        when(itemRepository.selectCount(any())).thenReturn(0L);
+        when(markItDownService.parseDocument(any()))
+                .thenReturn(new ParsedDocument("notes.md", "notes", "md", Map.of()));
+        when(itemTagRepository.findTagIdsByKnowledgeItemId(any())).thenReturn(List.of());
+
+        service.importUpload(
+                firstUserId,
+                new MockMultipartFile("file", "notes.md", "text/markdown", "same bytes".getBytes()),
+                null);
+        service.importUpload(
+                secondUserId,
+                new MockMultipartFile("file", "notes.md", "text/markdown", "same bytes".getBytes()),
+                null);
+
+        ArgumentCaptor<KnowledgeItem> itemCaptor = ArgumentCaptor.forClass(KnowledgeItem.class);
+        verify(itemRepository, Mockito.times(2)).insert(itemCaptor.capture());
+        assertEquals(
+                List.of(firstUserId, secondUserId),
+                itemCaptor.getAllValues().stream().map(KnowledgeItem::getUserId).toList());
+        assertEquals(
+                List.of(
+                        "58100dc8fc06562ce3e578231dc948e083520ee49c4b4ee5a5a28bb4b4003feb",
+                        "58100dc8fc06562ce3e578231dc948e083520ee49c4b4ee5a5a28bb4b4003feb"),
+                itemCaptor.getAllValues().stream().map(KnowledgeItem::getContentHash).toList());
+
+        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(itemRepository, Mockito.times(2)).selectCount(wrapperCaptor.capture());
+        List<QueryWrapper> wrappers = wrapperCaptor.getAllValues();
+        assertTrue(wrappers.get(0).getCustomSqlSegment().contains("user_id"));
+        assertTrue(wrappers.get(1).getCustomSqlSegment().contains("user_id"));
+        assertTrue(wrappers.get(0).getParamNameValuePairs().containsValue(firstUserId));
+        assertTrue(wrappers.get(1).getParamNameValuePairs().containsValue(secondUserId));
+    }
+
+    @Test
+    void preflightImportShouldReturnOnlyCurrentUsersExistingHashes() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        String existing = "a".repeat(64);
+        String missing = "b".repeat(64);
+        when(itemRepository.selectList(any()))
+                .thenReturn(List.of(KnowledgeItem.builder().contentHash(existing).build()));
+
+        var response =
+                service.preflightImport(
+                        userId, new ImportPreflightRequest(List.of(existing.toUpperCase(), missing)));
+
+        assertEquals(List.of(existing), response.existingContentHashes());
+        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(itemRepository).selectList(wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getCustomSqlSegment();
+        assertEquals("content_hash", wrapperCaptor.getValue().getSqlSelect());
+        assertTrue(sqlSegment.contains("user_id"));
+        assertTrue(sqlSegment.contains("content_hash"));
+        assertTrue(wrapperCaptor.getValue().getParamNameValuePairs().containsValue(userId));
+        assertTrue(wrapperCaptor.getValue().getParamNameValuePairs().containsValue(existing));
+        assertTrue(wrapperCaptor.getValue().getParamNameValuePairs().containsValue(missing));
+        verify(itemRepository, never()).insert(any(KnowledgeItem.class));
+    }
+
+    @Test
+    void importUploadShouldMapConcurrentHashDuplicateToConflict() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        when(itemRepository.selectCount(any())).thenReturn(0L);
+        when(markItDownService.parseDocument(any()))
+                .thenReturn(new ParsedDocument("notes.md", "notes", "md", Map.of()));
+        when(itemRepository.insert(any(KnowledgeItem.class)))
+                .thenThrow(
+                        new DuplicateKeyException(
+                                "uq_knowledge_items_user_content_hash duplicate key"));
+
+        ConflictException exception =
+                assertThrows(
+                        ConflictException.class,
+                        () ->
+                                service.importUpload(
+                                        userId,
+                                        new MockMultipartFile(
+                                                "file",
+                                                "notes.md",
+                                                "text/markdown",
+                                                "racing bytes".getBytes()),
+                                        null));
+
+        assertEquals("An identical file has already been imported", exception.getMessage());
+        verify(ingestionJobService, never()).createImportSucceeded(any(), any(), any());
     }
 
     @Test
@@ -169,7 +411,11 @@ class KnowledgeItemServiceTest {
         verify(ingestionJobService).createImportSucceeded(eq(userId), eq(response.id()), any());
         verify(ingestionJobService)
                 .createRunning(eq(userId), eq(response.id()), eq("organize"), any());
-        verify(ingestionJobService).markSucceeded(any(IngestionJob.class), any());
+        ArgumentCaptor<String> resultSnapshotCaptor = ArgumentCaptor.forClass(String.class);
+        verify(ingestionJobService)
+                .markSucceeded(any(IngestionJob.class), resultSnapshotCaptor.capture());
+        assertTrue(
+                resultSnapshotCaptor.getValue().contains("\"organizationStrategy\":\"heuristic\""));
     }
 
     @Test
@@ -245,6 +491,59 @@ class KnowledgeItemServiceTest {
         assertEquals("retry summary", response.summary());
         verify(ingestionJobService).createRunning(eq(userId), eq(itemId), eq("reprocess"), any());
         verify(ingestionJobService).markSucceeded(any(IngestionJob.class), any());
+    }
+
+    @Test
+    void archiveShouldRejectWhenConcurrentOrganizeClaimHasSetProcessing() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        KnowledgeItem item =
+                KnowledgeItem.builder()
+                        .id(itemId)
+                        .userId(userId)
+                        .sourceType("snippet")
+                        .title("Racing item")
+                        .rawContent("content")
+                        .status("ready")
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .build();
+        when(itemRepository.selectById(itemId)).thenReturn(item);
+        // A zero-row conditional update represents organize claiming the item after it was read.
+        when(itemRepository.update(any(), any())).thenReturn(0);
+
+        BadRequestException exception =
+                assertThrows(BadRequestException.class, () -> service.archive(userId, itemId));
+
+        assertEquals("Processing item cannot be archived", exception.getMessage());
+        assertEquals("ready", item.getStatus());
+        assertNull(item.getArchivedAt());
+        ArgumentCaptor<UpdateWrapper> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(itemRepository).update(Mockito.isNull(), wrapperCaptor.capture());
+        assertTrue(wrapperCaptor.getValue().getCustomSqlSegment().contains("status"));
+        assertTrue(
+                wrapperCaptor
+                        .getValue()
+                        .getParamNameValuePairs()
+                        .containsValue("processing"));
+        verify(itemRepository, never()).updateById(any(KnowledgeItem.class));
     }
 
     @Test
@@ -387,7 +686,7 @@ class KnowledgeItemServiceTest {
                         argThat(ids -> ids.contains(firstItemId) && ids.contains(secondItemId))))
                 .thenReturn(List.of(ragTag, searchTag));
 
-        var response = service.search(userId, "rag", null, null, null, null, 1, 20);
+        var response = service.search(userId, "rag", null, null, null, null, null, 1, 20);
 
         ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectPage(any(), wrapperCaptor.capture());
@@ -449,7 +748,8 @@ class KnowledgeItemServiceTest {
                 .when(itemRepository)
                 .selectPage(any(), any());
 
-        service.search(userId, "retrieval augmented generation", null, null, null, null, 1, 20);
+        service.search(
+                userId, "retrieval augmented generation", null, null, null, null, null, 1, 20);
 
         ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectPage(any(), wrapperCaptor.capture());
@@ -475,6 +775,28 @@ class KnowledgeItemServiceTest {
         assertTrue(postgresSql.contains("to_tsvector"));
         assertTrue(postgresSql.contains("idx_knowledge_items_user_status_updated"));
         assertTrue(h2Sql.contains("idx_knowledge_items_user_status_updated"));
+    }
+
+    @Test
+    void contentHashMigrationsShouldKeepHashNullableAndScopedToUser() throws Exception {
+        String postgresSql =
+                Files.readString(
+                        Path.of(
+                                "src/main/resources/db/migration/"
+                                        + "V11__knowledge_item_content_hash_deduplication.sql"));
+        String h2Sql =
+                Files.readString(
+                        Path.of(
+                                "src/main/resources/db/h2/"
+                                        + "V11__knowledge_item_content_hash_deduplication.sql"));
+
+        assertTrue(postgresSql.contains("ADD COLUMN content_hash VARCHAR(64)"));
+        assertTrue(postgresSql.contains("uq_knowledge_items_user_content_hash"));
+        assertTrue(postgresSql.contains("user_id, content_hash"));
+        assertTrue(postgresSql.contains("WHERE content_hash IS NOT NULL"));
+        assertTrue(h2Sql.contains("ADD COLUMN content_hash VARCHAR(64)"));
+        assertTrue(h2Sql.contains("uq_knowledge_items_user_content_hash"));
+        assertTrue(h2Sql.contains("user_id, content_hash"));
     }
 
     @Test
@@ -520,9 +842,114 @@ class KnowledgeItemServiceTest {
                 .when(itemRepository)
                 .selectPage(any(), any());
 
-        service.search(userId, "retrieval", "rag", null, null, null, 1, 20);
+        service.search(userId, "retrieval", null, "rag", null, null, null, 1, 20);
 
         verify(itemTagRepository, never()).findKnowledgeItemIdsByTagId(tag.getId());
+    }
+
+    @Test
+    void searchShouldApplyStatusFilterAndReturnNormalizedPagination() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        KnowledgeOrganizerService organizerService = new KnowledgeOrganizerService();
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        organizerService,
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        Mockito.doAnswer(
+                        invocation -> {
+                            Page<KnowledgeItem> page = invocation.getArgument(0);
+                            page.setRecords(List.of());
+                            page.setTotal(0);
+                            return page;
+                        })
+                .when(itemRepository)
+                .selectPage(any(), any());
+
+        var response = service.search(userId, null, "READY", null, null, null, null, 0, 500);
+
+        ArgumentCaptor<Page> pageCaptor = ArgumentCaptor.forClass(Page.class);
+        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(itemRepository).selectPage(pageCaptor.capture(), wrapperCaptor.capture());
+        assertEquals(1L, pageCaptor.getValue().getCurrent());
+        assertEquals(100L, pageCaptor.getValue().getSize());
+        assertTrue(wrapperCaptor.getValue().getCustomSqlSegment().contains("status"));
+        assertEquals(1L, response.page());
+        assertEquals(100L, response.pageSize());
+    }
+
+    @Test
+    void listShouldUnionMultipleStatusesWithServerSidePaging() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        Mockito.doAnswer(
+                        invocation -> {
+                            Page<KnowledgeItem> page = invocation.getArgument(0);
+                            page.setRecords(List.of());
+                            page.setTotal(23);
+                            return page;
+                        })
+                .when(itemRepository)
+                .selectPage(any(), any());
+
+        Instant from = Instant.parse("2026-07-01T00:00:00Z");
+        Instant to = Instant.parse("2026-07-29T23:59:59Z");
+        var response =
+                service.listItems(
+                        userId,
+                        List.of("inbox", "processing", "failed"),
+                        "markdown",
+                        null,
+                        from,
+                        to,
+                        0,
+                        500);
+
+        ArgumentCaptor<Page> pageCaptor = ArgumentCaptor.forClass(Page.class);
+        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        verify(itemRepository).selectPage(pageCaptor.capture(), wrapperCaptor.capture());
+
+        QueryWrapper wrapper = wrapperCaptor.getValue();
+        String sqlSegment = wrapper.getCustomSqlSegment();
+        assertEquals(1L, pageCaptor.getValue().getCurrent());
+        assertEquals(100L, pageCaptor.getValue().getSize());
+        assertEquals(23L, response.total());
+        assertTrue(sqlSegment.contains("status"));
+        assertTrue(sqlSegment.contains("IN"));
+        assertTrue(sqlSegment.contains("source_type"));
+        assertTrue(sqlSegment.contains("created_at"));
+        assertTrue(wrapper.getParamNameValuePairs().containsValue("inbox"));
+        assertTrue(wrapper.getParamNameValuePairs().containsValue("processing"));
+        assertTrue(wrapper.getParamNameValuePairs().containsValue("failed"));
     }
 
     @Test

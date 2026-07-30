@@ -6,6 +6,8 @@ import com.agent.mvp.knowledge.dto.BatchOrganizeResponse;
 import com.agent.mvp.knowledge.dto.CreateTagRequest;
 import com.agent.mvp.knowledge.dto.DashboardSummaryResponse;
 import com.agent.mvp.knowledge.dto.ImportFileKnowledgeItemRequest;
+import com.agent.mvp.knowledge.dto.ImportPreflightRequest;
+import com.agent.mvp.knowledge.dto.ImportPreflightResponse;
 import com.agent.mvp.knowledge.dto.ImportSnippetKnowledgeItemRequest;
 import com.agent.mvp.knowledge.dto.ImportWebKnowledgeItemRequest;
 import com.agent.mvp.knowledge.dto.KnowledgeItemPageResponse;
@@ -71,6 +73,14 @@ public class KnowledgeItemController extends AuthenticatedControllerSupport {
         return knowledgeItemService.importUpload(user.userId(), file, title);
     }
 
+    @PostMapping("/knowledge-items/import/preflight")
+    @Operation(summary = "预检当前用户已导入的本地文件哈希")
+    public ImportPreflightResponse preflightImport(
+            @Valid @RequestBody ImportPreflightRequest request, Authentication authentication) {
+        AuthenticatedUser user = requireAuthenticatedUser(authentication);
+        return knowledgeItemService.preflightImport(user.userId(), request);
+    }
+
     @PostMapping("/knowledge-items/import/snippet")
     @Operation(summary = "导入手动片段到收集箱")
     public KnowledgeItemResponse importSnippet(
@@ -83,21 +93,28 @@ public class KnowledgeItemController extends AuthenticatedControllerSupport {
     @GetMapping("/knowledge-items")
     @Operation(summary = "分页获取知识条目列表")
     public KnowledgeItemPageResponse listItems(
-            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "status", required = false) List<String> statuses,
             @RequestParam(value = "sourceType", required = false) String sourceType,
             @RequestParam(value = "tag", required = false) String tag,
+            @RequestParam(value = "from", required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    Instant from,
+            @RequestParam(value = "to", required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    Instant to,
             @RequestParam(value = "page", defaultValue = "1") long page,
             @RequestParam(value = "pageSize", defaultValue = "20") long pageSize,
             Authentication authentication) {
         AuthenticatedUser user = requireAuthenticatedUser(authentication);
         return knowledgeItemService.listItems(
-                user.userId(), status, sourceType, tag, page, pageSize);
+                user.userId(), statuses, sourceType, tag, from, to, page, pageSize);
     }
 
     @GetMapping("/knowledge-items/search")
     @Operation(summary = "搜索知识条目")
     public KnowledgeItemPageResponse search(
             @RequestParam(value = "q", required = false) String query,
+            @RequestParam(value = "status", required = false) String status,
             @RequestParam(value = "tag", required = false) String tag,
             @RequestParam(value = "sourceType", required = false) String sourceType,
             @RequestParam(value = "from", required = false)
@@ -111,7 +128,7 @@ public class KnowledgeItemController extends AuthenticatedControllerSupport {
             Authentication authentication) {
         AuthenticatedUser user = requireAuthenticatedUser(authentication);
         return knowledgeItemService.search(
-                user.userId(), query, tag, sourceType, from, to, page, pageSize);
+                user.userId(), query, status, tag, sourceType, from, to, page, pageSize);
     }
 
     @GetMapping("/knowledge-items/{id}")

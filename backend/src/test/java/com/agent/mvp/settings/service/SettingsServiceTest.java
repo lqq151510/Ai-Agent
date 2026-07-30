@@ -1,39 +1,63 @@
 package com.agent.mvp.settings.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.common.exception.BadRequestException;
+import com.agent.mvp.knowledge.entity.KnowledgeItem;
+import com.agent.mvp.knowledge.entity.KnowledgeItemTag;
+import com.agent.mvp.knowledge.entity.KnowledgeTag;
 import com.agent.mvp.knowledge.repo.KnowledgeItemRepository;
+import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
+import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
 import com.agent.mvp.modelsource.entity.ModelSource;
 import com.agent.mvp.modelsource.repo.ModelSourceRepository;
+import com.agent.mvp.settings.dto.SettingsBackupKnowledgeItem;
+import com.agent.mvp.settings.dto.SettingsBackupPayload;
+import com.agent.mvp.settings.dto.SettingsBackupPreferences;
+import com.agent.mvp.settings.dto.SettingsBackupTag;
 import com.agent.mvp.settings.dto.UpdateSettingsProfileRequest;
 import com.agent.mvp.settings.entity.UserProfile;
+import com.agent.mvp.settings.repo.UserProfileRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class SettingsServiceTest {
 
     @Test
     void updateProfileShouldRejectForeignModelSource() {
         UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
         ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
         KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
         KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
         SettingsService service =
                 new SettingsService(
                         userProfileService,
+                        userProfileRepository,
                         modelSourceRepository,
                         knowledgeItemRepository,
-                        knowledgeTagRepository);
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository);
 
         UUID userId = UUID.randomUUID();
         UUID foreignUserId = UUID.randomUUID();
@@ -66,15 +90,20 @@ class SettingsServiceTest {
     @Test
     void updateProfileShouldSyncDefaultModelSourceState() {
         UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
         ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
         KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
         KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
         SettingsService service =
                 new SettingsService(
                         userProfileService,
+                        userProfileRepository,
                         modelSourceRepository,
                         knowledgeItemRepository,
-                        knowledgeTagRepository);
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository);
 
         UUID userId = UUID.randomUUID();
         UUID oldDefaultId = UUID.randomUUID();
@@ -142,15 +171,20 @@ class SettingsServiceTest {
     @Test
     void updateProfileShouldClearModelSourceBindings() {
         UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
         ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
         KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
         KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
         SettingsService service =
                 new SettingsService(
                         userProfileService,
+                        userProfileRepository,
                         modelSourceRepository,
                         knowledgeItemRepository,
-                        knowledgeTagRepository);
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository);
 
         UUID userId = UUID.randomUUID();
         UUID defaultId = UUID.randomUUID();
@@ -196,5 +230,315 @@ class SettingsServiceTest {
         assertNull(response.defaultModelSourceId());
         verify(modelSourceRepository).updateById(currentDefault);
         verify(userProfileService).save(profile);
+    }
+
+    @Test
+    void exportBackupShouldIncludeKnowledgeAndTagsWithoutModelSecrets() throws Exception {
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
+        ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
+        KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
+        SettingsService service =
+                new SettingsService(
+                        userProfileService,
+                        userProfileRepository,
+                        modelSourceRepository,
+                        knowledgeItemRepository,
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository);
+
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID tagId = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-07-29T08:00:00Z");
+        UserProfile profile =
+                UserProfile.builder()
+                        .userId(userId)
+                        .displayName("泽宝")
+                        .avatarUrl("https://example.com/avatar.png")
+                        .organizeMode("manual")
+                        .privacyMode("local_first")
+                        .build();
+        KnowledgeItem item =
+                KnowledgeItem.builder()
+                        .id(itemId)
+                        .userId(userId)
+                        .sourceType("markdown")
+                        .title("RAG notes")
+                        .sourceUri("file:///notes/rag.md")
+                        .rawContent("RAG content")
+                        .cleanedContent("RAG content")
+                        .summary("RAG summary")
+                        .status("ready")
+                        .language("en")
+                        .wordCount(2)
+                        .createdAt(createdAt)
+                        .updatedAt(createdAt)
+                        .build();
+        KnowledgeTag tag =
+                KnowledgeTag.builder()
+                        .id(tagId)
+                        .userId(userId)
+                        .name("rag")
+                        .color("#7a8a84")
+                        .createdAt(createdAt)
+                        .build();
+        KnowledgeItemTagView relation = new KnowledgeItemTagView();
+        relation.setKnowledgeItemId(itemId);
+        relation.setTagId(tagId);
+        relation.setName("rag");
+        relation.setColor("#7a8a84");
+        relation.setCreatedAt(createdAt);
+
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("user@example.com").build());
+        when(userProfileRepository.selectById(userId)).thenReturn(profile);
+        when(knowledgeTagRepository.selectList(any())).thenReturn(List.of(tag));
+        when(knowledgeItemRepository.selectList(any())).thenReturn(List.of(item));
+        when(knowledgeItemTagRepository.findTagsByKnowledgeItemIds(List.of(itemId)))
+                .thenReturn(List.of(relation));
+        when(modelSourceRepository.selectList(any()))
+                .thenReturn(
+                        List.of(
+                                ModelSource.builder()
+                                        .apiKey("sk-local-secret")
+                                        .defaultModel("private-model")
+                                        .build()));
+
+        SettingsBackupPayload backup = service.exportBackup(userId);
+
+        assertEquals(1, backup.schemaVersion());
+        assertFalse(backup.modelSourcesIncluded());
+        assertEquals("泽宝", backup.preferences().displayName());
+        assertEquals(List.of(tagId), backup.knowledgeItems().getFirst().tagIds());
+        String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(backup);
+        assertFalse(json.contains("apiKey"));
+        assertFalse(json.contains("sk-local-secret"));
+        verifyNoInteractions(modelSourceRepository);
+        verify(userProfileService, never()).getOrCreate(any());
+    }
+
+    @Test
+    void importBackupShouldCreateNewItemsAndMergeTags() {
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
+        ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
+        KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
+        SettingsService service =
+                new SettingsService(
+                        userProfileService,
+                        userProfileRepository,
+                        modelSourceRepository,
+                        knowledgeItemRepository,
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository);
+
+        UUID userId = UUID.randomUUID();
+        UUID sourceItemId = UUID.randomUUID();
+        UUID javaBackupTagId = UUID.randomUUID();
+        UUID ragBackupTagId = UUID.randomUUID();
+        UUID existingJavaTagId = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-07-29T08:00:00Z");
+        KnowledgeTag existingJavaTag =
+                KnowledgeTag.builder()
+                        .id(existingJavaTagId)
+                        .userId(userId)
+                        .name("java")
+                        .color("#111111")
+                        .createdAt(createdAt)
+                        .build();
+        SettingsBackupPayload backup =
+                validBackup(
+                        sourceItemId,
+                        List.of(
+                                new SettingsBackupTag(
+                                        javaBackupTagId, "java", "#222222", createdAt),
+                                new SettingsBackupTag(ragBackupTagId, "rag", "#7a8a84", createdAt)),
+                        List.of(javaBackupTagId, ragBackupTagId),
+                        "ready",
+                        "markdown");
+
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("user@example.com").build());
+        when(knowledgeTagRepository.selectList(any())).thenReturn(List.of(existingJavaTag));
+
+        var response = service.importBackup(userId, backup);
+
+        assertEquals(1, response.importedItems());
+        assertEquals(1, response.createdTags());
+        assertFalse(response.preferencesRestored());
+        assertFalse(response.modelSourcesRestored());
+        ArgumentCaptor<KnowledgeItem> itemCaptor = ArgumentCaptor.forClass(KnowledgeItem.class);
+        verify(knowledgeItemRepository).insert(itemCaptor.capture());
+        KnowledgeItem importedItem = itemCaptor.getValue();
+        assertNotEquals(sourceItemId, importedItem.getId());
+        assertEquals(userId, importedItem.getUserId());
+        assertEquals("ready", importedItem.getStatus());
+
+        ArgumentCaptor<KnowledgeTag> tagCaptor = ArgumentCaptor.forClass(KnowledgeTag.class);
+        verify(knowledgeTagRepository).insert(tagCaptor.capture());
+        KnowledgeTag createdRagTag = tagCaptor.getValue();
+        assertEquals("rag", createdRagTag.getName());
+        assertEquals(userId, createdRagTag.getUserId());
+        assertTrue(createdRagTag.getId() != null);
+
+        ArgumentCaptor<KnowledgeItemTag> relationCaptor =
+                ArgumentCaptor.forClass(KnowledgeItemTag.class);
+        verify(knowledgeItemTagRepository, times(2)).insert(relationCaptor.capture());
+        assertTrue(
+                relationCaptor.getAllValues().stream()
+                        .allMatch(
+                                relation ->
+                                        importedItem
+                                                .getId()
+                                                .equals(relation.getKnowledgeItemId())));
+        assertTrue(
+                relationCaptor.getAllValues().stream()
+                        .anyMatch(relation -> existingJavaTagId.equals(relation.getTagId())));
+        assertTrue(
+                relationCaptor.getAllValues().stream()
+                        .anyMatch(relation -> createdRagTag.getId().equals(relation.getTagId())));
+        verify(knowledgeItemRepository, never()).updateById(any(KnowledgeItem.class));
+        verify(userProfileService, never()).save(any());
+    }
+
+    @Test
+    void importBackupShouldRejectInvalidPayloadBeforeWriting() {
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
+        ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
+        KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
+        SettingsService service =
+                new SettingsService(
+                        userProfileService,
+                        userProfileRepository,
+                        modelSourceRepository,
+                        knowledgeItemRepository,
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository);
+
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID tagId = UUID.randomUUID();
+        SettingsBackupPayload invalidBackup =
+                validBackup(
+                        itemId,
+                        List.of(new SettingsBackupTag(tagId, "rag", "#7a8a84", Instant.now())),
+                        List.of(tagId),
+                        "invalid",
+                        "markdown");
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("user@example.com").build());
+
+        assertThrows(BadRequestException.class, () -> service.importBackup(userId, invalidBackup));
+
+        verifyNoInteractions(
+                modelSourceRepository,
+                knowledgeItemRepository,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository);
+    }
+
+    @Test
+    void importBackupShouldValidateEveryItemBeforeAnyWrite() {
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
+        ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
+        KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
+        SettingsService service =
+                new SettingsService(
+                        userProfileService,
+                        userProfileRepository,
+                        modelSourceRepository,
+                        knowledgeItemRepository,
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository);
+
+        UUID userId = UUID.randomUUID();
+        UUID tagId = UUID.randomUUID();
+        SettingsBackupPayload firstValidItem =
+                validBackup(
+                        UUID.randomUUID(),
+                        List.of(new SettingsBackupTag(tagId, "rag", "#7a8a84", Instant.now())),
+                        List.of(tagId),
+                        "ready",
+                        "markdown");
+        SettingsBackupKnowledgeItem laterInvalidItem =
+                new SettingsBackupKnowledgeItem(
+                        UUID.randomUUID(),
+                        "unsupported",
+                        "Later invalid item",
+                        null,
+                        "This invalid item must prevent every write.",
+                        null,
+                        null,
+                        "ready",
+                        "en",
+                        1,
+                        firstValidItem.exportedAt(),
+                        firstValidItem.exportedAt(),
+                        null,
+                        List.of(tagId));
+        SettingsBackupPayload backup =
+                new SettingsBackupPayload(
+                        firstValidItem.schemaVersion(),
+                        firstValidItem.exportedAt(),
+                        firstValidItem.preferences(),
+                        firstValidItem.tags(),
+                        List.of(firstValidItem.knowledgeItems().getFirst(), laterInvalidItem),
+                        firstValidItem.modelSourcesIncluded());
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("user@example.com").build());
+
+        assertThrows(BadRequestException.class, () -> service.importBackup(userId, backup));
+
+        verifyNoInteractions(
+                modelSourceRepository,
+                knowledgeItemRepository,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository);
+    }
+
+    private SettingsBackupPayload validBackup(
+            UUID itemId,
+            List<SettingsBackupTag> tags,
+            List<UUID> tagIds,
+            String status,
+            String sourceType) {
+        Instant createdAt = Instant.parse("2026-07-29T08:00:00Z");
+        return new SettingsBackupPayload(
+                1,
+                createdAt,
+                new SettingsBackupPreferences("泽宝", null, "manual", "local_first"),
+                tags,
+                List.of(
+                        new SettingsBackupKnowledgeItem(
+                                itemId,
+                                sourceType,
+                                "Imported note",
+                                null,
+                                "Imported content",
+                                "Imported content",
+                                "Imported summary",
+                                status,
+                                "en",
+                                2,
+                                createdAt,
+                                createdAt,
+                                null,
+                                tagIds)),
+                false);
     }
 }
