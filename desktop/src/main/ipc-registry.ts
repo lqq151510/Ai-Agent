@@ -161,20 +161,25 @@ export class IpcRegistry {
     if (this.isLegacyEnabled) {
     ipcMain.handle('workspace:get-all', () => this.workspaceManager.getWorkspaces());
     ipcMain.handle('workspace:get-active', () => this.workspaceManager.getActiveWorkspace());
-    ipcMain.handle('workspace:set-active', (_event, path) => this.workspaceManager.setActiveWorkspace(path));
-    ipcMain.handle('workspace:add', () => this.workspaceManager.addWorkspace());
+    ipcMain.handle('workspace:set-active', async (_event, path) => {
+      const changed = this.workspaceManager.setActiveWorkspace(path);
+      if (changed) await this.localServiceManager.start(path);
+      return changed;
+    });
+    ipcMain.handle('workspace:add', async () => {
+      const workspace = await this.workspaceManager.addWorkspace();
+      if (workspace) await this.localServiceManager.start(workspace.path);
+      return workspace;
+    });
     ipcMain.handle('workspace:get-file-tree', async (_event, path: string, depth?: number) => {
-      if (!this.localServiceManager.isReady()) {
-        return { tree: [] };
-      }
       const workspaceRoot = this.resolveAuthorizedWorkspaceRoot(path);
       if (!workspaceRoot) {
         throw new Error('Workspace path is not authorized');
       }
       const safeDepth = normalizeTreeDepth(depth);
       try {
-        const resp = await this.localServiceManager.fetch(
-          `/workspace/tree?path=${encodeURIComponent(workspaceRoot)}&depth=${safeDepth}`,
+         const resp = await this.localServiceManager.fetchForWorkspace(workspaceRoot,
+          `/workspace/tree?path=.&depth=${safeDepth}`,
         );
         if (resp.ok) {
           return await resp.json();
@@ -463,7 +468,7 @@ export class IpcRegistry {
 
       // Build systemContext by calling local-service
       let systemContext: string | undefined;
-      if (this.localServiceManager.isReady() && workspacePath) {
+       if (workspacePath) {
         const workspaceRoot = this.resolveAuthorizedWorkspaceRoot(workspacePath);
         if (!workspaceRoot) {
           throw new Error('Workspace path is not authorized');
@@ -475,14 +480,12 @@ export class IpcRegistry {
         }
         try {
           const [contextResp, filesResp] = await Promise.all([
-            this.localServiceManager.fetch(
-              `/context?path=${encodeURIComponent(workspaceRoot)}`,
-            ),
+             this.localServiceManager.fetchForWorkspace(workspaceRoot, '/context'),
             authorizedFiles.length > 0
-              ? this.localServiceManager.fetch('/context/files', {
+               ? this.localServiceManager.fetchForWorkspace(workspaceRoot, '/context/files', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ paths: authorizedFiles }),
+                  body: JSON.stringify({ paths: authorizedFiles.map(filePath => path.relative(workspaceRoot, filePath) || '.') }),
                 })
               : Promise.resolve(null),
           ]);

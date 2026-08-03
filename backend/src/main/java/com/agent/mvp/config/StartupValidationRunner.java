@@ -83,6 +83,9 @@ public class StartupValidationRunner implements ApplicationRunner {
     }
 
     private void validateDbPassword() {
+        if (isH2Profile()) {
+            return;
+        }
         String dbPassword = env.getProperty("spring.datasource.password");
         if (dbPassword == null || dbPassword.isBlank()) {
             throw new IllegalStateException(
@@ -93,6 +96,13 @@ public class StartupValidationRunner implements ApplicationRunner {
             throw new IllegalStateException(
                     "PG_PASSWORD must not be the default 'change-me' value.");
         }
+    }
+
+    private boolean isH2Profile() {
+        String[] activeProfiles = env.getActiveProfiles();
+        String datasourceUrl = env.getProperty("spring.datasource.url");
+        return (activeProfiles != null && java.util.Arrays.stream(activeProfiles).anyMatch("desktop"::equals))
+                || (datasourceUrl != null && datasourceUrl.startsWith("jdbc:h2:"));
     }
 
     private void validateModelConfig() {

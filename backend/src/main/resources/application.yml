@@ -21,8 +21,6 @@ management:
         http.server.requests: true
 
 spring:
-  profiles:
-    include: mq
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_DATABASE:ai_agent}}
     username: ${PG_USERNAME:postgres}
@@ -107,13 +105,14 @@ app:
         enabled: ${SEARCH_VECTOR_ENABLED:true}
         weight: ${SEARCH_VECTOR_WEIGHT:1.0}
 
-# Bug Sentinel 配置：全局异常自动上报到 webhook，默认开启
+# Bug Sentinel 配置：仅在 legacy profile 中启用，starter 默认关闭
 bug:
   sentinel:
-    enabled: ${BUG_SENTINEL_ENABLED:true}
+    enabled: ${BUG_SENTINEL_ENABLED:false}
     environment: ${BUG_SENTINEL_ENV:dev}
+    max-request-bytes: ${BUG_SENTINEL_MAX_REQUEST_BYTES:16384}
     webhook:
-      url: ${BUG_SENTINEL_WEBHOOK_URL:http://localhost:8080/api/v1/sentinel/report}
+      url: ${BUG_SENTINEL_WEBHOOK_URL:}
 
 python-service:
   # python-service 文档解析服务基础地址

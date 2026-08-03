@@ -7,7 +7,7 @@
 本 starter 通过 Spring Boot 3 的 `AutoConfiguration.imports` 机制注册 [`BugSentinelAutoConfiguration`](src/main/java/com/agent/sentinel/BugSentinelAutoConfiguration.java)，触发条件：
 
 1. **classpath 中存在本 starter**：项目 `pom.xml` 依赖了 `com.agent:bug-sentinel-starter`。
-2. **配置开关未关闭**：`bug.sentinel.enabled` 未显式设为 `false`（默认开启，`matchIfMissing = true`）。
+2. **配置开关已开启**：`bug.sentinel.enabled=true`（默认关闭）。
 3. **无自定义 Bean 覆盖**：当容器中不存在 `SentinelWebhookClient` / `GlobalSentinelExceptionHandler` 时才注册默认实现（可通过 `@ConditionalOnMissingBean` 覆盖）。
 
 满足上述条件后，会自动注册：
@@ -24,6 +24,9 @@
 | `bug.sentinel.enabled` | `BUG_SENTINEL_ENABLED` | `true` | 总开关，设为 `false` 完全禁用自动配置 |
 | `bug.sentinel.webhook.url` | `BUG_SENTINEL_WEBHOOK_URL` | `http://localhost:8080/api/v1/sentinel/report` | 异常上报的 webhook 接收地址 |
 | `bug.sentinel.environment` | `BUG_SENTINEL_ENV` | `${spring.profiles.active:default}` | 环境标签，用于在告警平台区分 dev/staging/prod |
+| `BUG_SENTINEL_TOKEN` | `BUG_SENTINEL_TOKEN` | empty | starter webhook client 与 backend receiver 共用的认证 secret |
+
+`BUG_SENTINEL_TOKEN` 必须同时配置在 starter webhook client（发送端）和 backend Sentinel receiver（接收端）；两者使用同一个外部 Secret。保持 `BUG_SENTINEL_ENABLED=false` 时不会初始化 Sentinel。
 | `spring.application.name` | - | `default-project` | 项目名，作为上报 payload 的 `projectName` 字段 |
 
 ### application.yml 示例

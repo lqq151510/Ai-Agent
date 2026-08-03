@@ -40,8 +40,10 @@ services:
       test:
         [
           "CMD-SHELL",
-          "if [ -n \"${REDIS_PASSWORD:-}\" ]; then redis-cli -a \"${REDIS_PASSWORD}\" ping; else redis-cli ping; fi | grep -q PONG"
+          "redis-cli ping | grep -q PONG"
         ]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-}
       interval: 10s
       timeout: 5s
       retries: 10
@@ -71,8 +73,11 @@ services:
   backend:
     image: ${BACKEND_IMAGE_REPO:-ai-agent-backend}:${APP_IMAGE_TAG:-latest}
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
+      # Optional credentialed BuildKit build:
+      # docker build --secret id=maven_settings,src=.mvn/settings.xml -f backend/Dockerfile .
+      # Compose config intentionally does not bind a local secret file.
     container_name: ai-agent-backend
     depends_on:
       postgres:

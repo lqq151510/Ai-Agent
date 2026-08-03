@@ -1,85 +1,45 @@
 import { Router } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
+import { listWorkspaceEntries } from '../file-access.js';
+import { resolveWorkspacePath, toRelative } from '../path-access.js';
 
-export const workspaceRouter = Router();
+const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', '__pycache__', '.venv', 'venv', 'target', '.gradle', 'coverage', '.nyc_output', '.cache']);
+interface FileTreeNode { name: string; path: string; type: 'file' | 'directory'; children?: FileTreeNode[]; size?: number; }
 
-// Directories to ignore when building the file tree
-const IGNORED_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', 'out', '.next',
-  '__pycache__', '.venv', 'venv', 'target', '.gradle',
-  'coverage', '.nyc_output', '.cache'
-]);
-
-interface FileTreeNode {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  children?: FileTreeNode[];
-  size?: number;
+export function createWorkspaceRouter(root: string, options: { treeMaxDepth?: number; treeMaxNodes?: number } = {}): Router {
+  const router = Router();
+  const maxDepth = options.treeMaxDepth ?? 5;
+  const maxNodes = options.treeMaxNodes ?? 2_000;
+  router.get('/tree', (req, res) => {
+    let start;
+    try { start = resolveWorkspacePath(root, req.query.path); } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : 'invalid path' });
+    }
+    if (!fs.statSync(start.absolute).isDirectory()) return res.status(400).json({ error: 'path is not a directory' });
+    const requestedDepth = Number.parseInt(String(req.query.depth ?? '3'), 10);
+    const depth = Number.isFinite(requestedDepth) ? Math.max(0, Math.min(requestedDepth, maxDepth)) : 3;
+    const state = { nodes: 0, truncated: false, visited: new Set<string>() };
+    return res.json({ path: start.relative, tree: buildTree(root, start.absolute, 0, depth, maxNodes, state), truncated: state.truncated });
+  });
+  return router;
 }
 
-function buildFileTree(dirPath: string, depth: number, maxDepth: number): FileTreeNode[] {
-  if (depth > maxDepth) return [];
-
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
+function buildTree(root: string, directory: string, level: number, maxDepth: number, maxNodes: number, state: { nodes: number; truncated: boolean; visited: Set<string> }): FileTreeNode[] {
+  if (level > maxDepth || state.visited.has(directory)) return [];
+  state.visited.add(directory);
   const nodes: FileTreeNode[] = [];
-  for (const entry of entries) {
-    if (entry.name.startsWith('.') && depth === 0) {
-      // Show hidden files only at root? Skip for clarity
-      continue;
-    }
-    if (IGNORED_DIRS.has(entry.name)) continue;
-
-    const fullPath = path.join(dirPath, entry.name);
-    if (entry.isDirectory()) {
-      nodes.push({
-        name: entry.name,
-        path: fullPath,
-        type: 'directory',
-        children: buildFileTree(fullPath, depth + 1, maxDepth),
-      });
-    } else if (entry.isFile()) {
-      let size: number | undefined;
-      try {
-        size = fs.statSync(fullPath).size;
-      } catch { /* ignore */ }
-      nodes.push({ name: entry.name, path: fullPath, type: 'file', size });
+  for (const entry of listWorkspaceEntries(root, directory)) {
+    if (state.nodes >= maxNodes) { state.truncated = true; break; }
+    const name = entry.name;
+    if ((level === 0 && name.startsWith('.')) || IGNORED_DIRS.has(name)) continue;
+    state.nodes += 1;
+    if (entry.isDirectory) {
+      nodes.push({ name, path: toRelative(root, entry.absolute), type: 'directory', children: buildTree(root, entry.absolute, level + 1, maxDepth, maxNodes, state) });
+    } else {
+      nodes.push({ name, path: toRelative(root, entry.absolute), type: 'file', size: entry.size });
     }
   }
-
-  // Directories first, then files, each sorted alphabetically
-  nodes.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-
+  nodes.sort((a, b) => a.type !== b.type ? (a.type === 'directory' ? -1 : 1) : a.name.localeCompare(b.name));
   return nodes;
 }
-
-// GET /workspace/tree?path=<dir>&depth=3
-workspaceRouter.get('/tree', (req, res) => {
-  const dirPath = req.query['path'] as string;
-  const parsedDepth = Number.parseInt(req.query['depth'] as string || '3', 10);
-  const depth = Number.isFinite(parsedDepth)
-    ? Math.max(0, Math.min(parsedDepth, 5))
-    : 3;
-
-  if (!dirPath) {
-    return res.status(400).json({ error: 'path is required' });
-  }
-
-  const resolved = path.resolve(dirPath);
-  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
-    return res.status(404).json({ error: 'directory not found' });
-  }
-
-  const tree = buildFileTree(resolved, 0, depth);
-  return res.json({ path: resolved, tree });
-});

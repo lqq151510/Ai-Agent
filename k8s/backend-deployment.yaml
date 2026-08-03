@@ -11,11 +11,6 @@ spec:
     metadata:
       labels:
         app: backend
-      annotations:
-        # Prometheus 抓取注解 - 允许 Prometheus 自动发现并抓取该 Pod 的指标
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/actuator/prometheus"
     spec:
       containers:
       - name: backend
@@ -34,7 +29,43 @@ spec:
               name: app-config
               key: POSTGRES_USER
         - name: SPRING_DATASOURCE_PASSWORD
-          value: "postgres" # Should use Secret in real scenario
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: JWT_SECRET
+        - name: SECURITY_DB_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: SECURITY_DB_ENCRYPTION_KEY
+        - name: SECURITY_DB_LEGACY_ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: SECURITY_DB_LEGACY_ENCRYPTION_KEY
+              optional: true
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: OPENAI_API_KEY
+        - name: BUG_SENTINEL_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: BUG_SENTINEL_TOKEN
+              optional: true
+        - name: BUG_SENTINEL_OWNER_USER_ID
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: BUG_SENTINEL_OWNER_USER_ID
+              optional: true
         resources:
           requests:
             cpu: "250m"
@@ -50,7 +81,7 @@ spec:
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /actuator/health/readiness
+            path: /api/v1/system/health/ready
             port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10

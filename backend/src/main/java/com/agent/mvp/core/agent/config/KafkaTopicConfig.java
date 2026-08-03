@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.kafka.config.TopicBuilder;
 
 @Configuration
-@Profile("!desktop")
+@Profile("mq")
 public class KafkaTopicConfig {
 
     public static final String TOPIC_TASK_INPUT = "task-input-topic";

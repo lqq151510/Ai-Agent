@@ -9,6 +9,62 @@ on:
       - main
 
 jobs:
+  deployment-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Validate Compose and Kubernetes deployment configuration
+        run: |
+          set -euo pipefail
+          docker compose --env-file env/dev.env.example -f docker-compose.yml config --quiet
+          python3 - <<'PY'
+          from pathlib import Path
+
+          backend = Path("k8s/backend-deployment.yaml").read_text()
+          dockerfile = Path("backend/Dockerfile").read_text()
+          local_script = Path("start-local.sh").read_text()
+          kafka_config = Path("backend/src/main/java/com/agent/mvp/core/agent/config/KafkaTopicConfig.java").read_text()
+          postgres = Path("k8s/postgres-statefulset.yaml").read_text()
+          configmap = Path("k8s/configmap.yaml").read_text()
+          service = Path("k8s/backend-service.yaml").read_text()
+          assert 'required=true' in dockerfile
+          assert '/run/secrets/maven_settings' in dockerfile
+          assert 'id=github_actor,env=GITHUB_ACTOR' in dockerfile
+          assert 'id=github_token,env=GITHUB_TOKEN' in dockerfile
+          deploy = Path("scripts/deploy.sh").read_text()
+          assert 'MAVEN_SETTINGS_FILE must point to an existing Maven settings file' in deploy
+          assert '--secret "id=maven_settings,src=${MAVEN_SETTINGS_FILE}"' in deploy
+          assert '--secret "id=github_actor,env=GITHUB_ACTOR"' in deploy
+          assert '--secret "id=github_token,env=GITHUB_TOKEN"' in deploy
+          assert 'prometheus.io/scrape' not in backend
+          assert 'prometheus.io/port' not in backend
+          assert 'prometheus.io/path' not in backend
+          assert 'path: /actuator/health/liveness' in backend
+          assert 'path: /api/v1/system/health/ready' in backend
+          assert '@Profile("mq")' in kafka_config
+          assert 'KAFKA_BOOTSTRAP_SERVERS' not in configmap
+          assert 'eval' not in local_script
+          assert 'redis-cli -a' not in local_script
+          assert 'key: POSTGRES_PASSWORD' in backend
+          assert 'key: JWT_SECRET' in backend
+          assert 'key: SECURITY_DB_ENCRYPTION_KEY' in backend
+          assert 'key: SECURITY_DB_LEGACY_ENCRYPTION_KEY' in backend
+          assert 'key: OPENAI_API_KEY' in backend
+          assert 'name: BUG_SENTINEL_TOKEN' in backend
+          assert 'key: BUG_SENTINEL_TOKEN' in backend
+          assert 'BUG_SENTINEL_RECEIVER_TOKEN' not in backend
+          assert '@Value("${BUG_SENTINEL_TOKEN:}")' in Path("backend/src/main/java/com/agent/mvp/config/SentinelRequestFilter.java").read_text()
+          assert '@Value("${BUG_SENTINEL_TOKEN:}")' in Path("bug-sentinel-starter/src/main/java/com/agent/sentinel/BugSentinelAutoConfiguration.java").read_text()
+          assert 'value: "postgres"' not in backend
+          assert 'value: "postgres"' not in postgres
+          assert 'key: POSTGRES_PASSWORD' in postgres
+          assert 'SPRING_PROFILES_ACTIVE' not in configmap
+          assert 'name: http' in service
+          assert 'app: backend' in service
+          PY
+
   release-preflight:
     runs-on: ubuntu-latest
     permissions:

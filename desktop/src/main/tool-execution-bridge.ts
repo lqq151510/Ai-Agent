@@ -14,6 +14,7 @@
 import { PtyPool } from './pty-pool';
 import { ApprovalEngine, type ToolApprovalRequest, type ApprovalMode } from './approval-engine';
 import { ComputerUseManager } from './computer-use-manager';
+import { LocalServiceManager } from './local-service-manager';
 import { isReadOnlyCommand, parseCommandArgv } from './command-policy';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -44,6 +45,11 @@ export type ToolExecutionEvent = {
 
 export type ToolExecutionCallback = (event: ToolExecutionEvent) => void;
 
+type WorkspacePath = {
+  absolutePath: string;
+  relativePath: string;
+};
+
 // --------------- Constants ---------------
 
 /** Default timeout per tool execution (ms) */
@@ -64,8 +70,7 @@ export class ToolExecutionBridge {
   constructor(
     private ptyPool: PtyPool,
     private approvalEngine: ApprovalEngine,
-    private localServicePort: () => number,
-    private localServiceToken: () => string,
+    private localServiceManager: Pick<LocalServiceManager, 'fetchForWorkspace'>,
     private backendPort: () => number,
     private authToken: () => string | Promise<string>,
     private currentMode: () => ApprovalMode,
@@ -314,13 +319,13 @@ export class ToolExecutionBridge {
     const filePath = String(args.path || '');
     if (!filePath) throw new Error('No file path provided');
 
-    this.validatePathInWorkspace(filePath);
+    const workspaceRoot = this.currentWorkspaceOrThrow();
+    const { relativePath } = this.validatePathInWorkspace(filePath, workspaceRoot);
 
-    const port = this.localServicePort();
-    const token = this.localServiceToken();
-    const resp = await fetch(`http://127.0.0.1:${port}/file?path=${encodeURIComponent(filePath)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const resp = await this.localServiceManager.fetchForWorkspace(
+      workspaceRoot,
+      `/file?path=${encodeURIComponent(relativePath)}`,
+    );
     if (!resp.ok) throw new Error(`readFile failed: ${resp.status} ${await resp.text()}`);
     const data = await resp.json() as { content?: string; error?: string };
     if (data.error) throw new Error(data.error);
@@ -334,9 +339,9 @@ export class ToolExecutionBridge {
     const content = String(args.content || '');
     if (!filePath) throw new Error('No file path provided');
 
-    this.validatePathInWorkspace(filePath);
+    const { absolutePath } = this.validatePathInWorkspace(filePath);
 
-    const escapedPath = filePath.replace(/'/g, "'\\''");
+    const escapedPath = absolutePath.replace(/'/g, "'\\''");
     return this.execCli({
       command: `cat > '${escapedPath}' << 'ENDOFFILE'\n${content}\nENDOFFILE`,
     }, threadId);
@@ -354,14 +359,15 @@ export class ToolExecutionBridge {
   }
 
   private async execListTree(args: Record<string, unknown>): Promise<string> {
-    const dirPath = String(args.path || '.');
-    const depth = Number(args.depth) || 2;
+    const workspaceRoot = this.currentWorkspaceOrThrow();
+    const { relativePath: dirPath } = this.validatePathInWorkspace(String(args.path || '.'), workspaceRoot);
+    const parsedDepth = Number(args.depth);
+    const depth = Number.isFinite(parsedDepth) ? parsedDepth : 2;
 
-    const port = this.localServicePort();
-    const token = this.localServiceToken();
-    const resp = await fetch(`http://127.0.0.1:${port}/workspace/tree?path=${encodeURIComponent(dirPath)}&depth=${depth}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const resp = await this.localServiceManager.fetchForWorkspace(
+      workspaceRoot,
+      `/workspace/tree?path=${encodeURIComponent(dirPath)}&depth=${depth}`,
+    );
     if (!resp.ok) throw new Error(`listRepoTree failed: ${resp.status}`);
     const data = await resp.json() as { tree?: unknown };
     return JSON.stringify(data.tree ?? [], null, 2);
@@ -510,20 +516,21 @@ export class ToolExecutionBridge {
       });
   }
 
-  private validatePathInWorkspace(targetPath: string): void {
-    const ws = this.currentWorkspace();
+  private validatePathInWorkspace(targetPath: string, workspaceOverride?: string): WorkspacePath {
+    const ws = workspaceOverride ?? this.currentWorkspace();
     if (!ws) {
       throw new Error('No active workspace bound to validate path');
     }
 
     // Resolve absolute path (if file does not exist, realpathSync throws,
     // but for writeFile it might not exist yet, so we resolve the dirname if file doesn't exist)
+    const resolvedTarget = path.isAbsolute(targetPath) ? targetPath : path.resolve(ws, targetPath);
     let realTarget: string;
     try {
-      realTarget = fs.realpathSync(targetPath);
+      realTarget = fs.realpathSync(resolvedTarget);
     } catch (e: any) {
       if (e.code === 'ENOENT') {
-        const dir = path.dirname(targetPath);
+        const dir = path.dirname(resolvedTarget);
         const realDir = fs.realpathSync(dir);
         realTarget = path.join(realDir, path.basename(targetPath));
       } else {
@@ -532,8 +539,19 @@ export class ToolExecutionBridge {
     }
 
     const realWs = fs.realpathSync(ws);
-    if (!realTarget.startsWith(realWs)) {
+    const relativePath = path.relative(realWs, realTarget);
+    if (relativePath === '..' || relativePath.split(path.sep)[0] === '..' || path.isAbsolute(relativePath)) {
       throw new Error(`Access denied: path ${targetPath} is outside the current workspace.`);
     }
+    return {
+      absolutePath: realTarget,
+      relativePath: relativePath || '.',
+    };
+  }
+
+  private currentWorkspaceOrThrow(): string {
+    const workspace = this.currentWorkspace();
+    if (!workspace) throw new Error('No active workspace configured');
+    return workspace;
   }
 }

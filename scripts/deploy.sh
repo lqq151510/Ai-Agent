@@ -54,6 +54,21 @@ set -a
 source "${ENV_FILE}"
 set +a
 
+MAVEN_SETTINGS_FILE="${MAVEN_SETTINGS_FILE:-}"
+if [[ -z "${MAVEN_SETTINGS_FILE}" || ! -f "${MAVEN_SETTINGS_FILE}" ]]; then
+  echo "[deploy] MAVEN_SETTINGS_FILE must point to an existing Maven settings file" >&2
+  exit 1
+fi
+MAVEN_SETTINGS_FILE="$(cd "$(dirname "${MAVEN_SETTINGS_FILE}")" && pwd)/$(basename "${MAVEN_SETTINGS_FILE}")"
+if [[ -z "${GITHUB_ACTOR:-}" || -z "${GITHUB_TOKEN:-}" ]]; then
+  echo "[deploy] GITHUB_ACTOR and GITHUB_TOKEN are required for the private FlexAgent package" >&2
+  exit 1
+fi
+if ! docker buildx version >/dev/null 2>&1; then
+  echo "[deploy] Docker BuildKit/buildx is required for the Maven secret mounts" >&2
+  exit 1
+fi
+
 TAG="${REQUESTED_TAG}"
 if [[ -z "${TAG}" ]]; then
   TAG="$(date +%Y%m%d%H%M%S)"
@@ -93,7 +108,16 @@ run_compose() {
   APP_IMAGE_TAG="${TAG}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" "${args[@]}"
 }
 
-run_compose build backend python-service
+BACKEND_IMAGE="${BACKEND_IMAGE_REPO:-ai-agent-backend}:${TAG}"
+echo "[deploy] building backend image ${BACKEND_IMAGE} with BuildKit secrets"
+docker build \
+  --tag "${BACKEND_IMAGE}" \
+  --secret "id=maven_settings,src=${MAVEN_SETTINGS_FILE}" \
+  --secret "id=github_actor,env=GITHUB_ACTOR" \
+  --secret "id=github_token,env=GITHUB_TOKEN" \
+  --file "${ROOT_DIR}/backend/Dockerfile" \
+  "${ROOT_DIR}"
+run_compose build python-service
 run_compose up -d --remove-orphans
 
 if [[ -n "${PREV_CURRENT}" && "${PREV_CURRENT}" != "${TAG}" ]]; then

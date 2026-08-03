@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
   isReadOnlyCommand,
@@ -52,6 +55,25 @@ test('workspace access rejects escaped paths and normalizes depth', () => {
   assert.equal(normalizeTreeDepth(-3), 0);
 });
 
+test('list tree preserves an explicit depth of zero', async () => {
+  let request;
+  const bridge = new ToolExecutionBridge(
+    { findByThreadId: () => ({ cwd: process.cwd() }) },
+    { evaluate: () => ({ decision: 'approved' }) },
+    { fetchForWorkspace: async (_root, pathname) => {
+      request = pathname;
+      return { ok: true, json: async () => ({ tree: [] }) };
+    } },
+    () => 18080,
+    () => 'backend-token',
+    () => 'auto-edit',
+    () => process.cwd(),
+  );
+
+  await bridge.execListTree({ path: '.', depth: 0 });
+  assert.match(request, /depth=0$/);
+});
+
 test('tool approvals use the main-process pending call and cannot be replayed', async () => {
   const approvalEngine = {
     evaluate: () => ({ decision: 'requires-approval' }),
@@ -59,8 +81,7 @@ test('tool approvals use the main-process pending call and cannot be replayed', 
   const bridge = new ToolExecutionBridge(
     { findByThreadId: () => ({ cwd: process.cwd() }) },
     approvalEngine,
-    () => 8765,
-    () => 'local-token',
+    { fetchForWorkspace: async () => ({ ok: true, json: async () => ({}) }) },
     () => 18080,
     () => 'backend-token',
     () => 'auto-edit',
@@ -78,4 +99,59 @@ test('tool approvals use the main-process pending call and cannot be replayed', 
   assert.equal(result.output, 'git status');
   await assert.rejects(() => bridge.executeApproved('call-1'), /not pending/);
   await assert.rejects(() => bridge.executeApproved('forged-call'), /not pending/);
+});
+
+test('writeFile targets the validated workspace path when thread cwd differs', async (t) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'tool-bridge-workspace-'));
+  const threadCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'tool-bridge-thread-'));
+  fs.mkdirSync(path.join(workspace, 'nested'));
+  t.after(() => {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(threadCwd, { recursive: true, force: true });
+  });
+
+  let command;
+  const bridge = new ToolExecutionBridge(
+    { findByThreadId: () => ({ cwd: threadCwd }) },
+    { evaluate: () => ({ decision: 'approved' }) },
+    { fetchForWorkspace: async () => ({ ok: true, json: async () => ({}) }) },
+    () => 18080,
+    () => 'backend-token',
+    () => 'auto-edit',
+    () => workspace,
+  );
+  bridge.execCli = async args => {
+    command = args.command;
+    return 'written';
+  };
+
+  const result = await bridge.execWriteFile({ path: 'nested/output.txt', content: 'content' }, 'thread-1');
+
+  assert.equal(result, 'written');
+  assert.ok(command.includes(`'${path.join(fs.realpathSync(workspace), 'nested', 'output.txt')}'`));
+  assert.doesNotMatch(command, /'nested\/output\.txt'/);
+});
+
+test('local-service tool requests are bound to the current workspace without a port fallback', async () => {
+  const calls = [];
+  let workspace = '/workspace-a';
+  const bridge = new ToolExecutionBridge(
+    { findByThreadId: () => ({ cwd: process.cwd() }) },
+    { evaluate: () => ({ decision: 'approved' }) },
+    { fetchForWorkspace: async (root, pathname) => {
+      calls.push({ root, pathname });
+      return { ok: true, json: async () => ({ content: 'ok', tree: [] }) };
+    } },
+    () => 18080,
+    () => 'backend-token',
+    () => 'auto-edit',
+    () => workspace,
+  );
+
+  bridge.execReadFile = async () => 'ok';
+  workspace = '/workspace-b';
+  bridge.execListTree = async () => '[]';
+  await bridge.localServiceManager.fetchForWorkspace(workspace, '/workspace/tree');
+
+  assert.deepEqual(calls, [{ root: '/workspace-b', pathname: '/workspace/tree' }]);
 });

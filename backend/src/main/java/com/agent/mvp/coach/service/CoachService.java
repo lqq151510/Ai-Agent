@@ -93,31 +93,37 @@ public class CoachService {
         this.meterRegistry = meterRegistry;
     }
 
-    public void handleSentinelReport(SentinelReportRequest request) {
-        log.info(
-                "Received sentinel report for project {}: \n{}",
-                request.projectName(),
-                request.stackTrace());
-
-        List<String> codeContext = codeRAGService.searchRelatedCode(request.stackTrace(), 3);
-        String contextStr = String.join("\n---\n", codeContext);
-
+    public void handleSentinelReport(SentinelReportRequest request, UUID ownerUserId) {
+        String report = sanitizeSentinelContent(request.stackTrace());
         try {
+            log.info("Received sentinel report: source=sentinel, owner={}, length={}", ownerUserId, report.length());
+            List<String> codeContext = codeRAGService.searchRelatedCode(report, 3);
+            String contextStr = String.join("\n---\n", codeContext);
             LogDiagnosisAnalysis analysis =
-                    analyzeLog(request.stackTrace(), contextStr, null, null, null, null);
-            sentinelAlertBroadcaster.publish(
+                    analyzeLog(report, contextStr, null, null, null, null);
+            SentinelAlertResponse alert =
                     new SentinelAlertResponse(
-                            analysis.diagnosis().rootCause(), analysis.diagnosis().minimalFix()));
+                            analysis.diagnosis().rootCause(), analysis.diagnosis().minimalFix());
+            if (ownerUserId != null) sentinelAlertBroadcaster.publish(ownerUserId, alert);
             if (analysis.parseWarning() != null) {
-                log.warn("Sentinel diagnosis parse warning: {}", analysis.parseWarning());
+                log.warn("Sentinel diagnosis parse warning: source=sentinel, owner={}, length={}", ownerUserId, report.length());
             }
         } catch (Exception ex) {
-            log.warn("Failed to analyze sentinel report for project {}", request.projectName(), ex);
-            sentinelAlertBroadcaster.publish(
+            log.warn("Failed to analyze sentinel report: source=sentinel, owner={}, length={}", ownerUserId, report.length());
+            SentinelAlertResponse safeError =
                     new SentinelAlertResponse(
-                            "Unable to generate structured diagnosis: " + ex.getMessage(),
-                            "Inspect the stack trace and model provider configuration."));
+                            "Unable to generate structured diagnosis.",
+                            "Inspect the stack trace and model provider configuration.");
+            if (ownerUserId != null) sentinelAlertBroadcaster.publish(ownerUserId, safeError);
         }
+    }
+
+    private String sanitizeSentinelContent(String value) {
+        String text = value == null ? "" : value;
+        text = text.length() > 12000 ? text.substring(0, 12000) : text;
+        return text.replaceAll(
+                "(?i)(bearer\\s+|authorization\\s*[:=]\\s*|password|pwd|api[_-]?key|private_key|cookie|token)(\\s*[:=]\\s*|\\s+)[^\\s,;)]*",
+                "$1$2***");
     }
 
     public RequirementBreakdownResponse breakdown(

@@ -92,7 +92,10 @@ describe('managed local source bridge', () => {
         setManagedSourceFolderEnabled: async (payload) => calls.push(['enabled', payload]),
         scanManagedSourceFolder: async (payload) => calls.push(['scan', payload]),
         removeManagedSourceFolder: async (payload) => calls.push(['remove', payload]),
-        openManagedSourceAsset: async (payload) => calls.push(['open', payload]),
+        openManagedSourceAsset: async (payload) => {
+          calls.push(['open', payload]);
+          return { opened: true };
+        },
       },
     };
 

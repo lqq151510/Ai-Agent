@@ -1,44 +1,66 @@
 package com.agent.mvp.coach.service;
 
 import com.agent.mvp.coach.dto.SentinelAlertResponse;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @org.springframework.context.annotation.Profile("legacy")
 @Service
 public class SentinelAlertBroadcaster {
-    private final CopyOnWriteArrayList<SseEmitter> emitters = new CopyOnWriteArrayList<>();
-    private final AtomicReference<SentinelAlertResponse> lastAlert = new AtomicReference<>();
+    private static final int MAX_EMITTERS_PER_USER = 5;
+    private final Map<UUID, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
+    private final Map<UUID, SentinelAlertResponse> lastAlerts = new ConcurrentHashMap<>();
 
-    public SseEmitter subscribe() {
+    public SseEmitter subscribe(UUID userId) {
         SseEmitter emitter = new SseEmitter(0L);
-        emitters.add(emitter);
-        emitter.onCompletion(() -> emitters.remove(emitter));
-        emitter.onTimeout(() -> emitters.remove(emitter));
-        emitter.onError(error -> emitters.remove(emitter));
+        CopyOnWriteArrayList<SseEmitter> userEmitters = emitters.computeIfAbsent(userId, ignored -> new CopyOnWriteArrayList<>());
+        synchronized (userEmitters) {
+            if (userEmitters.size() >= MAX_EMITTERS_PER_USER) {
+                if (userEmitters.isEmpty()) {
+                    emitters.remove(userId, userEmitters);
+                }
+                emitter.completeWithError(new IllegalStateException("Too many alert subscriptions"));
+                return emitter;
+            }
+            userEmitters.add(emitter);
+        }
+        Runnable cleanup = () -> remove(userId, emitter);
+        emitter.onCompletion(cleanup);
+        emitter.onTimeout(cleanup);
+        emitter.onError(error -> cleanup.run());
 
-        SentinelAlertResponse current = lastAlert.get();
+        SentinelAlertResponse current = lastAlerts.get(userId);
         if (current != null) {
-            send(emitter, current);
+            send(userId, emitter, current);
         }
 
         return emitter;
     }
 
-    public void publish(SentinelAlertResponse alert) {
-        lastAlert.set(alert);
-        for (SseEmitter emitter : emitters) {
-            send(emitter, alert);
+    public void publish(UUID userId, SentinelAlertResponse alert) {
+        lastAlerts.put(userId, alert);
+        for (SseEmitter emitter : emitters.getOrDefault(userId, new CopyOnWriteArrayList<>())) {
+            send(userId, emitter, alert);
         }
     }
 
-    private void send(SseEmitter emitter, SentinelAlertResponse alert) {
+    private void remove(UUID userId, SseEmitter emitter) {
+        CopyOnWriteArrayList<SseEmitter> userEmitters = emitters.get(userId);
+        if (userEmitters != null) {
+            userEmitters.remove(emitter);
+            if (userEmitters.isEmpty()) emitters.remove(userId, userEmitters);
+        }
+    }
+
+    private void send(UUID userId, SseEmitter emitter, SentinelAlertResponse alert) {
         try {
             emitter.send(SseEmitter.event().name("alert").data(alert));
         } catch (Exception ex) {
-            emitters.remove(emitter);
+            remove(userId, emitter);
             try {
                 emitter.completeWithError(ex);
             } catch (Exception ignore) {
@@ -46,4 +68,5 @@ public class SentinelAlertBroadcaster {
             }
         }
     }
+
 }

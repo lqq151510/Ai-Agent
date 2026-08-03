@@ -147,14 +147,41 @@ Smoke test validates:
 
 ## Docker Services
 
-`docker-compose.yml` starts:
-- `backend` (Spring Boot API)
-- `python-service` (FastAPI document parsing/evaluation support)
-- `postgres`
-- `redis`
-- `kafka`
-- Milvus dependencies from `milvus-dc.yml`
-- Prometheus/Grafana monitoring
+`docker-compose.yml` starts the default services `postgres`, `redis`, `python-service`, and
+`backend` (Spring Boot API). Optional services are profile-gated:
+- Kafka: `docker compose --profile kafka up -d`
+- Milvus dependencies: `docker compose --profile milvus up -d`
+- Prometheus/Grafana/node exporter: `docker compose --profile monitoring up -d`
+
+The backend image uses the repository Maven reactor and may need the private FlexAgent package.
+The checked-in `.mvn/settings.xml` contains environment-variable placeholders, not credentials.
+For a credentialed BuildKit build, provide a real settings file path and credentials only for the
+command; none are written to the repository or image layers. The settings file contains no
+credentials; BuildKit injects the two credential values only into the Maven build process through
+secret environment mounts. This example copies the placeholder settings to a temporary file and
+removes it when the command exits:
+
+```bash
+tmp_settings="$(mktemp)"
+trap 'rm -f "$tmp_settings"' EXIT
+cp .mvn/settings.xml "$tmp_settings"
+GITHUB_ACTOR="${GITHUB_ACTOR:?GitHub Packages username}" \
+GITHUB_TOKEN="${GITHUB_TOKEN:?GitHub Packages read token}" \
+docker build \
+  --tag "${BACKEND_IMAGE_REPO:-ai-agent-backend}:${APP_IMAGE_TAG:-latest}" \
+  --secret "id=maven_settings,src=${tmp_settings}" \
+  --secret id=github_actor,env=GITHUB_ACTOR \
+  --secret id=github_token,env=GITHUB_TOKEN \
+  -f backend/Dockerfile .
+```
+
+The Compose `config --quiet` validation intentionally does not bind a local secret file;
+use the direct BuildKit command, or `scripts/deploy.sh` with the same inputs, when building
+the private FlexAgent image. A missing settings file or credential fails before deployment.
+
+Kafka is an independent infrastructure/profile choice. The default backend does not create Kafka
+topics; start Kafka separately and set `SPRING_PROFILES_ACTIVE=mq` plus
+`SPRING_KAFKA_BOOTSTRAP_SERVERS` only for an MQ deployment.
 
 Default URLs:
 - Backend: `http://localhost:8080`
@@ -206,14 +233,14 @@ node dist/index.js stream-chat --message "请给出一个简短状态总结"
 node dist/index.js
 
 # tool stats (table)
-node dist/index.js tool-stats --window-hours 24
+node dist/index.js tool-stats --window-hours 24 # legacy opt-in
 
 # tool stats (json / markdown)
 node dist/index.js tool-stats --window-hours 24 --json
 node dist/index.js tool-stats --window-hours 24 --markdown
 
 # release report (summary / json / markdown)
-node dist/index.js release-report --window-hours 24
+node dist/index.js release-report --window-hours 24 # legacy opt-in
 node dist/index.js release-report --window-hours 24 --json
 node dist/index.js release-report --window-hours 24 --markdown
 ```
@@ -248,6 +275,7 @@ SMOKE_RENDER_PDF=true ./scripts/smoke.sh dev
 - `POST /api/v1/agent/chat/stream` (SSE, includes `event: heartbeat`)
 
 ### Dev Coach
+- These Coach endpoints are legacy opt-in and require the corresponding legacy runtime configuration.
 - `POST /api/v1/coach/requirements/breakdown`
 - `POST /api/v1/coach/scaffolds`
 - `GET /api/v1/coach/scaffolds/{id}/download`
@@ -257,10 +285,15 @@ SMOKE_RENDER_PDF=true ./scripts/smoke.sh dev
 ### System
 - `GET /api/v1/system/models`
 - `GET /api/v1/system/health/ready`
-- `GET /api/v1/system/tool-stats?windowHours=24&sessionId=<optional>`
-- `GET /api/v1/system/tool-stats/export?windowHours=24&sessionId=<optional>&format=json|markdown`
-- `GET /api/v1/system/release-report?windowHours=24&sessionId=<optional>`
-- `GET /api/v1/system/release-report/export?windowHours=24&sessionId=<optional>&format=json|markdown`
+- `GET /api/v1/system/tool-stats?windowHours=24&sessionId=<optional>` (legacy opt-in)
+- `GET /api/v1/system/tool-stats/export?windowHours=24&sessionId=<optional>&format=json|markdown` (legacy opt-in)
+- `GET /api/v1/system/release-report?windowHours=24&sessionId=<optional>` (legacy opt-in)
+- `GET /api/v1/system/release-report/export?windowHours=24&sessionId=<optional>&format=json|markdown` (legacy opt-in)
+
+The default smoke test checks only default APIs. Set `SMOKE_ENABLE_LEGACY=true` to invoke
+Tool Stats and Release Report and generate their artifacts. To enable the legacy API runtime,
+set `SPRING_PROFILES_ACTIVE=legacy` and provide the required Sentinel receiver owner/token
+configuration.
 
 ### Desktop Computer Use
 - Desktop exposes macOS-only `computer_use` tool actions through approval-gated IPC:
@@ -291,6 +324,26 @@ Key runtime knobs:
 - `SMOKE_RENDER_PDF`
 - `SMOKE_ARTIFACTS_DIR`
 - `TECTONIC_BIN`
+
+## Kubernetes Secrets
+
+Kubernetes manifests reference an externally managed `app-secrets` Secret. Required keys are
+`POSTGRES_PASSWORD`, `JWT_SECRET`, `SECURITY_DB_ENCRYPTION_KEY`, and `OPENAI_API_KEY`.
+`SECURITY_DB_LEGACY_ENCRYPTION_KEY` is optional and is used only during key rotation.
+Sentinel forwarding optionally uses `BUG_SENTINEL_TOKEN` and
+`BUG_SENTINEL_OWNER_USER_ID`.
+
+```bash
+kubectl create secret generic app-secrets \
+  --from-literal=POSTGRES_PASSWORD='<replace-with-postgres-password>' \
+  --from-literal=JWT_SECRET='<replace-with-at-least-32-random-characters>' \
+  --from-literal=SECURITY_DB_ENCRYPTION_KEY='<replace-with-at-least-32-random-characters>' \
+  --from-literal=OPENAI_API_KEY='<replace-with-provider-key>'
+```
+
+Prometheus uses `/actuator/prometheus`, which remains authenticated and should be protected by
+appropriate scrape credentials or network policy. Readiness probes use the public
+`/api/v1/system/health/ready` endpoint.
 
 ## Notes
 - Error payloads include `requestId` for traceability.

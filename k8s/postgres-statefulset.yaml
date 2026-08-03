@@ -30,7 +30,10 @@ spec:
               name: app-config
               key: POSTGRES_USER
         - name: POSTGRES_PASSWORD
-          value: "postgres"
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: POSTGRES_PASSWORD
         volumeMounts:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data

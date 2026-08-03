@@ -160,18 +160,26 @@ const KnowledgeDeskApp = () => {
     window.setTimeout(() => setNotice(null), 3200);
   };
 
-  const refreshManagedSourceFolders = useCallback(async () => {
+  const refreshManagedSourceFolders = useCallback(async (isActive: () => boolean = () => true) => {
     if (!desktopManagedSourceFoldersAvailable) {
-      setManagedSourceFolders([]);
+      if (isActive()) setManagedSourceFolders([]);
       return [];
     }
     const folders = await listManagedSourceFolders();
-    setManagedSourceFolders(folders);
+    if (isActive()) setManagedSourceFolders(folders);
     return folders;
   }, [desktopManagedSourceFoldersAvailable]);
 
   useEffect(() => {
-    void refreshManagedSourceFolders().catch(() => setManagedSourceFolders([]));
+    let cancelled = false;
+
+    void Promise.resolve().then(() => refreshManagedSourceFolders(() => !cancelled)).catch(() => {
+      if (!cancelled) setManagedSourceFolders([]);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [refreshManagedSourceFolders]);
 
   const handleAddManagedSourceFolder = useCallback(async () => {

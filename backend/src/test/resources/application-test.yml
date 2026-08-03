@@ -89,3 +89,8 @@ logging:
     com.agent.mvp: INFO
     org.springframework.web: WARN
     org.hibernate: WARN
+
+bug:
+  sentinel:
+    enabled: false
+    max-request-bytes: 16384

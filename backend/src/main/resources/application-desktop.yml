@@ -109,4 +109,9 @@ logging:
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
 
 mybatis-plus:
-  type-handlers-package: com.agent.mvp.config
+      type-handlers-package: com.agent.mvp.config
+
+bug:
+  sentinel:
+    enabled: ${BUG_SENTINEL_ENABLED:false}
+    max-request-bytes: ${BUG_SENTINEL_MAX_REQUEST_BYTES:16384}

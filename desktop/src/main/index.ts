@@ -71,12 +71,12 @@ app.on('before-quit', async (event) => {
       cliManager.killAll();
     }
     if (ptyPool) ptyPool.killAll();
-    if (localServiceManager) localServiceManager.stop();
+     if (localServiceManager) await localServiceManager.stop();
     app.exit(0);
   } else if (cliManager) {
     cliManager.killAll();
     if (ptyPool) ptyPool.killAll();
-    if (localServiceManager) localServiceManager.stop();
+    if (localServiceManager) await localServiceManager.stop();
   }
 });
 
@@ -182,8 +182,7 @@ if (!gotTheLock) {
         toolBridge = new ToolExecutionBridge(
           ptyPool,
           approvalEngine,
-          () => localServiceManager.isReady() ? localServiceManager.getPort() : 8765,
-          () => localServiceManager.getToken(),
+          localServiceManager,
           () => activePort,
           () => ipcRegistry.getDesktopAccessToken(),
           () => approvalMode,
@@ -232,8 +231,9 @@ if (!gotTheLock) {
       }
 
       // Start local-service (non-blocking — best effort)
-      if (isLegacyEnabled) {
-        localServiceManager?.start().catch(err => {
+      const activeWorkspace = workspaceManager.getActiveWorkspace();
+      if (isLegacyEnabled && activeWorkspace) {
+        localServiceManager?.start(activeWorkspace).catch(err => {
           console.warn('[desktop] local-service failed to start (non-fatal):', err);
         });
       }

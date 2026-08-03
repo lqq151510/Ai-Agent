@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Bean;
  * <p>触发条件：
  * <ul>
  *   <li>classpath 中存在本 starter（即项目依赖 {@code bug-sentinel-starter}）</li>
- *   <li>配置 {@code bug.sentinel.enabled} 未显式设为 {@code false}（默认开启）</li>
+ *   <li>配置 {@code bug.sentinel.enabled=true}</li>
  * </ul>
  *
  * <p>自动注册以下组件：
@@ -22,10 +22,10 @@ import org.springframework.context.annotation.Bean;
  * </ul>
  */
 @AutoConfiguration
-@ConditionalOnProperty(prefix = "bug.sentinel", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "bug.sentinel", name = "enabled", havingValue = "true")
 public class BugSentinelAutoConfiguration {
 
-    @Value("${bug.sentinel.webhook.url:http://localhost:8080/api/v1/sentinel/report}")
+    @Value("${bug.sentinel.webhook.url:}")
     private String webhookUrl;
 
     @Value("${spring.application.name:default-project}")
@@ -35,10 +35,16 @@ public class BugSentinelAutoConfiguration {
     @Value("${bug.sentinel.environment:${spring.profiles.active:default}}")
     private String environment;
 
+    @Value("${BUG_SENTINEL_TOKEN:}")
+    private String token;
+
     @Bean
     @ConditionalOnMissingBean
     public SentinelWebhookClient sentinelWebhookClient() {
-        return new SentinelWebhookClient(webhookUrl, projectName, environment, true);
+        if (token.isBlank() || webhookUrl.isBlank()) {
+            throw new IllegalStateException("BUG_SENTINEL_TOKEN and bug.sentinel.webhook.url are required when Sentinel is enabled");
+        }
+        return new SentinelWebhookClient(webhookUrl, projectName, environment, token, true);
     }
 
     @Bean

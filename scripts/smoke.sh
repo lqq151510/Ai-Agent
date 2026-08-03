@@ -240,21 +240,25 @@ fi
 
 fetch_to_file "${BASE_URL}/api/v1/sessions/${SESSION_ID}/export?format=json" "${RUN_DIR}/session-export.json" "${ACCESS_TOKEN}"
 fetch_to_file "${BASE_URL}/api/v1/sessions/${SESSION_ID}/export?format=markdown" "${RUN_DIR}/session-export.md" "${ACCESS_TOKEN}"
-fetch_to_file "${BASE_URL}/api/v1/system/tool-stats?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}" "${RUN_DIR}/tool-stats.json" "${ACCESS_TOKEN}"
-fetch_to_file "${BASE_URL}/api/v1/system/tool-stats/export?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}&format=markdown" "${RUN_DIR}/tool-stats.md" "${ACCESS_TOKEN}"
-fetch_to_file "${BASE_URL}/api/v1/system/release-report?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}" "${RUN_DIR}/release-report.json" "${ACCESS_TOKEN}"
-fetch_to_file "${BASE_URL}/api/v1/system/release-report/export?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}&format=markdown" "${RUN_DIR}/release-report.md" "${ACCESS_TOKEN}"
-
-REPORT_ARGS=(
-  --input-json "${RUN_DIR}/release-report.json"
-  --output-dir "${RUN_DIR}"
-  --base-name "release-report"
-  --title "AI Agent Beta Release Report (${ENV_NAME})"
-)
-if [[ "${RENDER_PDF}" == "true" ]]; then
-  REPORT_ARGS+=(--pdf)
+if [[ "$(normalize_bool "${SMOKE_ENABLE_LEGACY:-false}")" == "true" ]]; then
+  fetch_to_file "${BASE_URL}/api/v1/system/tool-stats?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}" "${RUN_DIR}/tool-stats.json" "${ACCESS_TOKEN}"
+  fetch_to_file "${BASE_URL}/api/v1/system/tool-stats/export?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}&format=markdown" "${RUN_DIR}/tool-stats.md" "${ACCESS_TOKEN}"
+  fetch_to_file "${BASE_URL}/api/v1/system/release-report?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}" "${RUN_DIR}/release-report.json" "${ACCESS_TOKEN}"
+  fetch_to_file "${BASE_URL}/api/v1/system/release-report/export?windowHours=${REPORT_WINDOW_HOURS}&sessionId=${SESSION_ID}&format=markdown" "${RUN_DIR}/release-report.md" "${ACCESS_TOKEN}"
 fi
-"${ROOT_DIR}/scripts/render-release-report.sh" "${REPORT_ARGS[@]}"
+
+if [[ "$(normalize_bool "${SMOKE_ENABLE_LEGACY:-false}")" == "true" ]]; then
+  REPORT_ARGS=(
+    --input-json "${RUN_DIR}/release-report.json"
+    --output-dir "${RUN_DIR}"
+    --base-name "release-report"
+    --title "AI Agent Beta Release Report (${ENV_NAME})"
+  )
+  if [[ "${RENDER_PDF}" == "true" ]]; then
+    REPORT_ARGS+=(--pdf)
+  fi
+  "${ROOT_DIR}/scripts/render-release-report.sh" "${REPORT_ARGS[@]}"
+fi
 
 cat > "${RUN_DIR}/run-summary.txt" <<EOF
 env=${ENV_NAME}

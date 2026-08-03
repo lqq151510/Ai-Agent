@@ -86,7 +86,11 @@ kubectl apply -f k8s/grafana-deployment.yaml
 # 若使用 Prometheus Operator，部署 ServiceMonitor
 kubectl apply -f k8s/servicemonitor.yaml
 
-# Backend Deployment 已添加 prometheus.io/scrape 注解，无需额外操作
+# Backend metrics are opt-in. Deploy `k8s/servicemonitor.yaml` only when the
+# Prometheus Operator CRD, selector labels, authentication, and network policy
+# have been configured for this cluster. Otherwise add an explicitly managed
+# scrape rule with equivalent access controls. No backend scrape annotation is
+# applied automatically.
 ```
 
 > **注意**：Grafana Deployment 引用了 `grafana-admin` Secret，部署前需创建：

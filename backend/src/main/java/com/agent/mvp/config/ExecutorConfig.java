@@ -2,6 +2,7 @@ package com.agent.mvp.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
@@ -9,6 +10,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 public class ExecutorConfig {
 
     @Bean(name = "agentStreamExecutor")
+    @Primary
     public ThreadPoolTaskExecutor agentStreamExecutor(AppProperties appProperties) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(
@@ -19,6 +21,19 @@ public class ExecutorConfig {
                 Math.max(1, appProperties.getAgent().getStreamExecutorQueueCapacity()));
         executor.setKeepAliveSeconds(60);
         executor.setThreadNamePrefix("agent-stream-");
+        executor.setDaemon(true);
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "sentinelExecutor")
+    public ThreadPoolTaskExecutor sentinelExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(32);
+        executor.setThreadNamePrefix("sentinel-");
+        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
         executor.setDaemon(true);
         executor.initialize();
         return executor;

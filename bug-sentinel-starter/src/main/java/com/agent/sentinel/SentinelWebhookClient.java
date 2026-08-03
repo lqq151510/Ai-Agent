@@ -9,9 +9,11 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -25,23 +27,29 @@ public class SentinelWebhookClient {
     private final String webhookUrl;
     private final String projectName;
     private final String environment;
+    private final String token;
     private final boolean enabled;
 
-    private final ExecutorService executor = Executors.newFixedThreadPool(
-            Math.max(2, Runtime.getRuntime().availableProcessors() / 2),
+    private final ExecutorService executor = new ThreadPoolExecutor(
+            2, 2, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(32),
             r -> {
                 Thread t = new Thread(r, "sentinel-webhook");
                 t.setDaemon(true);
                 return t;
-            }
+            }, new ThreadPoolExecutor.AbortPolicy()
     );
 
     public SentinelWebhookClient(String webhookUrl, String projectName) {
-        this(webhookUrl, projectName, "default", true);
+        this(webhookUrl, projectName, "default", "", false);
     }
 
     public SentinelWebhookClient(
             String webhookUrl, String projectName, String environment, boolean enabled) {
+        this(webhookUrl, projectName, environment, "", enabled);
+    }
+
+    public SentinelWebhookClient(
+            String webhookUrl, String projectName, String environment, String token, boolean enabled) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000);
         factory.setReadTimeout(10000);
@@ -52,7 +60,8 @@ public class SentinelWebhookClient {
                         : "http://localhost:8080/api/v1/sentinel/report";
         this.projectName = projectName != null ? projectName : "default-project";
         this.environment = environment != null ? environment : "default";
-        this.enabled = enabled;
+        this.token = token != null ? token : "";
+        this.enabled = enabled && !this.token.isBlank() && !this.webhookUrl.isBlank();
     }
 
     /**
@@ -65,28 +74,27 @@ public class SentinelWebhookClient {
             return;
         }
         final String tag = currentTag.get();
-        CompletableFuture.runAsync(
-                () -> {
-                    try {
-                        HttpHeaders headers = new HttpHeaders();
-                        headers.setContentType(MediaType.APPLICATION_JSON);
+        try {
+            executor.execute(() -> sendReport(stackTrace, tag));
+        } catch (RejectedExecutionException ignored) {
+            // A full queue drops diagnostics without affecting the request path.
+        }
+    }
 
-                        Map<String, String> payload = new HashMap<>();
-                        payload.put("projectName", projectName);
-                        payload.put("environment", environment);
-                        payload.put("stackTrace", stackTrace);
-                        if (tag != null && !tag.isBlank()) {
-                            payload.put("tag", tag);
-                        }
-
-                        HttpEntity<Map<String, String>> request = new HttpEntity<>(payload, headers);
-                        restTemplate.postForEntity(webhookUrl, request, String.class);
-                    } catch (Exception e) {
-                        // 上报失败静默忽略，避免无限循环
-                        System.err.println("Failed to send sentinel report: " + e.getMessage());
-                    }
-                },
-                executor);
+    private void sendReport(String stackTrace, String tag) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Sentinel " + token);
+            Map<String, String> payload = new HashMap<>();
+            payload.put("projectName", projectName);
+            payload.put("environment", environment);
+            payload.put("stackTrace", SentinelRedactor.redact(stackTrace, 4000));
+            if (tag != null && !tag.isBlank()) payload.put("tag", tag);
+            restTemplate.postForEntity(webhookUrl, new HttpEntity<>(payload, headers), String.class);
+        } catch (Exception ignored) {
+            // 上报失败静默忽略，避免影响主业务或形成递归
+        }
     }
 
     @PreDestroy

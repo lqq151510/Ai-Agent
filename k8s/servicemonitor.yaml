@@ -1,6 +1,7 @@
-# ServiceMonitor - Prometheus Operator CRD
+# ServiceMonitor - Prometheus Operator CRD (opt-in)
 # 若集群已安装 Prometheus Operator，使用此 ServiceMonitor 自动发现抓取目标
 # 若未安装 Prometheus Operator，则使用 prometheus-config.yaml 中的 kubernetes-pods 抓取配置
+# 启用前必须由 Operator 配置 /actuator/prometheus 的认证和网络保护；默认不应用此清单。
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:

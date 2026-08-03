@@ -87,6 +87,30 @@ class StartupValidationRunnerTest {
     }
 
     @Test
+    void shouldTreatNullActiveProfilesAsNonH2() {
+        SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
+        when(diagnosticsService.checkDatabase()).thenReturn(readinessCheck("database", true, "ok"));
+        when(diagnosticsService.checkRedis()).thenReturn(readinessCheck("redis", true, "ok"));
+        when(diagnosticsService.checkModelProvider())
+                .thenReturn(readinessCheck("model", true, "ok"));
+        AppProperties appProperties = new AppProperties();
+        appProperties.getOpenai().setApiKey("sk-test");
+        appProperties.getOpenai().setBaseUrl("http://localhost:1234/v1");
+        appProperties.setDefaultOpenaiModel("qwen/qwen3.5-9b");
+        StartupValidationRunner runner =
+                new StartupValidationRunner(
+                        appProperties,
+                        diagnosticsService,
+                        mockEnvWithNullProfiles("01234567890123456789012345678901"));
+
+        assertDoesNotThrow(() -> runner.run(mock(ApplicationArguments.class)));
+
+        verify(diagnosticsService).checkDatabase();
+        verify(diagnosticsService).checkRedis();
+        verify(diagnosticsService).checkModelProvider();
+    }
+
+    @Test
     void shouldPassWhenModelProviderCheckFailsAndFailFastDisabled() {
         SystemDiagnosticsService diagnosticsService = mock(SystemDiagnosticsService.class);
         when(diagnosticsService.checkDatabase()).thenReturn(readinessCheck("database", true, "ok"));
@@ -184,6 +208,14 @@ class StartupValidationRunnerTest {
         org.springframework.core.env.Environment env =
                 mock(org.springframework.core.env.Environment.class);
         when(env.getProperty("security.jwt.secret")).thenReturn(secret);
+        when(env.getActiveProfiles()).thenReturn(new String[] {"desktop"});
+        return env;
+    }
+
+    private org.springframework.core.env.Environment mockEnvWithNullProfiles(String secret) {
+        org.springframework.core.env.Environment env = mockEnv(secret);
+        when(env.getActiveProfiles()).thenReturn(null);
+        when(env.getProperty("spring.datasource.password")).thenReturn("test-password");
         return env;
     }
 }

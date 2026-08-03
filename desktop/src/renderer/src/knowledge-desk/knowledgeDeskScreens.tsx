@@ -1400,7 +1400,7 @@ export const DetailPage = ({
     setIsEditing(true);
   };
 
-  const useManagedSourceAsset = async (action: 'open' | 'reveal') => {
+  const handleManagedSourceAsset = async (action: 'open' | 'reveal') => {
     if (!item.sourceAsset || item.sourceAsset.availability !== 'available') return;
     setSourceAssetAction(action);
     setSourceAssetError(null);
@@ -1557,10 +1557,10 @@ export const DetailPage = ({
           </div>
           {item.sourceAsset.availability === 'available' ? (
             <div className="kd-source-asset__actions">
-              <button disabled={sourceAssetAction !== null} onClick={() => void useManagedSourceAsset('open')} type="button">
+              <button disabled={sourceAssetAction !== null} onClick={() => void handleManagedSourceAsset('open')} type="button">
                 {sourceAssetAction === 'open' ? <Loader2 className="animate-spin" size={14} /> : <Eye size={14} />} 打开原件
               </button>
-              <button disabled={sourceAssetAction !== null} onClick={() => void useManagedSourceAsset('reveal')} type="button">
+              <button disabled={sourceAssetAction !== null} onClick={() => void handleManagedSourceAsset('reveal')} type="button">
                 {sourceAssetAction === 'reveal' ? <Loader2 className="animate-spin" size={14} /> : <FolderOpen size={14} />} 在 Finder 中显示
               </button>
             </div>

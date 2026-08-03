@@ -31,16 +31,19 @@ public class SecurityConfig {
     private final AppProperties appProperties;
     private final RequestContextFilter requestContextFilter;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final SentinelRequestFilter sentinelRequestFilter;
     private final ObjectMapper objectMapper;
 
     public SecurityConfig(
             AppProperties appProperties,
             RequestContextFilter requestContextFilter,
             JwtAuthenticationFilter jwtAuthenticationFilter,
+            SentinelRequestFilter sentinelRequestFilter,
             ObjectMapper objectMapper) {
         this.appProperties = appProperties;
         this.requestContextFilter = requestContextFilter;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.sentinelRequestFilter = sentinelRequestFilter;
         this.objectMapper = objectMapper;
     }
 
@@ -58,7 +61,6 @@ public class SecurityConfig {
                                                 "/api/v1/auth/login",
                                                 "/api/v1/auth/register",
                                                 "/api/v1/auth/refresh",
-                                                "/api/v1/sentinel/report",
                                                 "/api/v1/system/health/ready",
                                                 "/actuator/health/liveness")
                                         .permitAll()
@@ -86,7 +88,8 @@ public class SecurityConfig {
                                                                             "requestId",
                                                                             requestId)));
                                         }))
-                .addFilterBefore(requestContextFilter, UsernamePasswordAuthenticationFilter.class)
+                 .addFilterBefore(requestContextFilter, UsernamePasswordAuthenticationFilter.class)
+                 .addFilterBefore(sentinelRequestFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(
                         jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
@@ -106,6 +109,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @org.springframework.context.annotation.Profile("!desktop")
     public CorsConfigurationSource corsConfigurationSource() {
         List<String> allowedOrigins =
                 appProperties.getCors().getAllowedOrigins().stream()
