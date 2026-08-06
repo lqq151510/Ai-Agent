@@ -9,7 +9,7 @@
 - Electron main 是唯一可接触真实文件路径、受管原件目录和监听配置的层。
 - 后端只保存不透明的 asset ID、显示文件名、媒体类型、字节数、哈希和可用状态；不保存本机路径或文件内容。
 - Renderer 只接收安全元数据和 opaque ID；打开、定位、扫描和配置操作均经专用 IPC。
-- 仅处理普通 `.pdf`、`.md`、`.markdown`、`.txt`、`.html`、`.htm` 文件，单文件不超过 20 MiB。
+- 仅处理普通 `.pdf`、`.md`、`.markdown`、`.txt`、`.html`、`.htm`、`.docx`、`.pptx` 文件，单文件不超过 20 MiB；旧二进制 `.doc`、`.ppt` 继续拒绝。
 
 ## 受管原件
 

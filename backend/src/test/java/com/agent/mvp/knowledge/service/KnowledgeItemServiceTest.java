@@ -112,6 +112,52 @@ class KnowledgeItemServiceTest {
     }
 
     @Test
+    void importUploadShouldMapPptxToMarkdownUsingItsFilenameContract() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        UUID userId = UUID.randomUUID();
+        MockMultipartFile file =
+                new MockMultipartFile(
+                        "file",
+                        "architecture.PPTX",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        "pptx binary bytes".getBytes());
+        when(markItDownService.parseDocument(any()))
+                .thenReturn(
+                        new ParsedDocument(
+                                "architecture.PPTX",
+                                "# Architecture\n\nKnowledge Desk overview",
+                                "pptx",
+                                Map.of("title", "Knowledge Desk Architecture")));
+        when(itemTagRepository.findTagIdsByKnowledgeItemId(any())).thenReturn(List.of());
+
+        var response = service.importUpload(userId, file, null);
+
+        assertEquals("markdown", response.sourceType());
+        assertEquals("Knowledge Desk Architecture", response.title());
+        assertEquals("upload://architecture.PPTX", response.sourceUri());
+        ArgumentCaptor<KnowledgeItem> itemCaptor = ArgumentCaptor.forClass(KnowledgeItem.class);
+        verify(itemRepository).insert(itemCaptor.capture());
+        assertEquals("markdown", itemCaptor.getValue().getSourceType());
+        verify(markItDownService).parseDocument(any());
+    }
+
+    @Test
     void importUploadShouldPersistAndReturnOnlySafeManagedSourceAssetMetadata() throws Exception {
         KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
         KnowledgeSourceAssetRepository sourceAssetRepository =
@@ -139,12 +185,13 @@ class KnowledgeItemServiceTest {
         MockMultipartFile file =
                 new MockMultipartFile(
                         "file",
-                        "/Users/ze/private/managed-notes.md",
-                        "text/markdown",
+                        "/Users/ze/private/managed-notes.docx",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         bytes);
         when(itemRepository.selectCount(any())).thenReturn(0L);
         when(markItDownService.parseDocument(any()))
-                .thenReturn(new ParsedDocument("managed-notes.md", "# Managed", "md", Map.of()));
+                .thenReturn(
+                        new ParsedDocument("managed-notes.docx", "# Managed", "docx", Map.of()));
         when(itemTagRepository.findTagIdsByKnowledgeItemId(any())).thenReturn(List.of());
         AtomicReference<KnowledgeSourceAsset> storedAsset = new AtomicReference<>();
         Mockito.doAnswer(
@@ -171,15 +218,20 @@ class KnowledgeItemServiceTest {
         assertEquals(userId, persistedAsset.getUserId());
         assertEquals(response.id(), persistedAsset.getKnowledgeItemId());
         assertEquals(itemCaptor.getValue().getContentHash(), persistedAsset.getContentHash());
-        assertEquals("managed-notes.md", persistedAsset.getOriginalFilename());
-        assertEquals("text/markdown", persistedAsset.getMediaType());
+        assertEquals("markdown", response.sourceType());
+        assertEquals("managed-notes.docx", persistedAsset.getOriginalFilename());
+        assertEquals(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                persistedAsset.getMediaType());
         assertEquals((long) bytes.length, persistedAsset.getByteSize());
         assertEquals("watched_folder", persistedAsset.getOrigin());
         assertEquals("available", persistedAsset.getAvailability());
-        assertEquals("upload://managed-notes.md", response.sourceUri());
+        assertEquals("upload://managed-notes.docx", response.sourceUri());
         assertEquals(sourceAssetId, response.sourceAsset().id());
-        assertEquals("managed-notes.md", response.sourceAsset().originalFilename());
-        assertEquals("text/markdown", response.sourceAsset().mediaType());
+        assertEquals("managed-notes.docx", response.sourceAsset().originalFilename());
+        assertEquals(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                response.sourceAsset().mediaType());
         assertEquals((long) bytes.length, response.sourceAsset().byteSize());
         assertEquals("watched_folder", response.sourceAsset().origin());
         assertEquals("available", response.sourceAsset().availability());
@@ -189,6 +241,53 @@ class KnowledgeItemServiceTest {
         assertFalse(responseJson.contains("contentHash"));
         assertFalse(responseJson.contains("storageKey"));
         assertFalse(responseJson.contains("/Users/ze/private"));
+    }
+
+    @Test
+    void importUploadShouldRejectLegacyOfficeExtensionsBeforeProfileOrParsing() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        new KnowledgeOrganizerService(),
+                        markItDownService,
+                        userProfileService,
+                        new ObjectMapper());
+
+        BadRequestException docException =
+                assertThrows(
+                        BadRequestException.class,
+                        () ->
+                                service.importUpload(
+                                        UUID.randomUUID(),
+                                        new MockMultipartFile(
+                                                "file", "legacy.doc", "application/msword", "bytes".getBytes()),
+                                        null));
+        BadRequestException pptException =
+                assertThrows(
+                        BadRequestException.class,
+                        () ->
+                                service.importUpload(
+                                        UUID.randomUUID(),
+                                        new MockMultipartFile(
+                                                "file",
+                                                "legacy.ppt",
+                                                "application/vnd.ms-powerpoint",
+                                                "bytes".getBytes()),
+                                        null));
+
+        assertEquals("Uploaded file type is not supported: doc", docException.getMessage());
+        assertEquals("Uploaded file type is not supported: ppt", pptException.getMessage());
+        verifyNoInteractions(userProfileService, markItDownService);
+        verify(itemRepository, never()).insert(any(KnowledgeItem.class));
     }
 
     @Test
@@ -1341,6 +1440,8 @@ class KnowledgeItemServiceTest {
         assertEquals(7, response.totalItems());
         assertEquals(4, response.readyItems());
         assertEquals(2, response.failedItems());
+        assertEquals(0, response.review().dueCount());
+        assertNull(response.review().nextDueAt());
         assertEquals("rag", response.topTags().get(0).name());
         assertEquals(7, response.topTags().get(0).usageCount());
         assertTrue(sqlSelect.contains("title"));

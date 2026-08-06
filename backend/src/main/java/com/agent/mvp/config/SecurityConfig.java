@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -73,6 +74,7 @@ public class SecurityConfig {
                                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                                             response.setContentType(
                                                     MediaType.APPLICATION_JSON_VALUE);
+                                            response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
                                             String requestId = RequestContext.ensureRequestId();
                                             response.setHeader(
                                                     RequestContext.REQUEST_ID_HEADER, requestId);

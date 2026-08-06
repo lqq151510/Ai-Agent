@@ -35,6 +35,8 @@ const backup = {
   modelSourcesIncluded: false,
 };
 
+const normalizedBackup = { ...backup, reviewStates: [] };
+
 afterEach(() => {
   delete window.electronAPI;
 });
@@ -60,7 +62,7 @@ describe('Knowledge Desk backup API', () => {
       },
     };
 
-    await expect(exportKnowledgeDeskBackup()).resolves.toEqual(backup);
+    await expect(exportKnowledgeDeskBackup()).resolves.toEqual(normalizedBackup);
     await expect(importKnowledgeDeskBackup(backup)).resolves.toMatchObject({
       importedItems: 1,
       modelSourcesRestored: false,
@@ -69,7 +71,7 @@ describe('Knowledge Desk backup API', () => {
 
     expect(requests).toEqual([
       { method: 'GET', path: '/api/v1/settings/export', body: undefined },
-      { method: 'POST', path: '/api/v1/settings/import', body: backup },
+      { method: 'POST', path: '/api/v1/settings/import', body: normalizedBackup },
     ]);
     expect(JSON.stringify(backup)).not.toContain('apiKey');
     expect(backup).not.toHaveProperty('modelSources');
@@ -86,13 +88,28 @@ describe('Knowledge Desk backup API', () => {
       },
     };
 
-    await expect(saveKnowledgeDeskBackup(backup)).resolves.toBe('/tmp/knowledge-desk-backup.json');
+    await expect(saveKnowledgeDeskBackup(normalizedBackup)).resolves.toBe('/tmp/knowledge-desk-backup.json');
     expect(savePayload.suggestedName).toMatch(/^knowledge-desk-backup-.*\.json$/);
-    expect(JSON.parse(savePayload.content)).toEqual(backup);
+    expect(JSON.parse(savePayload.content)).toEqual(normalizedBackup);
   });
 
-  it('rejects malformed, legacy, and model-source-bearing backup files before import', () => {
-    expect(parseKnowledgeDeskBackup(JSON.stringify(backup))).toEqual(backup);
+  it('normalizes legacy backups and validates optional review states before import', () => {
+    expect(parseKnowledgeDeskBackup(JSON.stringify(backup))).toEqual(normalizedBackup);
+    const withReviewState = {
+      ...normalizedBackup,
+      reviewStates: [{
+        knowledgeItemId: 'item-rag',
+        dueAt: '2026-08-01T08:00:00.000Z',
+        intervalDays: 3,
+        easeFactor: 2.5,
+        repetitions: 2,
+        lastRating: 'good',
+        lastReviewedAt: '2026-07-29T08:00:00.000Z',
+        createdAt: '2026-07-29T08:00:00.000Z',
+        updatedAt: '2026-07-29T08:00:00.000Z',
+      }],
+    };
+    expect(parseKnowledgeDeskBackup(JSON.stringify(withReviewState))).toEqual(withReviewState);
     expect(() => parseKnowledgeDeskBackup('{bad json')).toThrow('不是有效的 JSON');
     expect(() => parseKnowledgeDeskBackup(JSON.stringify({ ...backup, schemaVersion: 2 }))).toThrow('不支持该备份版本');
     expect(() => parseKnowledgeDeskBackup(JSON.stringify({ ...backup, modelSourcesIncluded: true }))).toThrow('不支持该备份版本');
@@ -102,6 +119,14 @@ describe('Knowledge Desk backup API', () => {
     expect(() => parseKnowledgeDeskBackup(JSON.stringify({
       ...backup,
       knowledgeItems: [{ ...backup.knowledgeItems[0], updatedAt: undefined }],
+    }))).toThrow('不支持该备份版本');
+    expect(() => parseKnowledgeDeskBackup(JSON.stringify({
+      ...normalizedBackup,
+      reviewStates: [{ ...withReviewState.reviewStates[0], easeFactor: 1.2 }],
+    }))).toThrow('不支持该备份版本');
+    expect(() => parseKnowledgeDeskBackup(JSON.stringify({
+      ...normalizedBackup,
+      reviewStates: [{ ...withReviewState.reviewStates[0], lastRating: 'unknown' }],
     }))).toThrow('不支持该备份版本');
   });
 });

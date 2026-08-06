@@ -17,6 +17,7 @@ import { ComputerUseManager } from './computer-use-manager';
 import { KnowledgeSourceManager } from './knowledge-source-manager';
 import { findFreePort } from './utils/network';
 import { getDataDir, getJrePath, getBackendJarPath, getBackendStartupTimeoutMs } from './utils/env';
+import { getLocalBackendEndpoint } from './utils/local-backend-endpoint';
 import { ensureDesktopSecrets } from './utils/secrets';
 
 // Unhandled Promise Rejection Handling
@@ -136,16 +137,22 @@ if (!gotTheLock) {
         windowManager?.mainWindow?.webContents.send('app:shortcut', { action: 'focus-input' });
       });
 
-      try {
-        activePort = await findFreePort(DESKTOP_PORT, DESKTOP_PORT + 10);
-      } catch (error) {
-        console.warn('[desktop] Failed to find free port, falling back to default', error);
+      const attachedBackend = getLocalBackendEndpoint();
+      if (attachedBackend) {
+        activePort = attachedBackend.port;
+        console.info(`[desktop] Attaching to externally managed local backend at ${attachedBackend.baseUrl}`);
+      } else {
+        try {
+          activePort = await findFreePort(DESKTOP_PORT, DESKTOP_PORT + 10);
+        } catch (error) {
+          console.warn('[desktop] Failed to find free port, falling back to default', error);
+        }
       }
 
       const dataDir = getDataDir();
       const jrePath = getJrePath();
       const jarPath = getBackendJarPath();
-      const secrets = ensureDesktopSecrets(dataDir);
+      const secrets = attachedBackend ? undefined : ensureDesktopSecrets(dataDir);
 
       // Legacy developer tools can only run from a source checkout. A signed
       // distribution must never enable Computer Use or its raw automation IPC
@@ -155,6 +162,7 @@ if (!gotTheLock) {
       backendManager = new BackendManager(jrePath, jarPath, dataDir, activePort, {
         startupTimeoutMs: getBackendStartupTimeoutMs(),
         secrets,
+        attachedBackend: attachedBackend ?? undefined,
       });
       windowManager = new WindowManager();
       trayManager = new TrayManager(windowManager, backendManager);
@@ -183,7 +191,7 @@ if (!gotTheLock) {
           ptyPool,
           approvalEngine,
           localServiceManager,
-          () => activePort,
+          () => backendManager.getBaseUrl(),
           () => ipcRegistry.getDesktopAccessToken(),
           () => approvalMode,
           () => workspaceManager.getActiveWorkspace(),
@@ -197,6 +205,7 @@ if (!gotTheLock) {
         workspaceManager!, gitManager!, chatManager!,
         localServiceManager!,
         () => activePort,
+        () => backendManager.getBaseUrl(),
         threadManager!,
         toolBridge!,
         approvalEngine!,

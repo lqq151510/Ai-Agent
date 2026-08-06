@@ -2,6 +2,33 @@
 
 AI Agent 桌面客户端，基于 Electron 构建，集成后端 Java 服务、React Renderer、TS CLI、本地服务、Review/Skills/Computer Use 面板。
 
+> 当前按单机 macOS 使用维护；签名、安装包和部署说明不是日常使用前提。
+
+## 本机源代码启动
+
+推荐让 Electron 附着到你手动启动的 desktop profile。这样改 Java 源码后无需重建内嵌 JAR，退出桌面端也不会停止后端。
+
+```bash
+# 首次：在仓库根目录创建被 git 忽略的本机配置，并替换两个持久化随机值
+cp env/local-desktop.env.example env/local-desktop.env
+chmod 600 env/local-desktop.env
+
+# 终端 A：启动本机 H2 + Caffeine 后端
+cd backend
+set -a; source ../env/local-desktop.env; set +a
+SPRING_PROFILES_ACTIVE=desktop SERVER_PORT=18080 SERVER_ADDRESS=127.0.0.1 mvn spring-boot:run
+
+# 终端 B：启动 Renderer
+cd ../desktop/src/renderer
+npm install && npm run dev
+
+# 终端 C：启动 Electron 并附着到终端 A
+cd ../..
+npm install && npm run dev:attached
+```
+
+`DESKTOP_BACKEND_URL` 默认是 `http://127.0.0.1:18080`，可改为其他本机端口；它只接受 `127.0.0.1`、`localhost` 或 `[::1]` 的 HTTP 地址，且拒绝路径、查询参数和凭据。
+
 ## 架构概览
 
 ```

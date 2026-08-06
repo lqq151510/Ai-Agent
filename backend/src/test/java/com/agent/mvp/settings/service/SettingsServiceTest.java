@@ -1,5 +1,6 @@
 package com.agent.mvp.settings.service;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -26,11 +27,14 @@ import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
 import com.agent.mvp.knowledge.repo.KnowledgeSourceAssetRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
+import com.agent.mvp.knowledge.review.KnowledgeReviewState;
+import com.agent.mvp.knowledge.review.KnowledgeReviewStateRepository;
 import com.agent.mvp.modelsource.entity.ModelSource;
 import com.agent.mvp.modelsource.repo.ModelSourceRepository;
 import com.agent.mvp.settings.dto.SettingsBackupKnowledgeItem;
 import com.agent.mvp.settings.dto.SettingsBackupPayload;
 import com.agent.mvp.settings.dto.SettingsBackupPreferences;
+import com.agent.mvp.settings.dto.SettingsBackupReviewState;
 import com.agent.mvp.settings.dto.SettingsBackupSourceAsset;
 import com.agent.mvp.settings.dto.SettingsBackupTag;
 import com.agent.mvp.settings.dto.UpdateSettingsProfileRequest;
@@ -622,6 +626,197 @@ class SettingsServiceTest {
                 knowledgeItemRepository,
                 knowledgeTagRepository,
                 knowledgeItemTagRepository);
+    }
+
+    @Test
+    void exportBackupShouldIncludeOwnedReviewStateWithoutNewSensitiveFields() throws Exception {
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
+        ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
+        KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeSourceAssetRepository knowledgeSourceAssetRepository =
+                mock(KnowledgeSourceAssetRepository.class);
+        KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
+        KnowledgeReviewStateRepository reviewStateRepository =
+                mock(KnowledgeReviewStateRepository.class);
+        SettingsService service =
+                new SettingsService(
+                        userProfileService,
+                        userProfileRepository,
+                        modelSourceRepository,
+                        knowledgeItemRepository,
+                        knowledgeSourceAssetRepository,
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository,
+                        reviewStateRepository);
+
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-08-06T12:00:00Z");
+        KnowledgeItem item =
+                KnowledgeItem.builder()
+                        .id(itemId)
+                        .userId(userId)
+                        .sourceType("markdown")
+                        .title("RAG notes")
+                        .rawContent("private body")
+                        .status("ready")
+                        .wordCount(1)
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build();
+        KnowledgeReviewState state =
+                KnowledgeReviewState.builder()
+                        .id(UUID.randomUUID())
+                        .userId(userId)
+                        .knowledgeItemId(itemId)
+                        .dueAt(now.plusSeconds(86_400))
+                        .intervalDays(1)
+                        .easeFactor(2.5)
+                        .repetitions(1)
+                        .lastRating("good")
+                        .lastReviewedAt(now)
+                        .createdAt(now)
+                        .updatedAt(now)
+                        .build();
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("user@example.com").build());
+        when(knowledgeTagRepository.selectList(any())).thenReturn(List.of());
+        when(knowledgeItemRepository.selectList(any())).thenReturn(List.of(item));
+        when(knowledgeSourceAssetRepository.selectList(any())).thenReturn(List.of());
+        when(knowledgeItemTagRepository.findTagsByKnowledgeItemIds(List.of(itemId)))
+                .thenReturn(List.of());
+        when(reviewStateRepository.selectList(any())).thenReturn(List.of(state));
+
+        SettingsBackupPayload backup = service.exportBackup(userId);
+
+        assertEquals(1, backup.reviewStates().size());
+        SettingsBackupReviewState exportedState = backup.reviewStates().getFirst();
+        assertEquals(itemId, exportedState.knowledgeItemId());
+        assertEquals("good", exportedState.lastRating());
+        String reviewJson =
+                new ObjectMapper().findAndRegisterModules().writeValueAsString(exportedState);
+        assertFalse(reviewJson.contains("rawContent"));
+        assertFalse(reviewJson.contains("sourceUri"));
+        assertFalse(reviewJson.contains("contentHash"));
+    }
+
+    @Test
+    void importBackupMapsReviewStateToNewlyCreatedKnowledgeItem() {
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
+        ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
+        KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeSourceAssetRepository knowledgeSourceAssetRepository =
+                mock(KnowledgeSourceAssetRepository.class);
+        KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
+        KnowledgeReviewStateRepository reviewStateRepository =
+                mock(KnowledgeReviewStateRepository.class);
+        SettingsService service =
+                new SettingsService(
+                        userProfileService,
+                        userProfileRepository,
+                        modelSourceRepository,
+                        knowledgeItemRepository,
+                        knowledgeSourceAssetRepository,
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository,
+                        reviewStateRepository);
+
+        UUID userId = UUID.randomUUID();
+        UUID backupItemId = UUID.randomUUID();
+        UUID backupTagId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-08-06T12:00:00Z");
+        SettingsBackupPayload legacyShape =
+                validBackup(
+                        backupItemId,
+                        List.of(new SettingsBackupTag(backupTagId, "rag", "#7a8a84", now)),
+                        List.of(backupTagId),
+                        "ready",
+                        "markdown");
+        SettingsBackupPayload backup =
+                new SettingsBackupPayload(
+                        legacyShape.schemaVersion(),
+                        legacyShape.exportedAt(),
+                        legacyShape.preferences(),
+                        legacyShape.tags(),
+                        legacyShape.knowledgeItems(),
+                        legacyShape.modelSourcesIncluded(),
+                        List.of(
+                                new SettingsBackupReviewState(
+                                        backupItemId,
+                                        now.plusSeconds(86_400),
+                                        1,
+                                        2.5,
+                                        1,
+                                        "good",
+                                        now,
+                                        now,
+                                        now)));
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("user@example.com").build());
+        when(knowledgeTagRepository.selectList(any())).thenReturn(List.of());
+
+        service.importBackup(userId, backup);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<KnowledgeItem>> itemCaptor = ArgumentCaptor.forClass(List.class);
+        verify(knowledgeItemRepository).insertBatch(itemCaptor.capture());
+        KnowledgeItem importedItem = itemCaptor.getValue().getFirst();
+        ArgumentCaptor<KnowledgeReviewState> stateCaptor =
+                ArgumentCaptor.forClass(KnowledgeReviewState.class);
+        verify(reviewStateRepository).insert(stateCaptor.capture());
+        KnowledgeReviewState restoredState = stateCaptor.getValue();
+        assertNotEquals(backupItemId, importedItem.getId());
+        assertEquals(importedItem.getId(), restoredState.getKnowledgeItemId());
+        assertEquals(userId, restoredState.getUserId());
+        assertEquals("good", restoredState.getLastRating());
+        assertEquals(now.plusSeconds(86_400), restoredState.getDueAt());
+    }
+
+    @Test
+    void schemaVersionOneBackupWithoutReviewStatesStillImports() {
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
+        ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
+        KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
+        SettingsService service =
+                new SettingsService(
+                        userProfileService,
+                        userProfileRepository,
+                        modelSourceRepository,
+                        knowledgeItemRepository,
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository);
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID tagId = UUID.randomUUID();
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("user@example.com").build());
+        when(knowledgeTagRepository.selectList(any())).thenReturn(List.of());
+
+        assertDoesNotThrow(
+                () ->
+                        service.importBackup(
+                                userId,
+                                validBackup(
+                                        itemId,
+                                        List.of(
+                                                new SettingsBackupTag(
+                                                        tagId,
+                                                        "rag",
+                                                        "#7a8a84",
+                                                        Instant.parse("2026-08-06T12:00:00Z"))),
+                                        List.of(tagId),
+                                        "ready",
+                                        "markdown")));
     }
 
     private SettingsBackupPayload validBackup(

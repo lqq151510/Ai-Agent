@@ -305,7 +305,7 @@ public class OpenAiModelProvider implements ModelProvider {
 
     private void backoff(int attempt) {
         try {
-            long sleepMs = Math.min(1_200L, 200L * (attempt + 1));
+            long sleepMs = Math.min(300L, 100L * (attempt + 1));
             Thread.sleep(sleepMs);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();

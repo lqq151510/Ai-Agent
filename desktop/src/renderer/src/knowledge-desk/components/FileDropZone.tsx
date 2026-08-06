@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { FolderOpen, Upload } from 'lucide-react';
+import { KNOWLEDGE_FILE_ACCEPT, KNOWLEDGE_FILE_DESCRIPTION } from '../knowledgeDeskFileTypes';
 
 export interface FileDropZoneProps {
   accept?: string;
@@ -11,8 +12,8 @@ export interface FileDropZoneProps {
 }
 
 export const FileDropZone = ({
-  accept = '.md,.markdown,.pdf,.txt,.html,text/markdown,application/pdf,text/plain,text/html',
-  description = '支持 .md、.markdown、.pdf，也兼容 txt/html 文本资料。',
+  accept = KNOWLEDGE_FILE_ACCEPT,
+  description = KNOWLEDGE_FILE_DESCRIPTION,
   disabled = false,
   file,
   onFileSelect,

@@ -22,6 +22,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -122,6 +123,16 @@ public class AgentController {
         SseEmitter emitter = new SseEmitter(300_000L);
 
         long heartbeatMs = Math.max(1_000L, appProperties.getAgent().getHeartbeatIntervalMs());
+        AtomicBoolean cleanedUp = new AtomicBoolean(false);
+        AtomicReference<ScheduledFuture<?>> heartbeatRef = new AtomicReference<>();
+        Runnable cleanup =
+                () -> {
+                    if (!cleanedUp.compareAndSet(false, true)) return;
+                    ScheduledFuture<?> heartbeat = heartbeatRef.get();
+                    if (heartbeat != null) {
+                        heartbeat.cancel(true);
+                    }
+                };
         ScheduledFuture<?> heartbeat =
                 heartbeatScheduler
                         .getScheduledExecutor()
@@ -136,20 +147,14 @@ public class AgentController {
                                                                         "ts",
                                                                         Instant.now().toString())));
                                     } catch (Exception e) {
-                                        // ignore
+                                        cleanup.run();
                                     }
                                 },
                                 heartbeatMs,
                                 heartbeatMs,
                                 TimeUnit.MILLISECONDS);
 
-        AtomicBoolean cleanedUp = new AtomicBoolean(false);
-
-        Runnable cleanup =
-                () -> {
-                    if (!cleanedUp.compareAndSet(false, true)) return;
-                    heartbeat.cancel(true);
-                };
+        heartbeatRef.set(heartbeat);
         emitter.onCompletion(cleanup);
         emitter.onError(e -> cleanup.run());
         emitter.onTimeout(cleanup);

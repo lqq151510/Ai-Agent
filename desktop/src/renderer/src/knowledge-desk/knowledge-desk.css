@@ -2085,6 +2085,241 @@
   opacity: 0.62;
 }
 
+.kd-review-dashboard-card {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 15px 16px;
+  border: 1px solid var(--accent-alpha-25);
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent-alpha-10), var(--surface-card));
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.kd-review-dashboard-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.kd-review-dashboard-card > span,
+.kd-review-dashboard-card > em,
+.kd-review-due,
+.kd-review-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.kd-review-dashboard-card > strong {
+  font-size: 20px;
+}
+
+.kd-review-dashboard-card > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.kd-review-page {
+  display: grid;
+  gap: 16px;
+}
+
+.kd-review-page--loading {
+  min-height: 300px;
+  place-items: center;
+  align-content: center;
+  color: var(--text-secondary);
+}
+
+.kd-review-hero,
+.kd-review-card {
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.kd-review-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+  background: linear-gradient(135deg, var(--surface-page), var(--surface-accent-subtle));
+}
+
+.kd-review-hero p,
+.kd-review-hero h2,
+.kd-review-hero span {
+  margin: 0;
+}
+
+.kd-review-hero p,
+.kd-review-eyebrow {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.kd-review-hero h2 {
+  margin-top: 6px;
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+.kd-review-hero span {
+  display: block;
+  margin-top: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.kd-review-card {
+  padding: 22px;
+}
+
+.kd-review-card-header,
+.kd-review-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.kd-review-card-header h3 {
+  margin: 5px 0 0;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.kd-review-due {
+  align-self: flex-start;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: var(--accent-alpha-10);
+  white-space: nowrap;
+}
+
+.kd-review-prompt {
+  margin-top: 22px;
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 14px;
+}
+
+.kd-review-prompt > span,
+.kd-review-answer > div > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kd-review-prompt p,
+.kd-review-answer p {
+  margin: 6px 0 0;
+  color: var(--text-primary);
+  line-height: 1.7;
+}
+
+.kd-review-reveal,
+.kd-review-hide {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  border: 0;
+  border-radius: 7px;
+  padding: 10px 12px;
+  background: var(--accent-alpha-10);
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.kd-review-answer {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface-page);
+}
+
+.kd-review-answer > div > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kd-review-answer .kd-tag-cloud {
+  margin-top: 8px;
+}
+
+.kd-review-answer .kd-tag {
+  font-style: normal;
+}
+
+.kd-review-card-actions {
+  justify-content: flex-start;
+  margin-top: 18px;
+}
+
+.kd-review-feedback {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.kd-review-rating {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-height: 92px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.kd-review-rating:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-alpha-8);
+}
+
+.kd-review-rating span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.kd-review-rating--again:hover:not(:disabled) { border-color: var(--error); }
+.kd-review-rating--hard:hover:not(:disabled) { border-color: var(--warning); }
+.kd-review-rating--easy:hover:not(:disabled) { border-color: var(--success); }
+.kd-review-rating:disabled { cursor: default; opacity: 0.62; }
+
+.kd-review-inline-error {
+  margin: 14px 0 0;
+  color: var(--error);
+  font-size: 13px;
+}
+
+.kd-spin { animation: kd-spin 0.9s linear infinite; }
+
+@keyframes kd-spin { to { transform: rotate(360deg); } }
+
 /* ============================================================
    Error Boundary Fallback UI
    ============================================================ */

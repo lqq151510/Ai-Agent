@@ -38,6 +38,26 @@ test('ingestion job history is exposed through an exact read-only Knowledge IPC 
   );
 });
 
+test('review bridge exposes only its three exact API routes', () => {
+  const ipcRegistrySource = fs.readFileSync(
+    path.join(__dirname, '../src/main/ipc-registry.ts'),
+    'utf8',
+  );
+
+  assert.match(
+    ipcRegistrySource,
+    /pathname === '\/api\/v1\/knowledge-reviews\/queue'\s*\|\|\s*pathname === '\/api\/v1\/knowledge-reviews\/summary'/,
+  );
+  assert.match(
+    ipcRegistrySource,
+    /\^\\\/api\\\/v1\\\/knowledge-reviews\\\/\[0-9a-f-\]\{36\}\\\/complete\$\/i/,
+  );
+  assert.doesNotMatch(
+    ipcRegistrySource,
+    /allowedPrefixes\s*=\s*\[[\s\S]*?knowledge-reviews/,
+  );
+});
+
 test('main-process ingestion job bridge removes snapshots before renderer delivery', () => {
   const ipcRegistryPath = path.join(__dirname, '../src/main/ipc-registry.ts');
   const ipcRegistrySource = fs.readFileSync(ipcRegistryPath, 'utf8');
@@ -207,4 +227,37 @@ test('local batch import keeps file paths and content hashes in the main process
   assert.match(preloadSource, /preflightLocalFileBatch:\s*\(\)\s*=>\s*ipcRenderer\.invoke\('knowledge:preflight-local-file-batch'\)/);
   assert.match(preloadSource, /commitLocalFileBatch:\s*\(payload: \{ batchId: string; candidateIds: string\[\] \}\)/);
   assert.doesNotMatch(preloadSource, /filePath|contentHash/);
+});
+
+test('local import accepts only modern Office document extensions and preserves their MIME types', () => {
+  const ipcRegistryPath = path.join(__dirname, '../src/main/ipc-registry.ts');
+  const compiled = ts.transpileModule(fs.readFileSync(ipcRegistryPath, 'utf8'), {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+  const module = { exports: {} };
+  vm.runInNewContext(compiled, {
+    module,
+    exports: module.exports,
+    require: (moduleName) => {
+      if (moduleName === 'path') return path;
+      return {};
+    },
+  });
+
+  const registry = Object.create(module.exports.IpcRegistry.prototype);
+  assert.equal(registry.isSupportedKnowledgeFile('/private/notes.docx'), true);
+  assert.equal(registry.isSupportedKnowledgeFile('/private/slides.pptx'), true);
+  assert.equal(registry.isSupportedKnowledgeFile('/private/legacy.doc'), false);
+  assert.equal(registry.isSupportedKnowledgeFile('/private/legacy.ppt'), false);
+  assert.equal(
+    registry.mimeTypeForKnowledgeFile('/private/notes.docx'),
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  );
+  assert.equal(
+    registry.mimeTypeForKnowledgeFile('/private/slides.pptx'),
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  );
 });

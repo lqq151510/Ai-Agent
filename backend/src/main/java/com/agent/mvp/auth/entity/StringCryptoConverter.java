@@ -111,7 +111,7 @@ public class StringCryptoConverter {
             cipher.init(Cipher.DECRYPT_MODE, aesKey, gcmSpec);
             return new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            // Not valid Base64 or decryption failed — treat as plaintext.
+            // The caller distinguishes malformed prefixed ciphertext from legacy plaintext.
             return null;
         }
     }

@@ -16,6 +16,7 @@ import { ApprovalEngine, type ToolApprovalRequest, type ApprovalMode } from './a
 import { ComputerUseManager } from './computer-use-manager';
 import { LocalServiceManager } from './local-service-manager';
 import { isReadOnlyCommand, parseCommandArgv } from './command-policy';
+import { localBackendRequestUrl } from './utils/local-backend-endpoint';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -71,7 +72,7 @@ export class ToolExecutionBridge {
     private ptyPool: PtyPool,
     private approvalEngine: ApprovalEngine,
     private localServiceManager: Pick<LocalServiceManager, 'fetchForWorkspace'>,
-    private backendPort: () => number,
+    private backendBaseUrl: () => string,
     private authToken: () => string | Promise<string>,
     private currentMode: () => ApprovalMode,
     private currentWorkspace: () => string | null,
@@ -384,9 +385,8 @@ export class ToolExecutionBridge {
   // ---- Backend Result Submission ----
 
   private async submitResult(result: ToolResultPayload): Promise<void> {
-    const port = this.backendPort();
     const token = await this.authToken();
-    const resp = await fetch(`http://127.0.0.1:${port}/api/v1/agent/chat/tool_result`, {
+    const resp = await fetch(localBackendRequestUrl(this.backendBaseUrl(), '/api/v1/agent/chat/tool_result'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState, typ
 import {
   FolderArchive,
   BookOpen,
+  Clock3,
   FileText,
   Globe2,
   Inbox,
@@ -62,6 +63,7 @@ import {
 import { Button } from '../components/ui';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ArchivePage, ContextRail, ConnectionBanner, DashboardPage, DetailPage, ImportPanel, InboxPage, LibraryPage, SearchPage } from './knowledgeDeskScreens';
+import { ReviewPage } from './knowledgeDeskReview';
 import { SettingsPage } from './knowledgeDeskSettings';
 import type { MainPage, SettingsTab, ImportMode } from './knowledgeDeskTypes';
 import {
@@ -77,6 +79,7 @@ const pages: Array<{ id: MainPage; label: string; icon: React.ElementType; badge
   { id: 'dashboard', label: '工作台', icon: LayoutDashboard },
   { id: 'inbox', label: '收集箱', icon: Inbox },
   { id: 'library', label: '知识库', icon: BookOpen },
+  { id: 'review', label: '每日回顾', icon: Clock3 },
   { id: 'archive', label: '归档库', icon: FolderArchive },
   { id: 'search', label: '全局搜索', icon: Search },
 ];
@@ -498,6 +501,7 @@ const KnowledgeDeskApp = () => {
   const getPageBadge = (page: (typeof pages)[number]) => {
     if (page.id === 'inbox' && snapshot.inboxItems.length > 0) return String(snapshot.inboxItems.length);
     if (page.id === 'archive' && snapshot.storage.archivedItems > 0) return String(snapshot.storage.archivedItems);
+    if (page.id === 'review' && snapshot.dashboard.review.dueCount > 0) return String(snapshot.dashboard.review.dueCount);
     return page.badge;
   };
   const renderPageNavButton = (page: (typeof pages)[number], className: string) => {
@@ -518,7 +522,7 @@ const KnowledgeDeskApp = () => {
       </button>
     );
   };
-  const openDetail = useCallback((item: KnowledgeItem) => {
+  const openDetail = useCallback((item: KnowledgeItem, alreadyLoaded = false) => {
     const requestId = detailRequestRef.current + 1;
     detailRequestRef.current = requestId;
     setSelectedItem(item);
@@ -532,6 +536,10 @@ const KnowledgeDeskApp = () => {
     }
 
     void loadDetailJobs(item.id);
+    if (alreadyLoaded) {
+      setDetailFetch({ isLoading: false, error: null });
+      return;
+    }
     setDetailFetch({ isLoading: true, error: null });
     void loadKnowledgeItemDetail(item.id)
       .then((fullItem) => {
@@ -674,6 +682,7 @@ const KnowledgeDeskApp = () => {
                     libraryItems={libraryItems}
                     onOpenImport={() => setImportMode('snippet')}
                     onOpenDetail={openDetail}
+                    onOpenReview={() => setActivePage('review')}
                     tags={tags}
                   />
                 </PageErrorBoundary>
@@ -707,6 +716,26 @@ const KnowledgeDeskApp = () => {
                     onModeChange={setLibraryMode}
                     onOpenDetail={openDetail}
                     tags={tags}
+                  />
+                </PageErrorBoundary>
+              ) : null}
+              {activePage === 'review' ? (
+                <PageErrorBoundary label="每日回顾" onReset={() => setActivePage('review')}>
+                  <ReviewPage
+                    apiEnabled={apiEnabled}
+                    onOpenDetail={(itemId) => {
+                      const item = libraryItems.find((candidate) => candidate.id === itemId);
+                      if (item) {
+                        openDetail(item);
+                        return;
+                      }
+                      void loadKnowledgeItemDetail(itemId)
+                        .then((fullItem) => openDetail(fullItem, true))
+                        .catch((error) => showNotice(error instanceof Error ? error.message : String(error), 'error'));
+                    }}
+                    onReviewCompleted={async () => {
+                      await refreshSnapshot();
+                    }}
                   />
                 </PageErrorBoundary>
               ) : null}

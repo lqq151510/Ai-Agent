@@ -8,6 +8,16 @@ const DEFAULT_STABILITY_DELAY_MS = 750;
 const DEFAULT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 const PRIVATE_STATE_VERSION = 1;
 const OPAQUE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SUPPORTED_SOURCE_FILE_EXTENSIONS = new Set([
+  '.md',
+  '.markdown',
+  '.pdf',
+  '.txt',
+  '.html',
+  '.htm',
+  '.docx',
+  '.pptx',
+]);
 
 export type ManagedSourceAssetOrigin = 'picker' | 'watched_folder';
 export type ManagedSourceFolderStatus = 'watching' | 'scanning' | 'disabled' | 'error';
@@ -149,7 +159,7 @@ function isHiddenName(name: string): boolean {
 }
 
 function supportedSourceFile(name: string): boolean {
-  return ['.md', '.markdown', '.pdf', '.txt', '.html', '.htm'].includes(path.extname(name).toLowerCase());
+  return SUPPORTED_SOURCE_FILE_EXTENSIONS.has(path.extname(name).toLowerCase());
 }
 
 function mediaTypeForSourceFile(name: string): string {
@@ -157,6 +167,8 @@ function mediaTypeForSourceFile(name: string): string {
   if (extension === '.pdf') return 'application/pdf';
   if (extension === '.md' || extension === '.markdown') return 'text/markdown';
   if (extension === '.html' || extension === '.htm') return 'text/html';
+  if (extension === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (extension === '.pptx') return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
   return 'text/plain';
 }
 
@@ -822,7 +834,7 @@ export class KnowledgeSourceManager {
   }): Promise<StoredAsset> {
     const filename = safeDisplayName(input.filename);
     if (!supportedSourceFile(filename) || !Buffer.isBuffer(input.content) || input.content.length <= 0) {
-      throw new Error('仅支持非空的 Markdown、PDF、TXT 或 HTML 文件。');
+      throw new Error('仅支持非空的 Markdown、PDF、TXT、HTML、DOCX 或 PPTX 文件。');
     }
     if (input.content.length > MAX_MANAGED_SOURCE_FILE_BYTES) {
       throw new Error('单个文件超过 20 MB 上限。');

@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { Bot, Loader2 } from 'lucide-react';
 
 export type BackendStatus = 'starting' | 'running' | 'stopped' | 'error';
+export type BackendMode = 'managed' | 'attached';
 
 export interface SplashScreenProps {
-  status?: { status: BackendStatus } | null;
+  status?: { status: BackendStatus; mode?: BackendMode } | null;
   isReady?: boolean;
 }
 
@@ -29,7 +30,14 @@ export const SplashScreen = ({ status, isReady }: SplashScreenProps) => {
   }, []);
 
   const backendStatus = status?.status ?? 'starting';
-  const message = STATUS_MESSAGES[backendStatus] ?? '正在初始化...';
+  const message = status?.mode === 'attached'
+    ? {
+      starting: '正在连接本机后端...',
+      running: '已连接到本机后端',
+      stopped: '已断开本机后端',
+      error: '本机后端不可用',
+    }[backendStatus]
+    : STATUS_MESSAGES[backendStatus] ?? '正在初始化...';
 
   return (
     <div className={`splash-screen ${isReady ? 'splash-screen--ready' : ''}`}>

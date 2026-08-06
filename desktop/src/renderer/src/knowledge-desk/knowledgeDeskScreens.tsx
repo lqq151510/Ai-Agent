@@ -84,6 +84,7 @@ import {
   TimelineItem,
 } from './knowledgeDeskShared';
 import { formatCount, sourceIcon, toPercent } from './knowledgeDeskDisplay';
+import { KNOWLEDGE_FILE_ACCEPT } from './knowledgeDeskFileTypes';
 
 const LIST_PAGE_SIZE = 20;
 
@@ -231,6 +232,7 @@ export const DashboardPage = ({
   libraryItems,
   onOpenImport,
   onOpenDetail,
+  onOpenReview,
   tags,
 }: {
   dashboard: DashboardSummary;
@@ -239,6 +241,7 @@ export const DashboardPage = ({
   libraryItems: KnowledgeItem[];
   onOpenImport: () => void;
   onOpenDetail: (item: KnowledgeItem) => void;
+  onOpenReview: () => void;
   tags: string[];
 }) => {
   const recentItems = dashboard.recentItems.length > 0 ? dashboard.recentItems : libraryItems;
@@ -265,8 +268,15 @@ export const DashboardPage = ({
         <MetricCard label="今日新增" value={String(inboxItems.length)} detail={isLoading ? '正在同步本地知识库' : '来自收集箱最新条目'} />
         <MetricCard label="整理完成" value={formatCount(dashboard.readyItems)} detail="已进入可检索知识库" />
         <MetricCard label="待处理收集箱" value={formatCount(dashboard.inboxItems)} detail={`${dashboard.failedItems} 条需要重试`} />
-        <MetricCard label="知识总量" value={formatCount(dashboard.totalItems)} detail="网页 / PDF / Markdown 统一索引" />
+        <MetricCard label="知识总量" value={formatCount(dashboard.totalItems)} detail="网页 / 本机文档 / 摘录统一索引" />
       </div>
+
+      <button className="kd-review-dashboard-card" onClick={onOpenReview} type="button">
+        <span><Clock3 size={17} /> 每日回顾</span>
+        <strong>{formatCount(dashboard.review.dueCount)} 条</strong>
+        <p>{dashboard.review.dueCount > 0 ? '先凭记忆找回，再选择下一次回顾间隔。' : '今天已完成回顾，继续收集新资料吧。'}</p>
+        <em>进入回顾 →</em>
+      </button>
 
       <div className="kd-two-column">
         <Panel title="最近整理完成" icon={CheckCircle2}>
@@ -353,7 +363,7 @@ export const InboxPage = ({
       icon={Inbox}
       title={activeSegment === 'all' ? '收集箱是空的' : '当前分段没有条目'}
       description={activeSegment === 'all'
-        ? '网页摘录、本地 Markdown / PDF 和粘贴内容会先进入这里，再被整理进知识库。'
+        ? '网页摘录、本机文档和粘贴内容会先进入这里，再被整理进知识库。'
         : '切回全部，或继续导入资料后再处理。'}
     />
   ), [activeSegment]);
@@ -730,8 +740,6 @@ export const ImportPanel = ({
             ) : (
               <>
                 <FileDropZone
-                  accept=".md,.markdown,.pdf,.txt,.html,text/markdown,application/pdf,text/plain,text/html"
-                  description="支持 .md、.markdown、.pdf，也兼容 txt/html 文本资料。"
                   disabled={isBusy}
                   file={selectedFile}
                   onFileSelect={handleFileSelect}
@@ -740,7 +748,7 @@ export const ImportPanel = ({
                 {!canUseDesktopFilePicker ? (
                   <input
                     ref={browserFileInputRef}
-                    accept=".md,.markdown,.pdf,.txt,.html,text/markdown,application/pdf,text/plain,text/html"
+                    accept={KNOWLEDGE_FILE_ACCEPT}
                     className="kd-hidden-file-input"
                     onChange={(event) => void handleBrowserFileSelected(event)}
                     type="file"
@@ -751,6 +759,7 @@ export const ImportPanel = ({
             <div className="kd-import-file-types">
               <span><FileText size={13} /> Markdown</span>
               <span><FileText size={13} /> PDF</span>
+              <span><FileText size={13} /> Word / PowerPoint</span>
               <span><FileText size={13} /> 纯文本 / HTML</span>
             </div>
           </div>
@@ -2069,6 +2078,7 @@ export const ContextRail = ({
         <div className="kd-queue-row"><Loader2 size={15} /> {snapshot.dashboard.inboxItems} 条待整理</div>
         <div className="kd-queue-row"><CheckCircle2 size={15} /> {snapshot.dashboard.readyItems} 条已整理</div>
         <div className="kd-queue-row is-warning"><AlertTriangle size={15} /> {snapshot.dashboard.failedItems} 条需重试</div>
+        <div className="kd-queue-row"><Clock3 size={15} /> {snapshot.dashboard.review.dueCount} 条待回顾</div>
       </ContextBlock>
       <ContextBlock title="知识资产" icon={FolderOpen}>
         <div className="kd-asset-meter"><span style={{ width: `${storagePercent}%` }} /></div>
@@ -2078,7 +2088,7 @@ export const ContextRail = ({
         <div className="kd-extension-list">
           <span><Network size={15} /> 知识图谱</span>
           <span><Cpu size={15} /> 个性化推荐</span>
-          <span><BookOpen size={15} /> 复习回顾</span>
+          <span><BookOpen size={15} /> 本机备份恢复</span>
         </div>
       </ContextBlock>
     </aside>
@@ -2087,6 +2097,6 @@ export const ContextRail = ({
 
 const importModeTitle = (mode: ImportMode) => {
   if (mode === 'web') return '网页摘录收藏';
-  if (mode === 'file') return '导入 Markdown / PDF';
+  if (mode === 'file') return '导入本机文档';
   return '粘贴内容';
 };

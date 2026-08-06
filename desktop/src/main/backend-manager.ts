@@ -3,11 +3,14 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
 import type { DesktopSecrets } from './utils/secrets';
+import type { LocalBackendEndpoint } from './utils/local-backend-endpoint';
 
 export type BackendStatus = 'starting' | 'running' | 'stopped' | 'error';
+export type BackendMode = 'managed' | 'attached';
 
 export type BackendStatusSnapshot = {
   status: BackendStatus;
+  mode: BackendMode;
   port: number;
   pid: number | null;
   dataDir: string;
@@ -27,7 +30,8 @@ type BackendManagerOptions = {
   startupTimeoutMs?: number;
   healthCheckIntervalMs?: number;
   logTailSize?: number;
-  secrets: DesktopSecrets;
+  secrets?: DesktopSecrets;
+  attachedBackend?: LocalBackendEndpoint;
 };
 
 export class BackendManager {
@@ -38,11 +42,13 @@ export class BackendManager {
   private readonly dataDir: string;
   private readonly port: number;
   private readonly logPath: string;
+  private readonly baseUrl: string;
   private readonly healthUrl: string;
+  private readonly mode: BackendMode;
   private readonly startupTimeoutMs: number;
   private readonly healthCheckIntervalMs: number;
   private readonly maxLogSize: number;
-  private readonly secrets: DesktopSecrets;
+  private readonly secrets: DesktopSecrets | undefined;
   private logBuffer: string[] = [];
   private startedAt: string | null = null;
   private lastReadyAt: string | null = null;
@@ -57,8 +63,13 @@ export class BackendManager {
     this.jarPath = jarPath;
     this.dataDir = dataDir;
     this.port = port;
+    if (options.attachedBackend && options.attachedBackend.port !== port) {
+      throw new Error('Attached backend port must match the active desktop port');
+    }
+    this.mode = options.attachedBackend ? 'attached' : 'managed';
+    this.baseUrl = options.attachedBackend?.baseUrl ?? `http://127.0.0.1:${this.port}`;
     this.logPath = path.join(this.dataDir, 'logs', 'desktop-runtime.log');
-    this.healthUrl = `http://127.0.0.1:${this.port}/api/v1/system/health/ready`;
+    this.healthUrl = `${this.baseUrl}/api/v1/system/health/ready`;
     this.startupTimeoutMs = options.startupTimeoutMs ?? 60_000;
     this.healthCheckIntervalMs = options.healthCheckIntervalMs ?? 1_000;
     this.maxLogSize = options.logTailSize ?? 500;
@@ -74,24 +85,30 @@ export class BackendManager {
   }
 
   async start(): Promise<void> {
-    if (this.process) {
+    if (this.status === 'starting' || this.status === 'running') {
       return;
     }
 
-    this.ensureRuntimeDirs();
-    this.setStatus('starting');
-    this.logBuffer = [];
-    this.lastError = null;
-    this.lastExitCode = null;
-    this.lastExitAt = null;
-    this.startedAt = new Date().toISOString();
-    this.appendLog('system', `Starting backend on port ${this.port}`);
+    if (this.mode === 'attached') {
+      await this.connectAttachedBackend();
+      return;
+    }
+
+    const secrets = this.secrets;
+    if (!secrets) {
+      const message = 'Managed backend requires desktop runtime secrets';
+      this.lastError = message;
+      this.setStatus('error');
+      throw new Error(message);
+    }
+
+    this.prepareStart(`Starting managed backend on port ${this.port}`);
 
     const args = [
       '-jar', this.jarPath,
       '--spring.profiles.active=desktop',
       `--server.port=${this.port}`,
-      `--server.address=127.0.0.1`,
+      '--server.address=127.0.0.1',
       `--app.data-dir=${this.dataDir}`,
     ];
 
@@ -101,8 +118,8 @@ export class BackendManager {
         ...process.env,
         SPRING_OUTPUT_ANSI_ENABLED: 'never',
         APP_DESKTOP_MODE: 'true',
-        JWT_SECRET: this.secrets.jwtSecret,
-        SECURITY_DB_ENCRYPTION_KEY: this.secrets.dbEncryptionKey,
+        JWT_SECRET: secrets.jwtSecret,
+        SECURITY_DB_ENCRYPTION_KEY: secrets.dbEncryptionKey,
       },
     });
 
@@ -150,6 +167,15 @@ export class BackendManager {
   }
 
   async stop(): Promise<void> {
+    if (this.mode === 'attached') {
+      if (this.status !== 'stopped') {
+        this.ensureRuntimeDirs();
+        this.appendLog('system', 'Detached from externally managed backend without stopping it');
+      }
+      this.setStatus('stopped');
+      return;
+    }
+
     if (!this.process) {
       this.setStatus('stopped');
       return;
@@ -162,14 +188,24 @@ export class BackendManager {
 
   async restart(): Promise<void> {
     this.restartCount += 1;
+    this.ensureRuntimeDirs();
     this.appendLog('system', `Restart requested (#${this.restartCount})`);
+    if (this.mode === 'attached') {
+      await this.connectAttachedBackend();
+      return;
+    }
     await this.stop();
     await this.start();
+  }
+
+  getBaseUrl(): string {
+    return this.baseUrl;
   }
 
   getStatus(): BackendStatusSnapshot {
     return {
       status: this.status,
+      mode: this.mode,
       port: this.port,
       pid: this.process?.pid ?? null,
       dataDir: this.dataDir,
@@ -184,6 +220,33 @@ export class BackendManager {
       restartCount: this.restartCount,
       startupTimeoutMs: this.startupTimeoutMs,
     };
+  }
+
+  private async connectAttachedBackend(): Promise<void> {
+    this.prepareStart(`Connecting to externally managed backend at ${this.baseUrl}`);
+    try {
+      await this.waitForReady(this.startupTimeoutMs);
+      this.lastReadyAt = new Date().toISOString();
+      this.appendLog('system', `Attached backend ready: ${this.healthUrl}`);
+      this.setStatus('running');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.lastError = message;
+      this.appendLog('system', `Attached backend did not become ready: ${message}`);
+      this.setStatus('error');
+      throw error;
+    }
+  }
+
+  private prepareStart(message: string) {
+    this.ensureRuntimeDirs();
+    this.setStatus('starting');
+    this.logBuffer = [];
+    this.lastError = null;
+    this.lastExitCode = null;
+    this.lastExitAt = null;
+    this.startedAt = new Date().toISOString();
+    this.appendLog('system', message);
   }
 
   private ensureRuntimeDirs() {

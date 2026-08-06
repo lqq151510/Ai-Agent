@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import KnowledgeDeskApp from './knowledge-desk/KnowledgeDeskApp';
 import { Toaster } from './components/ui';
-import { SplashScreen, type BackendStatus } from './components/SplashScreen';
+import { SplashScreen, type BackendMode, type BackendStatus } from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ThemeProvider } from './components/theme';
 
-type BackendStatusPayload = { status: BackendStatus };
+type BackendStatusPayload = { status: BackendStatus; mode?: BackendMode };
 
 interface DesktopElectronApi {
   backendStatus?: () => Promise<BackendStatusPayload>;

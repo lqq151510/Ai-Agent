@@ -150,6 +150,47 @@ export type DashboardSummary = {
   failedItems: number;
   recentItems: KnowledgeItem[];
   topTags: Array<{ name: string; count: number; color?: string }>;
+  review: KnowledgeReviewSummary;
+};
+
+export type KnowledgeReviewRating = 'again' | 'hard' | 'good' | 'easy';
+
+export type KnowledgeReviewTag = {
+  id?: string;
+  name: string;
+  color?: string;
+};
+
+export type KnowledgeReviewItem = {
+  id: string;
+  title: string;
+  sourceType: string;
+  summary: string;
+  tags: KnowledgeReviewTag[];
+  updatedAt: string | null;
+  dueAt: string | null;
+  intervalDays: number | null;
+  easeFactor: number | null;
+  repetitions: number | null;
+};
+
+export type KnowledgeReviewQueue = {
+  items: KnowledgeReviewItem[];
+  dueCount: number;
+};
+
+export type KnowledgeReviewSummary = {
+  dueCount: number;
+  nextDueAt: string | null;
+};
+
+export type KnowledgeReviewState = {
+  knowledgeItemId: string;
+  rating: KnowledgeReviewRating;
+  dueAt: string;
+  intervalDays: number;
+  easeFactor: number;
+  repetitions: number;
 };
 
 export type KnowledgeDeskSnapshot = {
@@ -225,6 +266,19 @@ export type KnowledgeDeskBackup = {
     tagIds: string[];
   }>;
   modelSourcesIncluded: false;
+  reviewStates: KnowledgeDeskBackupReviewState[];
+};
+
+export type KnowledgeDeskBackupReviewState = {
+  knowledgeItemId: string;
+  dueAt: string;
+  intervalDays: number;
+  easeFactor: number;
+  repetitions: number;
+  lastRating: KnowledgeReviewRating;
+  lastReviewedAt: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type KnowledgeDeskBackupImportResult = {
@@ -290,6 +344,7 @@ type BackendDashboard = {
   failedItems: number;
   recentItems?: BackendKnowledgeItem[];
   topTags?: BackendTag[];
+  review?: unknown;
 };
 
 type BackendModelSource = {
@@ -442,6 +497,10 @@ const canUseDirectBackend = () => (
 
 const isPreviewOnlyMode = () => import.meta.env.DEV && !hasKnowledgeBridge() && !canUseDirectBackend();
 
+const REVIEW_RATINGS: KnowledgeReviewRating[] = ['again', 'hard', 'good', 'easy'];
+const DEFAULT_KNOWLEDGE_REVIEW_LIMIT = 10;
+const MAX_KNOWLEDGE_REVIEW_LIMIT = 20;
+
 const request = async <T>(path: string, method = 'GET', body?: unknown): Promise<T> => {
   const electronApi = getElectronApi();
   const knowledgeRequest = electronApi?.knowledge?.request;
@@ -452,6 +511,12 @@ const request = async <T>(path: string, method = 'GET', body?: unknown): Promise
     return directBackendRequest<T>(path, method, body);
   }
   throw new Error('Knowledge API bridge is not available');
+};
+
+const requireKnowledgeReviewService = () => {
+  if (isPreviewOnlyMode()) {
+    throw new Error('每日回顾需要本机知识服务，浏览器预览不会伪造复习进度。');
+  }
 };
 
 const directBackendRequest = async <T>(path: string, method = 'GET', body?: unknown): Promise<T> => {
@@ -756,6 +821,7 @@ export const loadKnowledgeDeskSnapshot = async (): Promise<KnowledgeDeskSnapshot
         count: tag.count ?? 0,
         color: tag.color,
       })),
+      review: dashboard.review == null ? emptyKnowledgeReviewSummary() : toKnowledgeReviewSummary(dashboard.review),
     },
     inboxTotals: {
       all: inbox.total + processing.total + failed.total,
@@ -959,13 +1025,20 @@ export const updateKnowledgeDeskSettingsProfile = async (
 };
 
 export const exportKnowledgeDeskBackup = async (): Promise<KnowledgeDeskBackup> => {
-  return request<KnowledgeDeskBackup>('/api/v1/settings/export');
+  const backup = await request<KnowledgeDeskBackup>('/api/v1/settings/export');
+  return {
+    ...backup,
+    reviewStates: Array.isArray(backup.reviewStates) ? backup.reviewStates : [],
+  };
 };
 
 export const importKnowledgeDeskBackup = async (
   backup: KnowledgeDeskBackup,
 ): Promise<KnowledgeDeskBackupImportResult> => {
-  return request<KnowledgeDeskBackupImportResult>('/api/v1/settings/import', 'POST', backup);
+  return request<KnowledgeDeskBackupImportResult>('/api/v1/settings/import', 'POST', {
+    ...backup,
+    reviewStates: Array.isArray(backup.reviewStates) ? backup.reviewStates : [],
+  });
 };
 
 export const saveKnowledgeDeskBackup = async (backup: KnowledgeDeskBackup): Promise<string | null> => {
@@ -1024,7 +1097,47 @@ export const parseKnowledgeDeskBackup = (content: string): KnowledgeDeskBackup =
   ) {
     throw new Error('不支持该备份版本，或备份包含不允许恢复的模型配置。');
   }
-  return backup as KnowledgeDeskBackup;
+  return {
+    ...backup,
+    reviewStates: Array.isArray(backup.reviewStates) ? backup.reviewStates : [],
+  } as KnowledgeDeskBackup;
+};
+
+export const loadKnowledgeReviewQueue = async (
+  requestedLimit = DEFAULT_KNOWLEDGE_REVIEW_LIMIT,
+): Promise<KnowledgeReviewQueue> => {
+  requireKnowledgeReviewService();
+  const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
+    ? Math.min(MAX_KNOWLEDGE_REVIEW_LIMIT, requestedLimit)
+    : DEFAULT_KNOWLEDGE_REVIEW_LIMIT;
+  return toKnowledgeReviewQueue(
+    await request<unknown>(`/api/v1/knowledge-reviews/queue?limit=${limit}`),
+  );
+};
+
+export const loadKnowledgeReviewSummary = async (): Promise<KnowledgeReviewSummary> => {
+  requireKnowledgeReviewService();
+  return toKnowledgeReviewSummary(
+    await request<unknown>('/api/v1/knowledge-reviews/summary'),
+  );
+};
+
+export const completeKnowledgeReview = (
+  itemId: string,
+  rating: KnowledgeReviewRating,
+): Promise<KnowledgeReviewState> => {
+  requireKnowledgeReviewService();
+  if (!isNonEmptyString(itemId)) {
+    throw new Error('复习条目无效。');
+  }
+  if (!isKnowledgeReviewRating(rating)) {
+    throw new Error('无效的复习反馈');
+  }
+  return request<unknown>(
+    `/api/v1/knowledge-reviews/${encodeURIComponent(itemId)}/complete`,
+    'POST',
+    { rating },
+  ).then(toKnowledgeReviewState);
 };
 
 export const organizeKnowledgeItems = async (includeFailed = true): Promise<BatchOrganizeResult> => {
@@ -1121,6 +1234,136 @@ const toKnowledgeSourceAsset = (value: unknown): KnowledgeSourceAsset | undefine
     byteSize: sourceAsset.byteSize,
     origin,
     availability,
+  };
+};
+
+const emptyKnowledgeReviewSummary = (): KnowledgeReviewSummary => ({
+  dueCount: 0,
+  nextDueAt: null,
+});
+
+const isKnowledgeReviewRating = (value: unknown): value is KnowledgeReviewRating => (
+  typeof value === 'string' && REVIEW_RATINGS.includes(value as KnowledgeReviewRating)
+);
+
+const optionalReviewTimestamp = (value: unknown, errorMessage: string): string | null => {
+  if (value == null) return null;
+  if (!isNonEmptyString(value) || Number.isNaN(Date.parse(value))) {
+    throw new Error(errorMessage);
+  }
+  return value;
+};
+
+const optionalReviewInteger = (value: unknown, minimum: number, errorMessage: string): number | null => {
+  if (value == null) return null;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < minimum) {
+    throw new Error(errorMessage);
+  }
+  return value;
+};
+
+const optionalReviewNumber = (value: unknown, minimum: number, errorMessage: string): number | null => {
+  if (value == null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum) {
+    throw new Error(errorMessage);
+  }
+  return value;
+};
+
+const toKnowledgeReviewTags = (value: unknown): KnowledgeReviewTag[] => {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    throw new Error('每日回顾队列返回了无效数据。');
+  }
+  return value.map((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error('每日回顾队列返回了无效数据。');
+    }
+    const tag = entry as Record<string, unknown>;
+    if (!isNonEmptyString(tag.name)) {
+      throw new Error('每日回顾队列返回了无效数据。');
+    }
+    return {
+      ...(isNonEmptyString(tag.id) ? { id: tag.id } : {}),
+      name: tag.name,
+      ...(typeof tag.color === 'string' && tag.color.trim() ? { color: tag.color } : {}),
+    };
+  });
+};
+
+const toKnowledgeReviewItem = (value: unknown): KnowledgeReviewItem => {
+  if (!value || typeof value !== 'object') {
+    throw new Error('每日回顾队列返回了无效数据。');
+  }
+  const item = value as Record<string, unknown>;
+  if (!isNonEmptyString(item.id) || !isNonEmptyString(item.title) || !isNonEmptyString(item.sourceType)) {
+    throw new Error('每日回顾队列返回了无效数据。');
+  }
+  return {
+    id: item.id,
+    title: item.title,
+    sourceType: item.sourceType,
+    summary: typeof item.summary === 'string' ? item.summary : '',
+    tags: toKnowledgeReviewTags(item.tags),
+    updatedAt: optionalReviewTimestamp(item.updatedAt, '每日回顾队列返回了无效数据。'),
+    dueAt: optionalReviewTimestamp(item.dueAt, '每日回顾队列返回了无效数据。'),
+    intervalDays: optionalReviewInteger(item.intervalDays, 1, '每日回顾队列返回了无效数据。'),
+    easeFactor: optionalReviewNumber(item.easeFactor, 1.3, '每日回顾队列返回了无效数据。'),
+    repetitions: optionalReviewInteger(item.repetitions, 0, '每日回顾队列返回了无效数据。'),
+  };
+};
+
+const toKnowledgeReviewQueue = (value: unknown): KnowledgeReviewQueue => {
+  if (!value || typeof value !== 'object') {
+    throw new Error('每日回顾队列返回了无效数据。');
+  }
+  const queue = value as Record<string, unknown>;
+  if (!Array.isArray(queue.items) || typeof queue.dueCount !== 'number'
+    || !Number.isInteger(queue.dueCount) || queue.dueCount < 0) {
+    throw new Error('每日回顾队列返回了无效数据。');
+  }
+  return {
+    items: queue.items.map(toKnowledgeReviewItem),
+    dueCount: queue.dueCount,
+  };
+};
+
+const toKnowledgeReviewSummary = (value: unknown): KnowledgeReviewSummary => {
+  if (!value || typeof value !== 'object') {
+    throw new Error('每日回顾摘要返回了无效数据。');
+  }
+  const summary = value as Record<string, unknown>;
+  if (typeof summary.dueCount !== 'number' || !Number.isInteger(summary.dueCount) || summary.dueCount < 0) {
+    throw new Error('每日回顾摘要返回了无效数据。');
+  }
+  return {
+    dueCount: summary.dueCount,
+    nextDueAt: optionalReviewTimestamp(summary.nextDueAt, '每日回顾摘要返回了无效数据。'),
+  };
+};
+
+const toKnowledgeReviewState = (value: unknown): KnowledgeReviewState => {
+  if (!value || typeof value !== 'object') {
+    throw new Error('每日回顾提交返回了无效数据。');
+  }
+  const state = value as Record<string, unknown>;
+  if (!isNonEmptyString(state.knowledgeItemId) || !isKnowledgeReviewRating(state.rating)) {
+    throw new Error('每日回顾提交返回了无效数据。');
+  }
+  const dueAt = optionalReviewTimestamp(state.dueAt, '每日回顾提交返回了无效数据。');
+  const intervalDays = optionalReviewInteger(state.intervalDays, 1, '每日回顾提交返回了无效数据。');
+  const easeFactor = optionalReviewNumber(state.easeFactor, 1.3, '每日回顾提交返回了无效数据。');
+  const repetitions = optionalReviewInteger(state.repetitions, 0, '每日回顾提交返回了无效数据。');
+  if (dueAt == null || intervalDays == null || easeFactor == null || repetitions == null) {
+    throw new Error('每日回顾提交返回了无效数据。');
+  }
+  return {
+    knowledgeItemId: state.knowledgeItemId,
+    rating: state.rating,
+    dueAt,
+    intervalDays,
+    easeFactor,
+    repetitions,
   };
 };
 
@@ -1274,6 +1517,28 @@ const isValidKnowledgeDeskBackupShape = (backup: Partial<KnowledgeDeskBackup>) =
     && Array.isArray(item?.tagIds)
     && item.tagIds.every(isNonEmptyString)
   ))
+  && (backup.reviewStates == null || (
+    Array.isArray(backup.reviewStates)
+    && backup.reviewStates.every(isBackupReviewState)
+  ))
+);
+
+const isBackupReviewState = (state: KnowledgeDeskBackupReviewState) => (
+  isNonEmptyString(state?.knowledgeItemId)
+  && isNonEmptyString(state?.dueAt)
+  && typeof state?.intervalDays === 'number'
+  && Number.isInteger(state.intervalDays)
+  && state.intervalDays >= 1
+  && typeof state?.easeFactor === 'number'
+  && Number.isFinite(state.easeFactor)
+  && state.easeFactor >= 1.3
+  && typeof state?.repetitions === 'number'
+  && Number.isInteger(state.repetitions)
+  && state.repetitions >= 0
+  && isKnowledgeReviewRating(state?.lastRating)
+  && isNonEmptyString(state?.lastReviewedAt)
+  && isNonEmptyString(state?.createdAt)
+  && isNonEmptyString(state?.updatedAt)
 );
 
 const isBackupSourceAsset = (sourceAsset: KnowledgeSourceAsset) => (
@@ -1463,6 +1728,7 @@ export const fallbackSnapshot: KnowledgeDeskSnapshot = {
     failedItems: 0,
     recentItems: [],
     topTags: [],
+    review: emptyKnowledgeReviewSummary(),
   },
   inboxTotals: {
     all: 0,

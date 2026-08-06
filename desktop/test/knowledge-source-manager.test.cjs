@@ -96,6 +96,44 @@ test('picker import keeps a private 0600 original after the user source disappea
   }
 });
 
+test('managed sources accept DOCX and PPTX with their real MIME types but reject legacy Office extensions', async () => {
+  const root = temporaryRoot();
+  const uploads = [];
+  const manager = makeManager(root, {
+    uploadManagedSource: async (request) => {
+      uploads.push(request);
+      return { outcome: 'imported', item: { id: `item-${uploads.length}` } };
+    },
+  });
+
+  try {
+    await manager.initialize();
+    await manager.ingestPickerContent({ filename: 'learning-plan.docx', content: Buffer.from('docx bytes') });
+    await manager.ingestPickerContent({ filename: 'architecture.pptx', content: Buffer.from('pptx bytes') });
+
+    assert.deepEqual(
+      uploads.map(({ filename, mediaType }) => ({ filename, mediaType })),
+      [
+        {
+          filename: 'learning-plan.docx',
+          mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        },
+        {
+          filename: 'architecture.pptx',
+          mediaType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        },
+      ],
+    );
+    await assert.rejects(
+      () => manager.ingestPickerContent({ filename: 'legacy.doc', content: Buffer.from('legacy bytes') }),
+      /DOCX 或 PPTX/,
+    );
+  } finally {
+    manager.dispose();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('watched folders are non-recursive, cursor-deduplicated, and path-free to callers', async () => {
   const root = temporaryRoot();
   const watchDirectory = path.join(root, 'incoming');

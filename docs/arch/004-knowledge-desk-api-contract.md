@@ -131,7 +131,13 @@
 - `GET /settings/export`
 - `POST /settings/import`
 
-### 4.7 工作流补充
+### 4.7 `knowledge-desk/pages/review.html`
+
+- `GET /knowledge-reviews/queue?limit=10`
+- `POST /knowledge-reviews/{itemId}/complete`
+- `GET /knowledge-reviews/summary`
+
+### 4.8 工作流补充
 
 - `GET /ingestion-jobs?knowledgeItemId=...`
 - `GET /ingestion-jobs?jobType=reprocess`
@@ -214,7 +220,7 @@
 
 返回可由本机保存为 JSON 的备份内容。该请求只读：如果当前用户尚无个人资料，响应使用默认的 `manual / local_first` 偏好，但不会因此创建记录。
 
-备份只包含知识条目、标签和非敏感偏好，以及可选的安全 `sourceAsset` 元数据。它**不会**包含 API Key、登录/认证信息、模型源配置、受管原件二进制、路径、存储键或内容哈希，并固定返回 `modelSourcesIncluded: false`。恢复的 `sourceAsset` 会生成新 ID 且固定标为 `missing`，因此不能伪造“原件可打开”。
+备份只包含知识条目、标签、非敏感偏好、可选的安全 `sourceAsset` 元数据，以及可选的 `reviewStates` 间隔复习状态。`reviewStates` 只含源条目 ID、下次到期时间、间隔、难度、重复次数和最近反馈时间；不含正文、路径、哈希、受管原件位置或模型配置。备份**不会**包含 API Key、登录/认证信息、模型源配置、受管原件二进制、路径、存储键或内容哈希，并固定返回 `modelSourcesIncluded: false`。恢复的 `sourceAsset` 会生成新 ID 且固定标为 `missing`，因此不能伪造“原件可打开”。
 
 响应示例：
 
@@ -229,11 +235,11 @@
     "privacyMode": "local_first"
   },
   "tags": [
-    { "id": "tag-rag", "name": "RAG", "color": "#4F46E5", "createdAt": "2026-07-29T08:00:00Z" }
+    { "id": "55a9f9c7-d91c-42f8-8b71-7da0c15f7ed6", "name": "RAG", "color": "#4F46E5", "createdAt": "2026-07-29T08:00:00Z" }
   ],
   "knowledgeItems": [
     {
-      "id": "item-rag",
+      "id": "af8aaf53-8219-4d3d-908b-8fbf2a22a9f1",
       "sourceType": "markdown",
       "title": "本机 RAG 笔记",
       "rawContent": "# RAG",
@@ -241,7 +247,20 @@
       "wordCount": 2,
       "createdAt": "2026-07-29T08:00:00Z",
       "updatedAt": "2026-07-29T08:00:00Z",
-      "tagIds": ["tag-rag"]
+      "tagIds": ["55a9f9c7-d91c-42f8-8b71-7da0c15f7ed6"]
+    }
+  ],
+  "reviewStates": [
+    {
+      "knowledgeItemId": "af8aaf53-8219-4d3d-908b-8fbf2a22a9f1",
+      "dueAt": "2026-08-01T08:00:00Z",
+      "intervalDays": 3,
+      "easeFactor": 2.5,
+      "repetitions": 2,
+      "lastRating": "good",
+      "lastReviewedAt": "2026-07-29T08:00:00Z",
+      "createdAt": "2026-07-27T08:00:00Z",
+      "updatedAt": "2026-07-29T08:00:00Z"
     }
   ],
   "modelSourcesIncluded": false
@@ -254,6 +273,8 @@
 
 - 只会新增知识条目；为导入条目生成新的 ID，不删除或覆盖已有资料
 - 标签按当前用户的名称复用或创建
+- `reviewStates` 缺失时按空列表处理，保持旧 `schemaVersion: 1` 备份兼容；存在时会按旧条目 ID 映射到新条目 ID
+- 复习状态只能引用备份内的 `ready` 或 `archived` 条目；已归档条目的状态会保留，但不进入回顾队列，恢复为 `ready` 后会按原到期时间继续
 - 不恢复偏好、模型源、API Key 或任何认证信息；目标机器需要重新配置本机模型
 - 非法版本、包含模型源、字段/枚举/长度不合法的文件会在写入前失败
 
@@ -446,7 +467,9 @@
 - 推荐给真实前端使用的文件导入入口
 - 当前支持：
   - `pdf` -> `sourceType=pdf`
-  - `md / markdown / txt / html / htm` -> `sourceType=markdown`
+  - `md / markdown / txt / html / htm / docx / pptx` -> `sourceType=markdown`
+- 服务端只按原始文件名的精确后缀放行上述格式；旧二进制 `doc / ppt` 不会因解析服务的格式归一化而被放行
+- `docx` 与 `pptx` 的受管原件元数据会保留对应的 Office MIME，正文则由本机解析服务转换为 Markdown 后入库
 - 会把 `sourceUri` 写成 `upload://<filename>`
 - 会复用现有 `MarkItDownService -> PythonParseClient` 解析链路
 - 如果用户 `organizeMode=auto`，导入后会继续执行整理
@@ -680,7 +703,7 @@ GET /knowledge-items?status=inbox&status=failed&sourceType=markdown&tag=rag&from
 
 ---
 
-## 9. 首页摘要
+## 9. 首页摘要与每日回顾
 
 ### 9.1 `GET /dashboard/summary`
 
@@ -709,9 +732,66 @@ GET /knowledge-items?status=inbox&status=failed&sourceType=markdown&tag=rag&from
       "usageCount": 18
     }
   ],
+  "review": {
+    "dueCount": 4,
+    "nextDueAt": "2026-06-25T10:30:00Z"
+  },
   "generatedAt": "2026-06-25T10:30:00Z"
 }
 ```
+
+`review.dueCount` 包含已到期状态与尚未建立复习状态的 `ready` 条目；`nextDueAt` 为下一条可回顾资料的时间，当前没有候选时为 `null`。
+
+### 9.2 `GET /knowledge-reviews/queue`
+
+查询参数：`limit` 可选，默认 `10`，范围为 `1` 到 `20`。响应到期条目优先，再补充尚未回顾过的 `ready` 条目。它是安全精简 DTO，不包含正文、`sourceUri`、`contentHash`、`sourceAsset` 或本机路径。
+
+```json
+{
+  "items": [
+    {
+      "id": "cdd8985c-d0c2-4f28-a5cf-3e72719171b7",
+      "title": "Transformer 架构详解",
+      "sourceType": "web",
+      "summary": "文章介绍了 Transformer 的核心结构与训练方式。",
+      "tags": [{ "id": "379f41bb-b3c0-4308-a412-4b72f8920b88", "name": "llm", "color": "#7a8a84" }],
+      "updatedAt": "2026-06-25T10:30:00Z",
+      "dueAt": "2026-06-25T09:00:00Z",
+      "intervalDays": 3,
+      "easeFactor": 2.5,
+      "repetitions": 2
+    }
+  ],
+  "dueCount": 4
+}
+```
+
+### 9.3 `POST /knowledge-reviews/{itemId}/complete`
+
+请求体只允许闭合反馈枚举：
+
+```json
+{ "rating": "again" }
+```
+
+可选值为 `again`、`hard`、`good`、`easy`。后端只接受当前用户拥有且状态为 `ready` 的条目；归档、收集箱、处理中或失败条目会返回 `400`，别人的条目会返回 `403`。
+
+响应只返回更新后的复习状态：
+
+```json
+{
+  "knowledgeItemId": "cdd8985c-d0c2-4f28-a5cf-3e72719171b7",
+  "rating": "again",
+  "dueAt": "2026-06-26T10:30:00Z",
+  "intervalDays": 1,
+  "easeFactor": 2.3,
+  "repetitions": 0
+}
+```
+
+### 9.4 `GET /knowledge-reviews/summary`
+
+返回与工作台 `review` 字段同形的 `{ "dueCount", "nextDueAt" }`，供回顾页刷新而无需重取整份工作台快照。
 
 ---
 
@@ -757,7 +837,6 @@ GET /knowledge-items?status=inbox&status=failed&sourceType=markdown&tag=rag&from
 
 - `PUT /settings/profile` 目前不能通过传 `null` 来清空模型源绑定
 - `POST /knowledge-items/import/file` 目前接收的是“文件内容已读好后的文本”，不是服务端直接解析本地文件
-- `POST /knowledge-items/import/upload` 目前还不支持 `docx / pptx` 入知识工作台域，即使底层解析服务具备更广格式能力
 - `POST /knowledge-items/{id}/organize` 当前使用启发式整理，不是大模型整理
 - 全仓库 Maven 全量编译目前被其他已有模块阻塞，不代表这组知识工作台接口本身不可编译
 

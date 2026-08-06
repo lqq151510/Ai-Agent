@@ -38,6 +38,8 @@ export class TrayManager {
   private buildContextMenu() {
     const mainWindow = this.windowManager.mainWindow;
     const isVisible = mainWindow?.isVisible() && !mainWindow.isMinimized();
+    const backendStatus = this.backendManager.getStatus();
+    const reconnectLabel = backendStatus.mode === 'attached' ? '重新连接本机后端' : '重启后端';
 
     const template: MenuItemConstructorOptions[] = [
       isVisible
@@ -50,7 +52,7 @@ export class TrayManager {
       { label: '打开运行日志', click: () => { shell.showItemInFolder(this.backendManager.getStatus().logPath); } },
       { type: 'separator' },
       {
-        label: '重启后端',
+        label: reconnectLabel,
         click: () => {
           this.backendManager.restart().catch((error) => {
             console.error('[desktop] backend restart failed', error);

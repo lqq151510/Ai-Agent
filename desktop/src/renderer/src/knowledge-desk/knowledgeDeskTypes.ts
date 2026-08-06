@@ -1,3 +1,3 @@
-export type MainPage = 'dashboard' | 'inbox' | 'library' | 'archive' | 'detail' | 'search' | 'settings';
+export type MainPage = 'dashboard' | 'inbox' | 'library' | 'review' | 'archive' | 'detail' | 'search' | 'settings';
 export type SettingsTab = 'profile' | 'models' | 'ai' | 'privacy' | 'integrations';
 export type ImportMode = 'web' | 'file' | 'snippet';

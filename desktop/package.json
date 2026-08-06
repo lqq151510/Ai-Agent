@@ -9,6 +9,7 @@
   "scripts": {
     "dev:renderer": "cd src/renderer && npm run dev",
     "dev": "npm run build:main && electron .",
+    "dev:attached": "DESKTOP_BACKEND_URL=${DESKTOP_BACKEND_URL:-http://127.0.0.1:18080} npm run dev",
     "build:main": "tsc -p tsconfig.main.json",
     "test:main": "npm run build:main && node --test test/*.test.cjs",
     "build:renderer": "cd src/renderer && npm run build && cp -R dist/. ../../dist/renderer/",

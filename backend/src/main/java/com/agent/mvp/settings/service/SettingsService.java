@@ -16,6 +16,9 @@ import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
 import com.agent.mvp.knowledge.repo.KnowledgeSourceAssetRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
+import com.agent.mvp.knowledge.review.KnowledgeReviewRating;
+import com.agent.mvp.knowledge.review.KnowledgeReviewState;
+import com.agent.mvp.knowledge.review.KnowledgeReviewStateRepository;
 import com.agent.mvp.modelsource.entity.ModelSource;
 import com.agent.mvp.modelsource.repo.ModelSourceRepository;
 import com.agent.mvp.settings.OrganizeMode;
@@ -23,6 +26,7 @@ import com.agent.mvp.settings.PrivacyMode;
 import com.agent.mvp.settings.dto.SettingsBackupKnowledgeItem;
 import com.agent.mvp.settings.dto.SettingsBackupPayload;
 import com.agent.mvp.settings.dto.SettingsBackupPreferences;
+import com.agent.mvp.settings.dto.SettingsBackupReviewState;
 import com.agent.mvp.settings.dto.SettingsBackupSourceAsset;
 import com.agent.mvp.settings.dto.SettingsBackupTag;
 import com.agent.mvp.settings.dto.SettingsImportResponse;
@@ -34,6 +38,7 @@ import com.agent.mvp.settings.repo.UserProfileRepository;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -66,6 +71,7 @@ public class SettingsService {
     private static final int MAX_TAG_COLOR_CHARS = 24;
     private static final int MAX_DISPLAY_NAME_CHARS = 120;
     private static final int MAX_AVATAR_URL_CHARS = 500;
+    private static final double MIN_REVIEW_EASE_FACTOR = 1.3;
 
     private final UserProfileService userProfileService;
     private final UserProfileRepository userProfileRepository;
@@ -74,6 +80,7 @@ public class SettingsService {
     private final KnowledgeSourceAssetRepository knowledgeSourceAssetRepository;
     private final KnowledgeTagRepository knowledgeTagRepository;
     private final KnowledgeItemTagRepository knowledgeItemTagRepository;
+    private final KnowledgeReviewStateRepository knowledgeReviewStateRepository;
 
     @Autowired
     public SettingsService(
@@ -83,7 +90,8 @@ public class SettingsService {
             KnowledgeItemRepository knowledgeItemRepository,
             KnowledgeSourceAssetRepository knowledgeSourceAssetRepository,
             KnowledgeTagRepository knowledgeTagRepository,
-            KnowledgeItemTagRepository knowledgeItemTagRepository) {
+            KnowledgeItemTagRepository knowledgeItemTagRepository,
+            KnowledgeReviewStateRepository knowledgeReviewStateRepository) {
         this.userProfileService = userProfileService;
         this.userProfileRepository = userProfileRepository;
         this.modelSourceRepository = modelSourceRepository;
@@ -91,6 +99,26 @@ public class SettingsService {
         this.knowledgeSourceAssetRepository = knowledgeSourceAssetRepository;
         this.knowledgeTagRepository = knowledgeTagRepository;
         this.knowledgeItemTagRepository = knowledgeItemTagRepository;
+        this.knowledgeReviewStateRepository = knowledgeReviewStateRepository;
+    }
+
+    public SettingsService(
+            UserProfileService userProfileService,
+            UserProfileRepository userProfileRepository,
+            ModelSourceRepository modelSourceRepository,
+            KnowledgeItemRepository knowledgeItemRepository,
+            KnowledgeSourceAssetRepository knowledgeSourceAssetRepository,
+            KnowledgeTagRepository knowledgeTagRepository,
+            KnowledgeItemTagRepository knowledgeItemTagRepository) {
+        this(
+                userProfileService,
+                userProfileRepository,
+                modelSourceRepository,
+                knowledgeItemRepository,
+                knowledgeSourceAssetRepository,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository,
+                null);
     }
 
     public SettingsService(
@@ -107,7 +135,8 @@ public class SettingsService {
                 knowledgeItemRepository,
                 null,
                 knowledgeTagRepository,
-                knowledgeItemTagRepository);
+                knowledgeItemTagRepository,
+                null);
     }
 
     public SettingsProfileResponse getProfile(UUID userId) {
@@ -208,6 +237,7 @@ public class SettingsService {
                                 .orderByAsc(KnowledgeItem::getCreatedAt));
         Map<UUID, List<UUID>> tagIdsByItem = collectTagIdsByItem(items);
         Map<UUID, KnowledgeSourceAsset> sourceAssetsByItem = collectSourceAssetsByItem(items);
+        List<SettingsBackupReviewState> reviewStates = collectReviewStates(userId, items);
 
         return new SettingsBackupPayload(
                 BACKUP_SCHEMA_VERSION,
@@ -245,13 +275,17 @@ public class SettingsService {
                                                         sourceAssetsByItem.get(item.getId())),
                                                 tagIdsByItem.getOrDefault(item.getId(), List.of())))
                         .toList(),
-                false);
+                false,
+                reviewStates);
     }
 
     @Transactional
     public SettingsImportResponse importBackup(UUID userId, SettingsBackupPayload backup) {
         userProfileService.requireUser(userId);
         ImportPlan plan = validateImportBackup(backup);
+        if (!plan.reviewStates().isEmpty() && knowledgeReviewStateRepository == null) {
+            throw new BadRequestException("Review state backups are not supported by this service");
+        }
         Map<String, KnowledgeTag> tagsByNormalizedName = loadTagsByNormalizedName(userId);
         Map<UUID, KnowledgeTag> importedTags = new HashMap<>();
         int createdTags = 0;
@@ -279,6 +313,7 @@ public class SettingsService {
         }
 
         List<KnowledgeItem> itemsToInsert = new ArrayList<>();
+        Map<UUID, KnowledgeItem> importedItemsByBackupId = new HashMap<>();
         for (ImportItemPlan sourceItem : plan.items()) {
             KnowledgeItem importedItem =
                     KnowledgeItem.builder()
@@ -298,15 +333,17 @@ public class SettingsService {
                             .build();
             importedItem.onCreate();
             itemsToInsert.add(importedItem);
+            importedItemsByBackupId.put(sourceItem.id(), importedItem);
         }
         if (!itemsToInsert.isEmpty()) {
             knowledgeItemRepository.insertBatch(itemsToInsert);
         }
 
+        restoreReviewStates(userId, plan.reviewStates(), importedItemsByBackupId);
+
         List<KnowledgeItemTag> itemTagsToInsert = new ArrayList<>();
-        for (int i = 0; i < plan.items().size(); i++) {
-            ImportItemPlan sourceItem = plan.items().get(i);
-            KnowledgeItem importedItem = itemsToInsert.get(i);
+        for (ImportItemPlan sourceItem : plan.items()) {
+            KnowledgeItem importedItem = importedItemsByBackupId.get(sourceItem.id());
             if (sourceItem.sourceAsset() != null) {
                 createMissingSourceAsset(userId, importedItem.getId(), sourceItem.sourceAsset());
             }
@@ -377,6 +414,76 @@ public class SettingsService {
         return sourceAssetsByItem;
     }
 
+    private List<SettingsBackupReviewState> collectReviewStates(
+            UUID userId, List<KnowledgeItem> items) {
+        if (knowledgeReviewStateRepository == null || items.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> itemIds =
+                items.stream()
+                        .map(KnowledgeItem::getId)
+                        .collect(java.util.stream.Collectors.toSet());
+        return knowledgeReviewStateRepository
+                .selectList(
+                        new LambdaQueryWrapper<KnowledgeReviewState>()
+                                .eq(KnowledgeReviewState::getUserId, userId)
+                                .in(KnowledgeReviewState::getKnowledgeItemId, itemIds))
+                .stream()
+                .filter(state -> state != null && itemIds.contains(state.getKnowledgeItemId()))
+                .sorted(
+                        Comparator.comparing(
+                                        KnowledgeReviewState::getDueAt,
+                                        Comparator.nullsLast(Comparator.naturalOrder()))
+                                .thenComparing(
+                                        KnowledgeReviewState::getKnowledgeItemId,
+                                        Comparator.nullsLast(Comparator.comparing(UUID::toString))))
+                .map(
+                        state ->
+                                new SettingsBackupReviewState(
+                                        state.getKnowledgeItemId(),
+                                        state.getDueAt(),
+                                        state.getIntervalDays(),
+                                        state.getEaseFactor(),
+                                        state.getRepetitions(),
+                                        state.getLastRating(),
+                                        state.getLastReviewedAt(),
+                                        state.getCreatedAt(),
+                                        state.getUpdatedAt()))
+                .toList();
+    }
+
+    private void restoreReviewStates(
+            UUID userId,
+            List<ImportReviewStatePlan> reviewStates,
+            Map<UUID, KnowledgeItem> importedItemsByBackupId) {
+        if (reviewStates.isEmpty()) {
+            return;
+        }
+        for (ImportReviewStatePlan sourceState : reviewStates) {
+            KnowledgeItem importedItem =
+                    importedItemsByBackupId.get(sourceState.knowledgeItemId());
+            if (importedItem == null) {
+                throw new IllegalStateException(
+                        "Validated review state lost its imported knowledge item");
+            }
+            KnowledgeReviewState restoredState =
+                    KnowledgeReviewState.builder()
+                            .userId(userId)
+                            .knowledgeItemId(importedItem.getId())
+                            .dueAt(sourceState.dueAt())
+                            .intervalDays(sourceState.intervalDays())
+                            .easeFactor(sourceState.easeFactor())
+                            .repetitions(sourceState.repetitions())
+                            .lastRating(sourceState.lastRating())
+                            .lastReviewedAt(sourceState.lastReviewedAt())
+                            .createdAt(sourceState.createdAt())
+                            .updatedAt(sourceState.updatedAt())
+                            .build();
+            restoredState.onCreate(sourceState.createdAt());
+            knowledgeReviewStateRepository.insert(restoredState);
+        }
+    }
+
     private SettingsBackupSourceAsset toBackupSourceAsset(KnowledgeSourceAsset sourceAsset) {
         if (sourceAsset == null) {
             return null;
@@ -442,6 +549,8 @@ public class SettingsService {
         List<SettingsBackupTag> tags = requiredList(backup.tags(), "tags");
         List<SettingsBackupKnowledgeItem> items =
                 requiredList(backup.knowledgeItems(), "knowledgeItems");
+        List<SettingsBackupReviewState> reviewStates =
+                backup.reviewStates() == null ? List.of() : backup.reviewStates();
         if (tags.size() > MAX_IMPORT_TAGS) {
             throw new BadRequestException("Backup contains too many tags");
         }
@@ -462,6 +571,7 @@ public class SettingsService {
         }
 
         Set<UUID> itemIds = new HashSet<>();
+        Map<UUID, ImportItemPlan> itemPlansById = new LinkedHashMap<>();
         List<ImportItemPlan> itemPlans = new ArrayList<>();
         long totalTextChars = 0;
         for (SettingsBackupKnowledgeItem item : items) {
@@ -478,8 +588,25 @@ public class SettingsService {
                 throw new BadRequestException("Backup text content exceeds the import limit");
             }
             itemPlans.add(itemPlan);
+            itemPlansById.put(itemPlan.id(), itemPlan);
         }
-        return new ImportPlan(List.copyOf(tagsById.values()), List.copyOf(itemPlans));
+        if (reviewStates.size() > itemPlans.size()) {
+            throw new BadRequestException("Backup contains too many review states");
+        }
+        Set<UUID> reviewStateItemIds = new HashSet<>();
+        List<ImportReviewStatePlan> reviewStatePlans = new ArrayList<>();
+        for (SettingsBackupReviewState reviewState : reviewStates) {
+            ImportReviewStatePlan reviewStatePlan =
+                    validateReviewState(reviewState, itemPlansById);
+            if (!reviewStateItemIds.add(reviewStatePlan.knowledgeItemId())) {
+                throw new BadRequestException("Backup contains duplicate review states for one item");
+            }
+            reviewStatePlans.add(reviewStatePlan);
+        }
+        return new ImportPlan(
+                List.copyOf(tagsById.values()),
+                List.copyOf(itemPlans),
+                List.copyOf(reviewStatePlans));
     }
 
     private void validatePreferences(SettingsBackupPreferences preferences) {
@@ -629,6 +756,56 @@ public class SettingsService {
         return new SourceAssetBackupPlan(originalFilename, mediaType, sourceAsset.byteSize(), origin);
     }
 
+    private ImportReviewStatePlan validateReviewState(
+            SettingsBackupReviewState state, Map<UUID, ImportItemPlan> itemPlansById) {
+        if (state == null || state.knowledgeItemId() == null) {
+            throw new BadRequestException("Each backup review state requires knowledgeItemId");
+        }
+        ImportItemPlan item = itemPlansById.get(state.knowledgeItemId());
+        if (item == null) {
+            throw new BadRequestException("Review state references an unknown backup item");
+        }
+        if (!KnowledgeItemStatus.READY.value().equals(item.status())
+                && !KnowledgeItemStatus.ARCHIVED.value().equals(item.status())) {
+            throw new BadRequestException("Review states require ready or archived knowledge items");
+        }
+        if (state.dueAt() == null) {
+            throw new BadRequestException("reviewStates.dueAt is required");
+        }
+        if (state.intervalDays() == null || state.intervalDays() < 1) {
+            throw new BadRequestException("reviewStates.intervalDays must be at least 1");
+        }
+        if (state.easeFactor() == null
+                || !Double.isFinite(state.easeFactor())
+                || state.easeFactor() < MIN_REVIEW_EASE_FACTOR) {
+            throw new BadRequestException("reviewStates.easeFactor must be at least 1.3");
+        }
+        if (state.repetitions() == null || state.repetitions() < 0) {
+            throw new BadRequestException("reviewStates.repetitions must be non-negative");
+        }
+        if (state.lastReviewedAt() == null || state.createdAt() == null || state.updatedAt() == null) {
+            throw new BadRequestException(
+                    "reviewStates.lastReviewedAt, createdAt and updatedAt are required");
+        }
+        if (state.updatedAt().isBefore(state.createdAt())) {
+            throw new BadRequestException("reviewStates.updatedAt cannot be before createdAt");
+        }
+        if (!state.dueAt().isAfter(state.lastReviewedAt())) {
+            throw new BadRequestException("reviewStates.dueAt must be after lastReviewedAt");
+        }
+        String rating = KnowledgeReviewRating.from(state.lastRating()).value();
+        return new ImportReviewStatePlan(
+                state.knowledgeItemId(),
+                state.dueAt(),
+                state.intervalDays(),
+                state.easeFactor(),
+                state.repetitions(),
+                rating,
+                state.lastReviewedAt(),
+                state.createdAt(),
+                state.updatedAt());
+    }
+
     private <T> List<T> requiredList(List<T> values, String fieldName) {
         if (values == null) {
             throw new BadRequestException(fieldName + " is required");
@@ -668,7 +845,10 @@ public class SettingsService {
         return value == null || value.isBlank() ? fallback : value;
     }
 
-    private record ImportPlan(List<ImportTagPlan> tags, List<ImportItemPlan> items) {}
+    private record ImportPlan(
+            List<ImportTagPlan> tags,
+            List<ImportItemPlan> items,
+            List<ImportReviewStatePlan> reviewStates) {}
 
     private record ImportTagPlan(
             UUID id, String name, String normalizedName, String color, Instant createdAt) {}
@@ -692,6 +872,17 @@ public class SettingsService {
 
     private record SourceAssetBackupPlan(
             String originalFilename, String mediaType, long byteSize, String origin) {}
+
+    private record ImportReviewStatePlan(
+            UUID knowledgeItemId,
+            Instant dueAt,
+            int intervalDays,
+            double easeFactor,
+            int repetitions,
+            String lastRating,
+            Instant lastReviewedAt,
+            Instant createdAt,
+            Instant updatedAt) {}
 
     private void validateModelSourceOwnership(UUID userId, UUID modelSourceId) {
         if (modelSourceId == null) {

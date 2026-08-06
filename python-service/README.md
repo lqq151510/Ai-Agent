@@ -59,7 +59,7 @@ Swagger UI 交互式文档。
 见 [requirements.txt](requirements.txt)，核心依赖：
 
 - `fastapi` + `uvicorn`：Web 框架
-- `markitdown`：通用文档转 Markdown
+- `markitdown[docx,pptx]`：通用文档转 Markdown，并安装 DOCX/PPTX 转换依赖
 - `pdfplumber`：PDF 元数据与文本提取
 - `python-docx`：DOCX 元数据提取
 - `python-pptx`：PPTX 元数据提取

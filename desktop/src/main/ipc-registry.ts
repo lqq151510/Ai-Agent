@@ -21,12 +21,14 @@ import {
   type ManagedSourceUploadResult,
 } from './knowledge-source-manager';
 import { getDataDir, getCliEntryPath } from './utils/env';
+import { localBackendRequestUrl } from './utils/local-backend-endpoint';
 import { isPathWithinRoot, normalizeTreeDepth, resolveAuthorizedRoot } from './workspace-access';
 
 const MAX_KNOWLEDGE_BACKUP_BYTES = 100 * 1024 * 1024;
 const MAX_KNOWLEDGE_IMPORT_BATCH_FILES = 20;
 const MAX_KNOWLEDGE_IMPORT_FILE_BYTES = 20 * 1024 * 1024;
 const KNOWLEDGE_IMPORT_BATCH_TTL_MS = 10 * 60 * 1000;
+const KNOWLEDGE_IMPORT_FILE_EXTENSIONS = ['md', 'markdown', 'pdf', 'txt', 'html', 'htm', 'docx', 'pptx'];
 
 type KnowledgeImportCandidateVerdict = 'ready' | 'duplicate_existing' | 'duplicate_in_batch' | 'invalid';
 
@@ -115,6 +117,7 @@ export class IpcRegistry {
     private chatManager: ChatManager,
     private localServiceManager: LocalServiceManager,
     private getActivePort: () => number,
+    private getBackendBaseUrl: () => string,
     private threadManager: ThreadManager,
     private toolBridge: ToolExecutionBridge,
     private approvalEngine: ApprovalEngine,
@@ -1069,7 +1072,7 @@ export class IpcRegistry {
       verdict: 'invalid',
     };
     if (!this.isSupportedKnowledgeFile(filePath)) {
-      candidate.reason = '仅支持 Markdown、PDF、TXT 或 HTML 文件。';
+      candidate.reason = '仅支持 Markdown、PDF、TXT、HTML、DOCX 或 PPTX 文件。';
       return candidate;
     }
     try {
@@ -1190,12 +1193,13 @@ export class IpcRegistry {
 
   private async selectKnowledgeFile(): Promise<string | null> {
     const options: OpenDialogOptions = {
-      title: '选择 Markdown 或 PDF 资料',
+      title: '选择本机资料',
       buttonLabel: '导入到 Inbox',
       properties: ['openFile'],
       filters: [
-        { name: 'Markdown / PDF', extensions: ['md', 'markdown', 'pdf'] },
-        { name: 'Markdown', extensions: ['md', 'markdown', 'txt', 'html', 'htm'] },
+        { name: '支持的资料', extensions: KNOWLEDGE_IMPORT_FILE_EXTENSIONS },
+        { name: 'Office 文档', extensions: ['docx', 'pptx'] },
+        { name: 'Markdown / 文本 / HTML', extensions: ['md', 'markdown', 'txt', 'html', 'htm'] },
         { name: 'PDF', extensions: ['pdf'] },
       ],
     };
@@ -1210,7 +1214,7 @@ export class IpcRegistry {
 
     const filePath = result.filePaths[0];
     if (!this.isSupportedKnowledgeFile(filePath)) {
-      throw new Error('仅支持 Markdown 与 PDF 文件。');
+      throw new Error('仅支持 Markdown、PDF、TXT、HTML、DOCX 或 PPTX 文件。');
     }
     return filePath;
   }
@@ -1221,8 +1225,9 @@ export class IpcRegistry {
       buttonLabel: '预检并导入',
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: 'Markdown / PDF', extensions: ['md', 'markdown', 'pdf'] },
-        { name: 'Markdown', extensions: ['md', 'markdown', 'txt', 'html', 'htm'] },
+        { name: '支持的资料', extensions: KNOWLEDGE_IMPORT_FILE_EXTENSIONS },
+        { name: 'Office 文档', extensions: ['docx', 'pptx'] },
+        { name: 'Markdown / 文本 / HTML', extensions: ['md', 'markdown', 'txt', 'html', 'htm'] },
         { name: 'PDF', extensions: ['pdf'] },
       ],
     };
@@ -1367,7 +1372,7 @@ export class IpcRegistry {
   }
 
   private isSupportedKnowledgeFile(filePath: string): boolean {
-    return ['.md', '.markdown', '.pdf', '.txt', '.html', '.htm'].includes(path.extname(filePath).toLowerCase());
+    return KNOWLEDGE_IMPORT_FILE_EXTENSIONS.includes(path.extname(filePath).toLowerCase().replace(/^\./, ''));
   }
 
   private mimeTypeForKnowledgeFile(filePath: string): string {
@@ -1375,24 +1380,25 @@ export class IpcRegistry {
     if (extension === '.pdf') return 'application/pdf';
     if (extension === '.md' || extension === '.markdown') return 'text/markdown';
     if (extension === '.html' || extension === '.htm') return 'text/html';
+    if (extension === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (extension === '.pptx') return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
     return 'text/plain';
   }
 
   private async backendRequestRaw(pathname: string, init: RequestInit): Promise<Response> {
     const token = await this.ensureDesktopAccessToken();
-    const port = this.getActivePort();
     const headers = new Headers(init.headers || {});
     if (!headers.has('Content-Type') && !this.isMultipartBody(init.body)) {
       headers.set('Content-Type', 'application/json');
     }
     headers.set('Authorization', `Bearer ${token}`);
 
-    const response = await fetch(`http://127.0.0.1:${port}${pathname}`, { ...init, headers });
+    const response = await fetch(localBackendRequestUrl(this.getBackendBaseUrl(), pathname), { ...init, headers });
     if (response.status === 401) {
       this.desktopAuthTokens = null;
       const retryToken = await this.ensureDesktopAccessToken();
       headers.set('Authorization', `Bearer ${retryToken}`);
-      const retry = await fetch(`http://127.0.0.1:${port}${pathname}`, { ...init, headers });
+      const retry = await fetch(localBackendRequestUrl(this.getBackendBaseUrl(), pathname), { ...init, headers });
       if (!retry.ok) {
         throw new Error(await this.toErrorMessage(retry));
       }
@@ -1417,6 +1423,17 @@ export class IpcRegistry {
     if (pathname === '/api/v1/ingestion-jobs') {
       // The renderer only needs the auditable job list; keep this surface exact and read-only.
       return method === 'GET';
+    }
+
+    if (
+      pathname === '/api/v1/knowledge-reviews/queue'
+      || pathname === '/api/v1/knowledge-reviews/summary'
+    ) {
+      return method === 'GET';
+    }
+
+    if (/^\/api\/v1\/knowledge-reviews\/[0-9a-f-]{36}\/complete$/i.test(pathname)) {
+      return method === 'POST';
     }
 
     const allowedPrefixes = [
@@ -1448,8 +1465,7 @@ export class IpcRegistry {
 
     const credentials = this.loadDesktopCredentials();
     const login = async () => {
-      const port = this.getActivePort();
-      const response = await fetch(`http://127.0.0.1:${port}/api/v1/auth/login`, {
+      const response = await fetch(localBackendRequestUrl(this.getBackendBaseUrl(), '/api/v1/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
@@ -1472,8 +1488,7 @@ export class IpcRegistry {
         throw error;
       }
 
-      const port = this.getActivePort();
-      const registerResponse = await fetch(`http://127.0.0.1:${port}/api/v1/auth/register`, {
+      const registerResponse = await fetch(localBackendRequestUrl(this.getBackendBaseUrl(), '/api/v1/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
@@ -1587,7 +1602,7 @@ export class IpcRegistry {
     if (configured && configured.trim()) {
       return configured.replace(/\/$/, '');
     }
-    return `http://127.0.0.1:${this.getActivePort()}`;
+    return this.getBackendBaseUrl();
   }
 
   private tryParseJson(input: string): any | null {

@@ -40,6 +40,8 @@ import com.agent.mvp.knowledge.repo.KnowledgeItemTagRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeItemTagView;
 import com.agent.mvp.knowledge.repo.KnowledgeSourceAssetRepository;
 import com.agent.mvp.knowledge.repo.KnowledgeTagRepository;
+import com.agent.mvp.knowledge.review.KnowledgeReviewService;
+import com.agent.mvp.knowledge.review.dto.KnowledgeReviewSummaryResponse;
 import com.agent.mvp.settings.OrganizeMode;
 import com.agent.mvp.settings.entity.UserProfile;
 import com.agent.mvp.settings.service.UserProfileService;
@@ -63,6 +65,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -127,6 +130,8 @@ public class KnowledgeItemService {
     private static final String SOURCE_ASSET_ITEM_UNIQUE_CONSTRAINT =
             "uq_knowledge_source_assets_item";
     private static final int MAX_SOURCE_ASSET_FILENAME_CHARS = 512;
+    private static final Set<String> SUPPORTED_UPLOAD_FORMATS =
+            Set.of("pdf", "md", "markdown", "txt", "html", "htm", "docx", "pptx");
 
     private final KnowledgeItemRepository knowledgeItemRepository;
     private final KnowledgeSourceAssetRepository knowledgeSourceAssetRepository;
@@ -139,6 +144,7 @@ public class KnowledgeItemService {
     private final ObjectMapper objectMapper;
     private final boolean postgresFullTextSearch;
     private final TransactionTemplate transactionTemplate;
+    private final KnowledgeReviewService knowledgeReviewService;
 
     @Autowired
     public KnowledgeItemService(
@@ -151,6 +157,7 @@ public class KnowledgeItemService {
             MarkItDownService markItDownService,
             UserProfileService userProfileService,
             ObjectMapper objectMapper,
+            KnowledgeReviewService knowledgeReviewService,
             @Value("${spring.datasource.url:}") String datasourceUrl,
             PlatformTransactionManager transactionManager) {
         this(
@@ -164,7 +171,8 @@ public class KnowledgeItemService {
                 userProfileService,
                 objectMapper,
                 isPostgresDatasource(datasourceUrl),
-                new TransactionTemplate(transactionManager));
+                new TransactionTemplate(transactionManager),
+                knowledgeReviewService);
     }
 
     public KnowledgeItemService(
@@ -236,7 +244,8 @@ public class KnowledgeItemService {
                 userProfileService,
                 objectMapper,
                 postgresFullTextSearch,
-                transactionTemplate);
+                transactionTemplate,
+                null);
     }
 
     KnowledgeItemService(
@@ -251,6 +260,34 @@ public class KnowledgeItemService {
             ObjectMapper objectMapper,
             boolean postgresFullTextSearch,
             TransactionTemplate transactionTemplate) {
+        this(
+                knowledgeItemRepository,
+                knowledgeSourceAssetRepository,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository,
+                ingestionJobService,
+                knowledgeOrganizerService,
+                markItDownService,
+                userProfileService,
+                objectMapper,
+                postgresFullTextSearch,
+                transactionTemplate,
+                null);
+    }
+
+    private KnowledgeItemService(
+            KnowledgeItemRepository knowledgeItemRepository,
+            KnowledgeSourceAssetRepository knowledgeSourceAssetRepository,
+            KnowledgeTagRepository knowledgeTagRepository,
+            KnowledgeItemTagRepository knowledgeItemTagRepository,
+            IngestionJobService ingestionJobService,
+            KnowledgeOrganizerService knowledgeOrganizerService,
+            MarkItDownService markItDownService,
+            UserProfileService userProfileService,
+            ObjectMapper objectMapper,
+            boolean postgresFullTextSearch,
+            TransactionTemplate transactionTemplate,
+            KnowledgeReviewService knowledgeReviewService) {
         this.knowledgeItemRepository = knowledgeItemRepository;
         this.knowledgeSourceAssetRepository = knowledgeSourceAssetRepository;
         this.knowledgeTagRepository = knowledgeTagRepository;
@@ -262,6 +299,7 @@ public class KnowledgeItemService {
         this.objectMapper = objectMapper;
         this.postgresFullTextSearch = postgresFullTextSearch;
         this.transactionTemplate = transactionTemplate;
+        this.knowledgeReviewService = knowledgeReviewService;
     }
 
     private static boolean isPostgresDatasource(String datasourceUrl) {
@@ -320,15 +358,19 @@ public class KnowledgeItemService {
             String title,
             String sourceAssetId,
             String sourceAssetOrigin) {
-        UserProfile profile = userProfileService.getOrCreate(userId);
         if (file == null || file.isEmpty()) {
             throw new BadRequestException("Uploaded file is required");
         }
         SourceAssetRequest sourceAssetRequest =
                 normalizeSourceAssetRequest(sourceAssetId, sourceAssetOrigin);
         String originalFilename = file.getOriginalFilename();
+        String uploadFormat = requireSupportedUploadFormat(originalFilename);
         String sanitizedOriginalFilename = sanitizeFilename(originalFilename);
-        String filenameMediaType = resolveKnownUploadMediaType(originalFilename);
+        String filenameMediaType = resolveUploadMediaType(uploadFormat);
+        if (file.getSize() > MAX_SOURCE_ASSET_BYTES) {
+            throw new BadRequestException("Uploaded file exceeds the 20 MiB limit");
+        }
+        UserProfile profile = userProfileService.getOrCreate(userId);
         Path tempFile = null;
         try {
             tempFile = createTempFile(originalFilename);
@@ -365,7 +407,7 @@ public class KnowledgeItemService {
                 throw new BadRequestException("Uploaded file could not be parsed");
             }
 
-            String sourceType = resolveUploadSourceType(originalFilename, parsed.sourceFormat());
+            String sourceType = resolveUploadSourceType(uploadFormat);
             String resolvedTitle =
                     fallbackTitle(title, resolveUploadTitle(parsed, originalFilename));
             String sourceUri = buildUploadSourceUri(originalFilename);
@@ -376,7 +418,7 @@ public class KnowledgeItemService {
                                     sourceAssetRequest.id(),
                                     contentHash,
                                     sanitizedOriginalFilename,
-                                    resolveUploadMediaType(originalFilename, parsed.sourceFormat()),
+                                    filenameMediaType,
                                     byteSize,
                                     sourceAssetRequest.origin(),
                                     KnowledgeSourceAssetAvailability.AVAILABLE.value());
@@ -962,6 +1004,10 @@ public class KnowledgeItemService {
                                                         : tag.getUsageCount()))
                         .toList();
         long totalItems = statusCounts.values().stream().mapToLong(Long::longValue).sum();
+        KnowledgeReviewSummaryResponse review =
+                knowledgeReviewService == null
+                        ? new KnowledgeReviewSummaryResponse(0, null)
+                        : knowledgeReviewService.getSummary(userId);
 
         return new DashboardSummaryResponse(
                 totalItems,
@@ -979,6 +1025,7 @@ public class KnowledgeItemService {
                                                 item.getUpdatedAt()))
                         .toList(),
                 topTags,
+                review,
                 Instant.now());
     }
 
@@ -1454,37 +1501,44 @@ public class KnowledgeItemService {
         return fallback.length() <= 240 ? fallback : fallback.substring(0, 240);
     }
 
-    private String resolveUploadSourceType(String filename, String parsedFormat) {
-        String format = normalizeUploadFormat(parsedFormat, filename);
+    private String resolveUploadSourceType(String format) {
         return switch (format) {
             case "pdf" -> KnowledgeItemSourceType.PDF.value();
-            case "md", "markdown", "txt", "html", "htm" -> KnowledgeItemSourceType.MARKDOWN.value();
-            default ->
-                    throw new BadRequestException(
-                            "Uploaded file type is not supported yet: " + format);
+            case "md", "markdown", "txt", "html", "htm", "docx", "pptx" ->
+                    KnowledgeItemSourceType.MARKDOWN.value();
+            default -> throw new IllegalArgumentException("Unsupported upload format: " + format);
         };
     }
 
-    private String resolveUploadMediaType(String filename, String parsedFormat) {
-        String format = normalizeUploadFormat(parsedFormat, filename);
+    private String resolveUploadMediaType(String format) {
         return switch (format) {
             case "pdf" -> "application/pdf";
             case "md", "markdown" -> "text/markdown";
             case "txt" -> "text/plain";
             case "html", "htm" -> "text/html";
-            default -> throw new BadRequestException("Uploaded file type is not supported");
+            case "docx" ->
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case "pptx" ->
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            default -> throw new IllegalArgumentException("Unsupported upload format: " + format);
         };
     }
 
-    private String resolveKnownUploadMediaType(String filename) {
-        String format = normalizeUploadFormat(null, filename);
-        return switch (format) {
-            case "pdf" -> "application/pdf";
-            case "md", "markdown" -> "text/markdown";
-            case "txt" -> "text/plain";
-            case "html", "htm" -> "text/html";
-            default -> null;
-        };
+    private String requireSupportedUploadFormat(String filename) {
+        String format = uploadFormatFromFilename(filename);
+        if (!SUPPORTED_UPLOAD_FORMATS.contains(format)) {
+            throw new BadRequestException("Uploaded file type is not supported: " + format);
+        }
+        return format;
+    }
+
+    private String uploadFormatFromFilename(String filename) {
+        String sanitized = sanitizeFilename(filename);
+        int dot = sanitized.lastIndexOf('.');
+        if (dot < 0 || dot == sanitized.length() - 1) {
+            return "";
+        }
+        return sanitized.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
     private String resolveUploadTitle(ParsedDocument parsed, String filename) {
@@ -1495,18 +1549,6 @@ public class KnowledgeItemService {
             }
         }
         return stripExtension(sanitizeFilename(filename));
-    }
-
-    private String normalizeUploadFormat(String parsedFormat, String filename) {
-        if (parsedFormat != null && !parsedFormat.isBlank()) {
-            return parsedFormat.trim().toLowerCase();
-        }
-        String sanitized = sanitizeFilename(filename);
-        int dot = sanitized.lastIndexOf('.');
-        if (dot < 0 || dot == sanitized.length() - 1) {
-            return "";
-        }
-        return sanitized.substring(dot + 1).toLowerCase();
     }
 
     private String buildUploadSourceUri(String filename) {

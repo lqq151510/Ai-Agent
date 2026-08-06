@@ -531,7 +531,7 @@ const IntegrationSettings = ({
           <EmptyBlock
             icon={FolderOpen}
             title="还没有自动收集资料夹"
-            description="选择一个常用资料目录后，新加入且稳定的 Markdown、PDF、TXT 或 HTML 文件会进入收集箱。"
+            description="选择一个常用资料目录后，新加入且稳定的 Markdown、PDF、TXT、HTML、DOCX 或 PPTX 文件会进入收集箱。"
           />
         ) : null}
         {folders.map((folder) => {
