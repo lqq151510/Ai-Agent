@@ -29,6 +29,13 @@ const MAX_KNOWLEDGE_IMPORT_BATCH_FILES = 20;
 const MAX_KNOWLEDGE_IMPORT_FILE_BYTES = 20 * 1024 * 1024;
 const KNOWLEDGE_IMPORT_BATCH_TTL_MS = 10 * 60 * 1000;
 const KNOWLEDGE_IMPORT_FILE_EXTENSIONS = ['md', 'markdown', 'pdf', 'txt', 'html', 'htm', 'docx', 'pptx'];
+const LOCAL_CHAT_MESSAGE_MAX_CHARS = 8_000;
+const LOCAL_CHAT_RESPONSE_MAX_CHARS = 120_000;
+const LOCAL_CHAT_EXPORT_MAX_BYTES = 20 * 1024 * 1024;
+const LOCAL_CHAT_TITLE_MAX_CHARS = 120;
+const LOCAL_CHAT_SESSION_MARKER = 'local_assistant';
+const LOCAL_CHAT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const LOCAL_CHAT_MODEL = /^[\w./:-]{1,128}$/;
 
 type KnowledgeImportCandidateVerdict = 'ready' | 'duplicate_existing' | 'duplicate_in_batch' | 'invalid';
 
@@ -70,6 +77,118 @@ type LocalKnowledgeImportCommitResponse = {
   imported: Array<{ candidateId: string; name: string }>;
   skipped: Array<{ candidateId: string; name: string; reason: string }>;
   failed: Array<{ candidateId: string; name: string; reason: string }>;
+};
+
+type LocalChatInput = {
+  message: string;
+  sessionId?: string;
+  modelSourceId: string;
+  model: string;
+};
+
+type LocalChatSession = {
+  id: string;
+  title: string;
+  model: string;
+  updatedAt?: string;
+};
+
+type LocalChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt?: string;
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null => (
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+);
+
+const safeText = (value: unknown, maxChars: number): string | null => (
+  typeof value === 'string' ? value.slice(0, maxChars) : null
+);
+
+export function normalizeLocalChatSessionId(value: unknown): string {
+  const id = typeof value === 'string' ? value.trim() : '';
+  if (!LOCAL_CHAT_UUID.test(id)) {
+    throw new Error('对话标识无效，请重新打开对话。');
+  }
+  return id;
+}
+
+export function normalizeLocalChatInput(payload: unknown): LocalChatInput {
+  const value = asRecord(payload);
+  if (!value) {
+    throw new Error('本机助手请求无效。');
+  }
+
+  const message = typeof value.message === 'string' ? value.message.trim() : '';
+  if (!message) {
+    throw new Error('请输入消息。');
+  }
+  if (message.length > LOCAL_CHAT_MESSAGE_MAX_CHARS) {
+    throw new Error(`单条消息不能超过 ${LOCAL_CHAT_MESSAGE_MAX_CHARS} 个字符。`);
+  }
+
+  const modelSourceId = normalizeLocalChatSessionId(value.modelSourceId);
+  const model = typeof value.model === 'string' ? value.model.trim() : '';
+  if (!LOCAL_CHAT_MODEL.test(model)) {
+    throw new Error('本机模型标识无效。');
+  }
+
+  const sessionValue = value.sessionId;
+  const sessionId = sessionValue === undefined || sessionValue === null || sessionValue === ''
+    ? undefined
+    : normalizeLocalChatSessionId(sessionValue);
+
+  return { message, sessionId, modelSourceId, model };
+}
+
+export function toSafeLocalChatError(error: unknown): string {
+  const raw = (
+    error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+      ? error.message
+      : String(error ?? '')
+  );
+  const message = raw.replace(/\s+/g, ' ').trim();
+  if (!message || message.length > 240 || /(?:https?:\/\/|file:|authorization|bearer|(?:[A-Za-z]:)?[\\/])/.test(message)) {
+    return '本机模型暂时无法响应，请检查个人中心中的模型连接。';
+  }
+  return message;
+}
+
+const localChatTitleFromMessage = (message: string) => {
+  const compact = message.replace(/\s+/g, ' ').trim();
+  return compact.slice(0, LOCAL_CHAT_TITLE_MAX_CHARS) || '新对话';
+};
+
+const toSafeLocalChatSession = (value: unknown): LocalChatSession | null => {
+  const record = asRecord(value);
+  if (!record || record.taskType !== 'chat' || record.taskGoal !== LOCAL_CHAT_SESSION_MARKER) {
+    return null;
+  }
+  const id = safeText(record.id, 64);
+  const title = safeText(record.title, LOCAL_CHAT_TITLE_MAX_CHARS);
+  const model = safeText(record.model, 128);
+  if (!id || !LOCAL_CHAT_UUID.test(id) || !title || !model) {
+    return null;
+  }
+  const updatedAt = safeText(record.updatedAt, 64) ?? undefined;
+  return { id, title, model, updatedAt };
+};
+
+const toSafeLocalChatMessage = (value: unknown): LocalChatMessage | null => {
+  const record = asRecord(value);
+  const id = safeText(record?.id, 64);
+  const content = safeText(record?.content, LOCAL_CHAT_RESPONSE_MAX_CHARS);
+  const role = record?.role;
+  if (!id || !LOCAL_CHAT_UUID.test(id) || !content || (role !== 'user' && role !== 'assistant')) {
+    return null;
+  }
+  const createdAt = safeText(record?.createdAt, 64) ?? undefined;
+  return { id, role, content, createdAt };
 };
 
 export function redactIngestionJobSnapshots(value: unknown): unknown {
@@ -145,6 +264,10 @@ export class IpcRegistry {
     });
     
     ipcMain.handle('backend:port', () => this.getActivePort());
+
+    // This is deliberately registered outside the legacy developer IPC gate.
+    // It never reaches the workspace, terminal, local service, or tool bridge.
+    this.setupLocalChatIpc();
     
     if (this.isLegacyEnabled) {
       ipcMain.handle('cli:execute', (_event, args: string[]) => {
@@ -777,6 +900,208 @@ export class IpcRegistry {
     }
   }
 
+  private setupLocalChatIpc(): void {
+    ipcMain.handle('local-chat:list-sessions', async (event) => {
+      this.assertLocalChatSender(event.sender);
+      const response = await this.backendRequest('/api/v1/sessions?page=0&size=50', {
+        method: 'GET',
+      });
+      const sessions: unknown[] = Array.isArray(response?.content) ? response.content : [];
+      return sessions
+        .map(toSafeLocalChatSession)
+        .filter((session: LocalChatSession | null): session is LocalChatSession => session !== null);
+    });
+
+    ipcMain.handle('local-chat:list-messages', async (event, sessionId: unknown) => {
+      this.assertLocalChatSender(event.sender);
+      const normalizedSessionId = normalizeLocalChatSessionId(sessionId);
+      const response = await this.backendRequest(
+        `/api/v1/sessions/${normalizedSessionId}/messages`,
+        { method: 'GET' },
+      );
+      const messages: unknown[] = Array.isArray(response) ? response : [];
+      return messages
+        .map(toSafeLocalChatMessage)
+        .filter((message: LocalChatMessage | null): message is LocalChatMessage => message !== null);
+    });
+
+    ipcMain.handle('local-chat:delete-session', async (event, sessionId: unknown) => {
+      this.assertLocalChatSender(event.sender);
+      const normalizedSessionId = normalizeLocalChatSessionId(sessionId);
+      await this.backendRequest(`/api/v1/sessions/${normalizedSessionId}`, { method: 'DELETE' });
+      return { deleted: true };
+    });
+
+    ipcMain.handle('local-chat:export-session', async (event, sessionId: unknown) => {
+      this.assertLocalChatSender(event.sender);
+      const normalizedSessionId = normalizeLocalChatSessionId(sessionId);
+      const window = this.mainWindowGetter();
+      if (!window) {
+        throw new Error('桌面窗口不可用，请重新打开本机助手。');
+      }
+
+      try {
+        const response = await this.backendRequestRaw(
+          `/api/v1/sessions/${normalizedSessionId}/export?format=markdown`,
+          { method: 'GET' },
+        );
+        const advertisedLength = Number.parseInt(response.headers.get('content-length') ?? '', 10);
+        if (Number.isFinite(advertisedLength) && advertisedLength > LOCAL_CHAT_EXPORT_MAX_BYTES) {
+          throw new Error('对话导出内容超过 20 MB 上限。');
+        }
+        return this.saveLocalChatMarkdown(await response.text(), window);
+      } catch (error) {
+        throw new Error(toSafeLocalChatError(error));
+      }
+    });
+
+    ipcMain.handle('local-chat:send', async (event, payload: unknown) => {
+      this.assertLocalChatSender(event.sender);
+      const input = normalizeLocalChatInput(payload);
+      const createdSession = input.sessionId ? null : await this.createLocalChatSession(input);
+      const sessionId = input.sessionId ?? createdSession?.id;
+      if (!sessionId) {
+        throw new Error('无法创建本机对话。');
+      }
+
+      const requestId = randomUUID();
+      event.sender.send('local-chat:stream-event', {
+        requestId,
+        sessionId,
+        type: 'started',
+      });
+      void this.streamLocalChat({
+        ...input,
+        requestId,
+        sessionId,
+        sender: event.sender,
+      }).catch((error) => {
+        console.warn('[local-chat] stream failed', toSafeLocalChatError(error));
+      });
+
+      return {
+        ok: true,
+        requestId,
+        sessionId,
+        isNewSession: createdSession !== null,
+      };
+    });
+  }
+
+  private async createLocalChatSession(input: LocalChatInput): Promise<LocalChatSession> {
+    const response = await this.backendRequest('/api/v1/sessions', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: localChatTitleFromMessage(input.message),
+        provider: 'OPENAI',
+        model: input.model,
+        taskType: 'chat',
+        taskGoal: LOCAL_CHAT_SESSION_MARKER,
+        taskStatus: 'in_progress',
+      }),
+    });
+    const session = toSafeLocalChatSession(response);
+    if (!session) {
+      throw new Error('本机对话创建失败。');
+    }
+    return session;
+  }
+
+  private async streamLocalChat(input: LocalChatInput & {
+    requestId: string;
+    sessionId: string;
+    sender: Electron.WebContents;
+  }): Promise<void> {
+    const { requestId, sessionId, message, modelSourceId, model, sender } = input;
+    let assistantReply = '';
+    let completed = false;
+    let streamReportedError = false;
+    let blockedToolCall = false;
+    const abortController = new AbortController();
+
+    try {
+      const response = await this.backendRequestRaw('/api/v1/agent/chat/stream', {
+        method: 'POST',
+        signal: abortController.signal,
+        body: JSON.stringify({
+          sessionId,
+          message,
+          provider: 'OPENAI',
+          model,
+          modelSourceId,
+          toolsEnabled: false,
+        }),
+      });
+      if (!response.body) {
+        throw new Error('本机模型没有返回可读取的响应流。');
+      }
+
+      await this.parseSseStream(response.body, (eventName, data) => {
+        if (eventName === 'chunk') {
+          const chunk = safeText(data, LOCAL_CHAT_RESPONSE_MAX_CHARS) ?? '';
+          assistantReply = `${assistantReply}${chunk}`.slice(0, LOCAL_CHAT_RESPONSE_MAX_CHARS);
+          sender.send('local-chat:stream-event', { requestId, sessionId, type: 'chunk', chunk });
+          return;
+        }
+
+        if (eventName === 'done') {
+          const parsed = this.tryParseJson(data);
+          const reply = safeText(parsed?.reply, LOCAL_CHAT_RESPONSE_MAX_CHARS) ?? assistantReply;
+          assistantReply = reply;
+          completed = true;
+          sender.send('local-chat:stream-event', { requestId, sessionId, type: 'done', reply });
+          return;
+        }
+
+        if (eventName === 'error') {
+          const parsed = this.tryParseJson(data);
+          const messageText = toSafeLocalChatError(parsed?.message ?? data);
+          streamReportedError = true;
+          sender.send('local-chat:stream-event', { requestId, sessionId, type: 'error', message: messageText });
+          return;
+        }
+
+        if (eventName === 'client_tool_call') {
+          blockedToolCall = true;
+          abortController.abort();
+          sender.send('local-chat:stream-event', {
+            requestId,
+            sessionId,
+            type: 'error',
+            message: '本机助手不允许执行工具调用。',
+          });
+        }
+      });
+
+      if (!completed && !streamReportedError && !blockedToolCall) {
+        sender.send('local-chat:stream-event', {
+          requestId,
+          sessionId,
+          type: 'error',
+          message: '本机模型提前结束了响应，请重试。',
+        });
+      }
+    } catch (error) {
+      if (blockedToolCall) {
+        return;
+      }
+      sender.send('local-chat:stream-event', {
+        requestId,
+        sessionId,
+        type: 'error',
+        message: toSafeLocalChatError(error),
+      });
+      throw error;
+    }
+  }
+
+  private assertLocalChatSender(sender: WebContents): void {
+    const window = this.mainWindowGetter();
+    if (!window || sender !== window.webContents) {
+      throw new Error('Unauthorized sender for local chat');
+    }
+  }
+
   private async createBackendSession(): Promise<{ id: string; title: string }> {
     const response = await this.backendRequest('/api/v1/sessions', {
       method: 'POST',
@@ -1282,6 +1607,31 @@ export class IpcRegistry {
     return { canceled: false, filePath: result.filePath };
   }
 
+  private async saveLocalChatMarkdown(
+    content: string,
+    window: BrowserWindow,
+  ): Promise<{ canceled: boolean }> {
+    if (!content.trim()) {
+      throw new Error('对话内容为空，暂时无法导出。');
+    }
+    if (Buffer.byteLength(content, 'utf8') > LOCAL_CHAT_EXPORT_MAX_BYTES) {
+      throw new Error('对话导出内容超过 20 MB 上限。');
+    }
+
+    const result = await dialog.showSaveDialog(window, {
+      title: '导出本机助手对话',
+      defaultPath: path.join(app.getPath('downloads'), this.localChatMarkdownFileName()),
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    });
+    if (result.canceled || !result.filePath) {
+      return { canceled: true };
+    }
+
+    await fs.promises.writeFile(result.filePath, content, { encoding: 'utf8', mode: 0o600 });
+    await fs.promises.chmod(result.filePath, 0o600);
+    return { canceled: false };
+  }
+
   private async selectKnowledgeBackup(
     window: BrowserWindow,
   ): Promise<{ canceled: boolean; content?: string; fileName?: string }> {
@@ -1318,6 +1668,11 @@ export class IpcRegistry {
       return sanitized;
     }
     return 'knowledge-desk-backup.json';
+  }
+
+  private localChatMarkdownFileName(): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '');
+    return `local-assistant-${timestamp}.md`;
   }
 
   private async importKnowledgeLocalFile(filePath: string, title?: string): Promise<ManagedSourceUploadResult> {

@@ -83,6 +83,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  // A narrow, normal-mode conversation surface. Unlike the legacy chat bridge,
+  // it cannot pass workspace paths, API keys, URLs, or client-side tools.
+  localChat: {
+    listSessions: () => ipcRenderer.invoke('local-chat:list-sessions'),
+    listMessages: (sessionId: string) => ipcRenderer.invoke('local-chat:list-messages', sessionId),
+    deleteSession: (sessionId: string) => ipcRenderer.invoke('local-chat:delete-session', sessionId),
+    exportSession: (sessionId: string) => ipcRenderer.invoke('local-chat:export-session', sessionId),
+    send: (payload: { message: string; sessionId?: string; modelSourceId: string; model: string }) =>
+      ipcRenderer.invoke('local-chat:send', payload),
+    onStreamEvent: (callback: (event: any) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: any) => callback(data);
+      ipcRenderer.on('local-chat:stream-event', listener);
+      return () => ipcRenderer.removeListener('local-chat:stream-event', listener);
+    },
+  },
+
   agent: {
     submitTask: (prompt: string) => ipcRenderer.invoke('agent:submit-task', { prompt }),
     approvePlan: (taskId: string, approved: boolean) =>

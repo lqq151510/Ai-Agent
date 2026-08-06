@@ -7,6 +7,7 @@ import {
   Globe2,
   Inbox,
   LayoutDashboard,
+  MessageCircle,
   Plus,
   RefreshCw,
   Search,
@@ -64,6 +65,7 @@ import { Button } from '../components/ui';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ArchivePage, ContextRail, ConnectionBanner, DashboardPage, DetailPage, ImportPanel, InboxPage, LibraryPage, SearchPage } from './knowledgeDeskScreens';
 import { ReviewPage } from './knowledgeDeskReview';
+import { LocalAssistantPage } from './knowledgeDeskAssistant';
 import { SettingsPage } from './knowledgeDeskSettings';
 import type { MainPage, SettingsTab, ImportMode } from './knowledgeDeskTypes';
 import {
@@ -77,12 +79,54 @@ import './knowledge-desk.css';
 
 const pages: Array<{ id: MainPage; label: string; icon: React.ElementType; badge?: string }> = [
   { id: 'dashboard', label: '工作台', icon: LayoutDashboard },
+  { id: 'assistant', label: '本机助手', icon: MessageCircle },
   { id: 'inbox', label: '收集箱', icon: Inbox },
   { id: 'library', label: '知识库', icon: BookOpen },
   { id: 'review', label: '每日回顾', icon: Clock3 },
   { id: 'archive', label: '归档库', icon: FolderArchive },
   { id: 'search', label: '全局搜索', icon: Search },
 ];
+
+const LOCAL_ASSISTANT_DRAFT_MAX_CHARS = 8_000;
+const LOCAL_ASSISTANT_BODY_CONTEXT_MAX_CHARS = 6_000;
+const LOCAL_ASSISTANT_TRUNCATION_NOTE = '\n\n（正文较长，以上为开头摘录；如需更多内容，请提示我继续补充。）';
+
+const buildAssistantDraftFromKnowledge = (
+  item: KnowledgeItem,
+  context: 'summary' | 'body' = 'summary',
+) => {
+  const title = (item.title.trim() || '未命名资料').slice(0, 240);
+  const summary = (item.summary.trim() || '这条资料暂时还没有摘要。').slice(0, 1_600);
+  const tags = (item.tags.length > 0 ? item.tags.join('、') : '未分类').slice(0, 600);
+  const body = (item.cleanedContent || item.rawContent || '').trim();
+  const instruction = context === 'body'
+    ? '我想基于下面这条本机资料继续理解或延展。正文摘录由我主动带入，请优先依据正文回答；无法从正文确认时请明确说明。'
+    : '我想基于下面这条本机资料继续理解或延展，请先结合标题、摘要和标签回答。';
+  const metadata = [
+    instruction,
+    '',
+    `标题：${title}`,
+    `摘要：${summary}`,
+    `标签：${tags}`,
+  ];
+  const question = '\n\n我的问题：';
+
+  if (context !== 'body' || !body) {
+    return `${metadata.join('\n')}${question}`.slice(0, LOCAL_ASSISTANT_DRAFT_MAX_CHARS);
+  }
+
+  const prefix = `${metadata.join('\n')}\n\n正文摘录（由我主动带入）：\n`;
+  const availableBodyChars = Math.max(
+    0,
+    Math.min(
+      LOCAL_ASSISTANT_BODY_CONTEXT_MAX_CHARS,
+      LOCAL_ASSISTANT_DRAFT_MAX_CHARS - prefix.length - question.length - LOCAL_ASSISTANT_TRUNCATION_NOTE.length,
+    ),
+  );
+  const excerpt = body.slice(0, availableBodyChars).trimEnd();
+  const truncationNote = excerpt.length < body.length ? LOCAL_ASSISTANT_TRUNCATION_NOTE : '';
+  return `${prefix}${excerpt}${truncationNote}${question}`.slice(0, LOCAL_ASSISTANT_DRAFT_MAX_CHARS);
+};
 
 const KnowledgeDeskApp = () => {
   const [activePage, setActivePage] = useState<MainPage>('dashboard');
@@ -107,6 +151,7 @@ const KnowledgeDeskApp = () => {
   const [itemActionState, setItemActionState] = useState<{ itemId: string; action: KnowledgeWorkflowAction } | null>(null);
   const [notice, setNotice] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [managedSourceFolders, setManagedSourceFolders] = useState<ManagedSourceFolder[]>([]);
+  const [assistantDraft, setAssistantDraft] = useState<{ id: number; text: string } | null>(null);
   const detailRequestRef = useRef(0);
   const detailJobsRequestRef = useRef(0);
   const desktopFilePickerAvailable = canUseDesktopFilePicker();
@@ -687,6 +732,32 @@ const KnowledgeDeskApp = () => {
                   />
                 </PageErrorBoundary>
               ) : null}
+              {activePage === 'assistant' ? (
+                <PageErrorBoundary label="本机助手" onReset={() => setActivePage('assistant')}>
+                  <LocalAssistantPage
+                    defaultModelSourceId={snapshot.profile.defaultModelSourceId}
+                    initialDraft={assistantDraft}
+                    modelProviders={snapshot.modelProviders}
+                    onConsumeInitialDraft={(id) => {
+                      setAssistantDraft((current) => current?.id === id ? null : current);
+                    }}
+                    onOpenModelSettings={() => {
+                      setSettingsTab('models');
+                      setActivePage('settings');
+                    }}
+                    onSaveAssistantMessage={async (message) => {
+                      const firstLine = message.content.replace(/\s+/g, ' ').trim().slice(0, 72);
+                      const item = await importKnowledgeItem({
+                        kind: 'snippet',
+                        title: `助手笔记：${firstLine || '未命名回答'}`,
+                        content: message.content,
+                      });
+                      await refreshSnapshot();
+                      showNotice(`已收进知识库：${item.title}`);
+                    }}
+                  />
+                </PageErrorBoundary>
+              ) : null}
               {activePage === 'inbox' ? (
                 <PageErrorBoundary label="收集箱" onReset={() => setActivePage('inbox')}>
                   <InboxPage
@@ -766,6 +837,13 @@ const KnowledgeDeskApp = () => {
                     jobsError={detailJobsFetch.error}
                     jobsLoading={detailJobsFetch.isLoading}
                     onAction={handleItemAction}
+                    onAskAssistant={(targetItem, context) => {
+                      setAssistantDraft({
+                        id: Date.now(),
+                        text: buildAssistantDraftFromKnowledge(targetItem, context),
+                      });
+                      setActivePage('assistant');
+                    }}
                     onOpenManagedSourceAsset={handleOpenManagedSourceAsset}
                     onRetryJobs={() => void loadDetailJobs(detailItem.id)}
                     onUpdate={handleItemUpdate}

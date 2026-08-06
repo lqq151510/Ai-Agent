@@ -26,7 +26,35 @@ public record ChatRequest(
         @Size(max = 50000, message = "systemContext must be <= 50000 chars") String systemContext,
         UUID modelSourceId,
         String customApiKey,
-        List<ToolSpec> clientTools) {
+        List<ToolSpec> clientTools,
+        Boolean toolsEnabled) {
+    /**
+     * Keeps the pre-local-assistant request shape source-compatible. Existing callers remain
+     * tool-enabled unless they explicitly opt out.
+     */
+    public ChatRequest(
+            UUID sessionId,
+            String message,
+            ModelProviderType provider,
+            String model,
+            Integer maxContextTokens,
+            String systemContext,
+            UUID modelSourceId,
+            String customApiKey,
+            List<ToolSpec> clientTools) {
+        this(
+                sessionId,
+                message,
+                provider,
+                model,
+                maxContextTokens,
+                systemContext,
+                modelSourceId,
+                customApiKey,
+                clientTools,
+                true);
+    }
+
     public ChatRequest(
             UUID sessionId,
             String message,
@@ -45,6 +73,15 @@ public record ChatRequest(
                 systemContext,
                 modelSourceId,
                 customApiKey,
-                null);
+                null,
+                true);
+    }
+
+    /**
+     * JSON requests created before this flag existed leave it absent. Preserve their original
+     * behavior, while allowing the local desktop assistant to opt out explicitly.
+     */
+    public boolean allowsTools() {
+        return !Boolean.FALSE.equals(toolsEnabled);
     }
 }

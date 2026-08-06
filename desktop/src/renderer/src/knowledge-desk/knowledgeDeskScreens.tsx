@@ -4,6 +4,8 @@ import {
   Archive,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   Eye,
   FileText,
@@ -14,6 +16,7 @@ import {
   Library,
   ListFilter,
   Loader2,
+  MessageCircle,
   Pencil,
   Plus,
   RefreshCw,
@@ -87,6 +90,8 @@ import { formatCount, sourceIcon, toPercent } from './knowledgeDeskDisplay';
 import { KNOWLEDGE_FILE_ACCEPT } from './knowledgeDeskFileTypes';
 
 const LIST_PAGE_SIZE = 20;
+const DETAIL_INITIAL_PARAGRAPH_COUNT = 4;
+const DETAIL_PARAGRAPH_BATCH_SIZE = 80;
 
 type ListPageLoader = (params: ListKnowledgeItemsParams) => Promise<KnowledgeItemPage>;
 
@@ -1367,6 +1372,7 @@ export const DetailPage = ({
   jobsError,
   jobsLoading,
   onAction,
+  onAskAssistant,
   onOpenManagedSourceAsset,
   onRetryJobs,
   onUpdate,
@@ -1380,6 +1386,7 @@ export const DetailPage = ({
   jobsError?: string | null;
   jobsLoading: boolean;
   onAction: (item: KnowledgeItem, action: KnowledgeWorkflowAction) => Promise<void>;
+  onAskAssistant: (item: KnowledgeItem, context?: 'summary' | 'body') => void;
   onOpenManagedSourceAsset: (assetId: string, reveal?: boolean) => Promise<void>;
   onRetryJobs: () => void;
   onUpdate: (item: KnowledgeItem, draft: { title: string; summary: string; tags: string[] }) => Promise<void>;
@@ -1394,14 +1401,21 @@ export const DetailPage = ({
   const [editError, setEditError] = useState<string | null>(null);
   const [sourceAssetAction, setSourceAssetAction] = useState<'open' | 'reveal' | null>(null);
   const [sourceAssetError, setSourceAssetError] = useState<string | null>(null);
+  const [visibleParagraphCount, setVisibleParagraphCount] = useState(DETAIL_INITIAL_PARAGRAPH_COUNT);
   const body = item.cleanedContent || item.rawContent || item.summary;
-  const paragraphs = body
+  const allParagraphs = body
     .split('\n')
     .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 4);
+    .filter(Boolean);
+  const paragraphs = allParagraphs.slice(0, visibleParagraphCount);
+  const remainingParagraphCount = allParagraphs.length - paragraphs.length;
   const workflowActions = buildWorkflowActions(item);
   const itemTagDraft = item.tags.join(', ');
+  const canAskWithBody = Boolean((item.cleanedContent || item.rawContent || '').trim());
+
+  useEffect(() => {
+    setVisibleParagraphCount(DETAIL_INITIAL_PARAGRAPH_COUNT);
+  }, [body, item.id]);
 
   const startEditing = () => {
     setEditError(null);
@@ -1478,6 +1492,25 @@ export const DetailPage = ({
                 );
               })}
             </>
+          ) : null}
+          <button
+            className="kd-action-button"
+            disabled={isSavingEdit || isEditing}
+            onClick={() => onAskAssistant(item, 'summary')}
+            type="button"
+          >
+            <MessageCircle size={15} /> 问本机助手
+          </button>
+          {canAskWithBody ? (
+            <button
+              aria-label="带正文提问，正文会先预填进本机助手输入框"
+              className="kd-action-button"
+              disabled={isSavingEdit || isEditing}
+              onClick={() => onAskAssistant(item, 'body')}
+              type="button"
+            >
+              <FileText size={15} /> 带正文提问
+            </button>
           ) : null}
           <button
             className="kd-action-button"
@@ -1601,8 +1634,35 @@ export const DetailPage = ({
         />
       ) : null}
 
-      {paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-      {paragraphs.length === 0 ? <p>这条知识还没有可展示正文，整理完成后会补充清洗后的内容。</p> : null}
+      {paragraphs.map((paragraph, index) => <p key={`${item.id}-${index}`}>{paragraph}</p>)}
+      {allParagraphs.length === 0 ? <p>这条知识还没有可展示正文，整理完成后会补充清洗后的内容。</p> : null}
+      {allParagraphs.length > DETAIL_INITIAL_PARAGRAPH_COUNT ? (
+        <div className="kd-detail-reading-actions">
+          <span>已显示 {paragraphs.length} / {allParagraphs.length} 段</span>
+          <div>
+            {remainingParagraphCount > 0 ? (
+              <button
+                className="kd-action-button"
+                onClick={() => setVisibleParagraphCount((current) => (
+                  Math.min(allParagraphs.length, current + DETAIL_PARAGRAPH_BATCH_SIZE)
+                ))}
+                type="button"
+              >
+                <ChevronDown size={15} /> 继续阅读 {Math.min(remainingParagraphCount, DETAIL_PARAGRAPH_BATCH_SIZE)} 段
+              </button>
+            ) : null}
+            {visibleParagraphCount > DETAIL_INITIAL_PARAGRAPH_COUNT ? (
+              <button
+                className="kd-action-button"
+                onClick={() => setVisibleParagraphCount(DETAIL_INITIAL_PARAGRAPH_COUNT)}
+                type="button"
+              >
+                <ChevronUp size={15} /> 收起正文
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <blockquote>
         这条知识已关联到 {item.tags.length > 0 ? item.tags.join(' / ') : '未分类主题'}，后续可从标签、来源、时间和关键词再次找回。
       </blockquote>

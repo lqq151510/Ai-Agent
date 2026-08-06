@@ -123,6 +123,36 @@ export type ModelProvider = {
   lastCheckMessage?: string | null;
 };
 
+export type LocalAssistantSession = {
+  id: string;
+  title: string;
+  model: string;
+  updatedAt?: string;
+};
+
+export type LocalAssistantMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt?: string;
+  pending?: boolean;
+};
+
+export type LocalAssistantStreamEvent = {
+  requestId: string;
+  sessionId: string;
+  type: 'started' | 'chunk' | 'done' | 'error';
+  chunk?: string;
+  reply?: string;
+  message?: string;
+};
+
+export type SendLocalAssistantMessageResult = {
+  requestId: string;
+  sessionId: string;
+  isNewSession: boolean;
+};
+
 export type SettingsProfile = {
   displayName: string;
   email: string;
@@ -434,7 +464,17 @@ type BackendLocalFileBatchCommitResult = {
   failed?: unknown;
 };
 
+type LocalAssistantBridge = {
+    listSessions: () => Promise<unknown>;
+    listMessages: (sessionId: string) => Promise<unknown>;
+    deleteSession: (sessionId: string) => Promise<unknown>;
+    exportSession?: (sessionId: string) => Promise<unknown>;
+    send: (payload: { message: string; sessionId?: string; modelSourceId: string; model: string }) => Promise<unknown>;
+    onStreamEvent: (callback: (event: unknown) => void) => () => void;
+};
+
 type KnowledgeElectronApi = {
+  localChat?: LocalAssistantBridge;
   knowledge?: {
     request: <T>(payload: { method?: string; path: string; body?: unknown }) => Promise<T>;
     importLocalFile?: (payload?: { title?: string }) => Promise<BackendLocalFileImportResponse>;
@@ -487,6 +527,150 @@ export const canUseManagedSourceFolders = () => {
       && knowledge.openManagedSourceAsset,
   );
 };
+
+export const canUseLocalAssistant = () => {
+  const localChat = getElectronApi()?.localChat as Partial<LocalAssistantBridge> | undefined;
+  return Boolean(
+    localChat?.listSessions
+      && localChat.listMessages
+      && localChat.deleteSession
+      && localChat.send
+      && localChat.onStreamEvent,
+  );
+};
+
+export const canExportLocalAssistantSession = () => Boolean(
+  (getElectronApi()?.localChat as Partial<LocalAssistantBridge> | undefined)?.exportSession,
+);
+
+const requireLocalAssistantBridge = () => {
+  const localChat = getElectronApi()?.localChat;
+  if (!localChat || !canUseLocalAssistant()) {
+    throw new Error('本机助手只能在桌面端使用。');
+  }
+  return localChat;
+};
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => (
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+);
+
+const localAssistantText = (value: unknown, maxChars: number) => (
+  typeof value === 'string' && value.trim().length > 0 ? value.slice(0, maxChars) : null
+);
+
+const mapLocalAssistantSession = (value: unknown): LocalAssistantSession | null => {
+  if (!isPlainRecord(value)) return null;
+  const id = localAssistantText(value.id, 64);
+  const title = localAssistantText(value.title, 120);
+  const model = localAssistantText(value.model, 128);
+  if (!id || !title || !model) return null;
+  return {
+    id,
+    title,
+    model,
+    updatedAt: localAssistantText(value.updatedAt, 64) ?? undefined,
+  };
+};
+
+const mapLocalAssistantMessage = (value: unknown): LocalAssistantMessage | null => {
+  if (!isPlainRecord(value)) return null;
+  const id = localAssistantText(value.id, 64);
+  const content = localAssistantText(value.content, 120_000);
+  const role = value.role;
+  if (!id || !content || (role !== 'user' && role !== 'assistant')) return null;
+  return {
+    id,
+    content,
+    role,
+    createdAt: localAssistantText(value.createdAt, 64) ?? undefined,
+  };
+};
+
+const mapLocalAssistantStreamEvent = (value: unknown): LocalAssistantStreamEvent | null => {
+  if (!isPlainRecord(value)) return null;
+  const requestId = localAssistantText(value.requestId, 64);
+  const sessionId = localAssistantText(value.sessionId, 64);
+  const type = value.type;
+  if (!requestId || !sessionId || !['started', 'chunk', 'done', 'error'].includes(String(type))) {
+    return null;
+  }
+  return {
+    requestId,
+    sessionId,
+    type: type as LocalAssistantStreamEvent['type'],
+    chunk: localAssistantText(value.chunk, 120_000) ?? undefined,
+    reply: localAssistantText(value.reply, 120_000) ?? undefined,
+    message: localAssistantText(value.message, 240) ?? undefined,
+  };
+};
+
+export const listLocalAssistantSessions = async (): Promise<LocalAssistantSession[]> => {
+  const response = await requireLocalAssistantBridge().listSessions();
+  if (!Array.isArray(response)) {
+    throw new Error('本机助手会话列表返回了无效数据。');
+  }
+  return response
+    .map(mapLocalAssistantSession)
+    .filter((session): session is LocalAssistantSession => session !== null);
+};
+
+export const listLocalAssistantMessages = async (sessionId: string): Promise<LocalAssistantMessage[]> => {
+  const response = await requireLocalAssistantBridge().listMessages(sessionId);
+  if (!Array.isArray(response)) {
+    throw new Error('本机助手消息记录返回了无效数据。');
+  }
+  return response
+    .map(mapLocalAssistantMessage)
+    .filter((message): message is LocalAssistantMessage => message !== null);
+};
+
+export const deleteLocalAssistantSession = async (sessionId: string): Promise<void> => {
+  await requireLocalAssistantBridge().deleteSession(sessionId);
+};
+
+export const exportLocalAssistantSession = async (
+  sessionId: string,
+): Promise<{ canceled: boolean }> => {
+  const bridge = requireLocalAssistantBridge();
+  if (!bridge.exportSession) {
+    throw new Error('当前桌面端暂不支持导出本机助手对话。');
+  }
+  const response = await bridge.exportSession(sessionId);
+  if (!isPlainRecord(response) || typeof response.canceled !== 'boolean') {
+    throw new Error('本机助手导出没有返回有效结果。');
+  }
+  return { canceled: response.canceled };
+};
+
+export const sendLocalAssistantMessage = async (payload: {
+  message: string;
+  sessionId?: string;
+  modelSourceId: string;
+  model: string;
+}): Promise<SendLocalAssistantMessageResult> => {
+  const response = await requireLocalAssistantBridge().send(payload);
+  if (!isPlainRecord(response)) {
+    throw new Error('本机助手没有确认消息请求。');
+  }
+  const requestId = localAssistantText(response.requestId, 64);
+  const sessionId = localAssistantText(response.sessionId, 64);
+  if (!requestId || !sessionId || response.ok !== true) {
+    throw new Error('本机助手没有确认消息请求。');
+  }
+  return {
+    requestId,
+    sessionId,
+    isNewSession: response.isNewSession === true,
+  };
+};
+
+export const subscribeLocalAssistantStream = (
+  callback: (event: LocalAssistantStreamEvent) => void,
+): (() => void) => requireLocalAssistantBridge().onStreamEvent((event) => {
+  const mapped = mapLocalAssistantStreamEvent(event);
+  if (mapped) callback(mapped);
+});
 
 const canUseDirectBackend = () => (
   DIRECT_BACKEND_PREVIEW_ENABLED
