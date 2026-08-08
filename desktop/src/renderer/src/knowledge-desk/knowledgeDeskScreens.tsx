@@ -258,14 +258,23 @@ export const DashboardPage = ({
 
   return (
     <div className="kd-stack">
-      <section className="kd-search-hero">
-        <div>
-          <p>今日研究台</p>
-          <h2>把新资料先收进来，再慢慢变成能找回的知识。</h2>
+      <section className="kd-search-hero kd-search-hero--index">
+        <div className="kd-index-hero-copy">
+          <p><span className="kd-index-hero-signal" /> INDEX / TODAY</p>
+          <h2>让每一条新线索<br /><em>在需要时重新出现。</em></h2>
+          <span className="kd-index-hero-caption">收集、整理、连接、回顾。你的资料不会再散落在不同地方。</span>
+        </div>
+        <div aria-hidden="true" className="kd-index-hero-map">
+          <img alt="" className="kd-index-hero-image" src="/knowledge-desk-index-v1.png" />
+          <div className="kd-index-hero-map-lines">
+            <span>01 / CAPTURE</span>
+            <span>02 / INDEX</span>
+            <span>03 / RECALL</span>
+          </div>
         </div>
         <button className="kd-primary-button" onClick={onOpenImport} type="button">
           <Plus size={17} />
-          新增资料
+          录入线索
         </button>
       </section>
 
@@ -414,7 +423,15 @@ export const InboxPage = ({
   }
 
   return (
-    <div className="kd-stack">
+    <div className="kd-stack kd-inbox-stack">
+      <header className="kd-page-identity kd-page-identity--inbox">
+        <div>
+          <p>INTAKE QUEUE / INBOX</p>
+          <h2>把尚未成形的资料，先放进可靠的队列。</h2>
+          <span>每一条都会保留来源和状态，等你决定下一步。</span>
+        </div>
+        <strong aria-hidden="true">01</strong>
+      </header>
       <div className="kd-page-tools">
         <div className="kd-segmented">
           {inboxSegments.map((segment) => (
@@ -1048,6 +1065,14 @@ export const LibraryPage = ({
       </aside>
 
       <div className="kd-stack">
+        <header className="kd-page-identity kd-page-identity--library">
+          <div>
+            <p>RECALL INDEX / LIBRARY</p>
+            <h2>不是收藏夹，是能够重新找到的记忆。</h2>
+            <span>用来源、时间和主题切开索引，回到真正需要的那一条。</span>
+          </div>
+          <strong aria-hidden="true">02</strong>
+        </header>
         <div className="kd-page-tools">
           <div>
             <h2 className="kd-section-title">当前页 {formatCount(filteredItems.length)} / {formatCount(pageData.total)} 条知识条目</h2>

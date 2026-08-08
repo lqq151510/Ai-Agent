@@ -33,6 +33,8 @@ const LOCAL_CHAT_MESSAGE_MAX_CHARS = 8_000;
 const LOCAL_CHAT_RESPONSE_MAX_CHARS = 120_000;
 const LOCAL_CHAT_EXPORT_MAX_BYTES = 20 * 1024 * 1024;
 const LOCAL_CHAT_TITLE_MAX_CHARS = 120;
+const LOCAL_CHAT_SESSION_PAGE_SIZE = 50;
+const LOCAL_CHAT_MAX_PAGE_INDEX = 1_000;
 const LOCAL_CHAT_SESSION_MARKER = 'local_assistant';
 const LOCAL_CHAT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LOCAL_CHAT_MODEL = /^[\w./:-]{1,128}$/;
@@ -93,6 +95,11 @@ type LocalChatSession = {
   updatedAt?: string;
 };
 
+type LocalChatSessionPage = {
+  sessions: LocalChatSession[];
+  nextPage: number | null;
+};
+
 type LocalChatMessage = {
   id: string;
   role: 'user' | 'assistant';
@@ -116,6 +123,19 @@ export function normalizeLocalChatSessionId(value: unknown): string {
     throw new Error('对话标识无效，请重新打开对话。');
   }
   return id;
+}
+
+export function normalizeLocalChatPage(value: unknown): number {
+  if (value === undefined) return 0;
+  if (
+    typeof value !== 'number'
+    || !Number.isSafeInteger(value)
+    || value < 0
+    || value > LOCAL_CHAT_MAX_PAGE_INDEX
+  ) {
+    throw new Error('对话分页参数无效，请重新打开本机助手。');
+  }
+  return value;
 }
 
 export function normalizeLocalChatInput(payload: unknown): LocalChatInput {
@@ -901,16 +921,29 @@ export class IpcRegistry {
   }
 
   private setupLocalChatIpc(): void {
-    ipcMain.handle('local-chat:list-sessions', async (event) => {
-      this.assertLocalChatSender(event.sender);
-      const response = await this.backendRequest('/api/v1/sessions?page=0&size=50', {
-        method: 'GET',
-      });
-      const sessions: unknown[] = Array.isArray(response?.content) ? response.content : [];
-      return sessions
-        .map(toSafeLocalChatSession)
-        .filter((session: LocalChatSession | null): session is LocalChatSession => session !== null);
-    });
+    ipcMain.handle(
+      'local-chat:list-sessions',
+      async (event, pageInput: unknown): Promise<LocalChatSessionPage> => {
+        this.assertLocalChatSender(event.sender);
+        const page = normalizeLocalChatPage(pageInput);
+        const response = await this.backendRequest(
+          `/api/v1/sessions?page=${page}&size=${LOCAL_CHAT_SESSION_PAGE_SIZE}`,
+          { method: 'GET' },
+        );
+        const sessions: unknown[] = Array.isArray(response?.content) ? response.content : [];
+        const totalPages = (
+          typeof response?.totalPages === 'number'
+          && Number.isSafeInteger(response.totalPages)
+          && response.totalPages >= 0
+        ) ? response.totalPages : 0;
+        return {
+          sessions: sessions
+            .map(toSafeLocalChatSession)
+            .filter((session: LocalChatSession | null): session is LocalChatSession => session !== null),
+          nextPage: page + 1 < totalPages ? page + 1 : null,
+        };
+      },
+    );
 
     ipcMain.handle('local-chat:list-messages', async (event, sessionId: unknown) => {
       this.assertLocalChatSender(event.sender);

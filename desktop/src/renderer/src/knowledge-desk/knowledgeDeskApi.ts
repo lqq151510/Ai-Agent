@@ -130,6 +130,11 @@ export type LocalAssistantSession = {
   updatedAt?: string;
 };
 
+export type LocalAssistantSessionPage = {
+  sessions: LocalAssistantSession[];
+  nextPage: number | null;
+};
+
 export type LocalAssistantMessage = {
   id: string;
   role: 'user' | 'assistant';
@@ -465,12 +470,12 @@ type BackendLocalFileBatchCommitResult = {
 };
 
 type LocalAssistantBridge = {
-    listSessions: () => Promise<unknown>;
-    listMessages: (sessionId: string) => Promise<unknown>;
-    deleteSession: (sessionId: string) => Promise<unknown>;
-    exportSession?: (sessionId: string) => Promise<unknown>;
-    send: (payload: { message: string; sessionId?: string; modelSourceId: string; model: string }) => Promise<unknown>;
-    onStreamEvent: (callback: (event: unknown) => void) => () => void;
+  listSessions: (page?: number) => Promise<unknown>;
+  listMessages: (sessionId: string) => Promise<unknown>;
+  deleteSession: (sessionId: string) => Promise<unknown>;
+  exportSession?: (sessionId: string) => Promise<unknown>;
+  send: (payload: { message: string; sessionId?: string; modelSourceId: string; model: string }) => Promise<unknown>;
+  onStreamEvent: (callback: (event: unknown) => void) => () => void;
 };
 
 type KnowledgeElectronApi = {
@@ -605,14 +610,26 @@ const mapLocalAssistantStreamEvent = (value: unknown): LocalAssistantStreamEvent
   };
 };
 
-export const listLocalAssistantSessions = async (): Promise<LocalAssistantSession[]> => {
-  const response = await requireLocalAssistantBridge().listSessions();
-  if (!Array.isArray(response)) {
+export const listLocalAssistantSessions = async (
+  page = 0,
+): Promise<LocalAssistantSessionPage> => {
+  const response = await requireLocalAssistantBridge().listSessions(page);
+  if (!isPlainRecord(response) || !Array.isArray(response.sessions)) {
     throw new Error('本机助手会话列表返回了无效数据。');
   }
-  return response
-    .map(mapLocalAssistantSession)
-    .filter((session): session is LocalAssistantSession => session !== null);
+  const nextPage = response.nextPage;
+  if (
+    nextPage !== null
+    && (typeof nextPage !== 'number' || !Number.isSafeInteger(nextPage) || nextPage < 0)
+  ) {
+    throw new Error('本机助手会话列表返回了无效分页信息。');
+  }
+  return {
+    sessions: response.sessions
+      .map(mapLocalAssistantSession)
+      .filter((session): session is LocalAssistantSession => session !== null),
+    nextPage,
+  };
 };
 
 export const listLocalAssistantMessages = async (sessionId: string): Promise<LocalAssistantMessage[]> => {

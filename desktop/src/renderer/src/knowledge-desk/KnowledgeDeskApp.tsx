@@ -67,6 +67,7 @@ import { ArchivePage, ContextRail, ConnectionBanner, DashboardPage, DetailPage, 
 import { ReviewPage } from './knowledgeDeskReview';
 import { LocalAssistantPage } from './knowledgeDeskAssistant';
 import { SettingsPage } from './knowledgeDeskSettings';
+import { KnowledgeDeskMark } from './KnowledgeDeskMark';
 import type { MainPage, SettingsTab, ImportMode } from './knowledgeDeskTypes';
 import {
   applySnapshotItemUpdate,
@@ -604,13 +605,13 @@ const KnowledgeDeskApp = () => {
   }, [snapshot.status, loadDetailJobs]);
 
   return (
-    <div className="kd-app">
+    <div className="kd-app kd-app--obsidian-index">
       <aside className="kd-sidebar">
         <div className="kd-brand" aria-label="知识工作台">
-          <div className="kd-brand-mark">知</div>
+          <KnowledgeDeskMark className="kd-brand-mark" title="Knowledge Desk" />
           <div>
             <div className="kd-brand-name">知识工作台</div>
-            <div className="kd-brand-subtitle">个人知识工作台</div>
+            <div className="kd-brand-subtitle">私人索引系统 / 01</div>
           </div>
         </div>
 
@@ -649,7 +650,7 @@ const KnowledgeDeskApp = () => {
       <main className={`kd-main kd-main--${activePage}`}>
         <header className="kd-topbar">
           <div>
-            <p className="kd-kicker">现代编辑部式知识中台</p>
+            <p className="kd-kicker">Obsidian Index / Private Memory System</p>
             <h1>{currentTitle}</h1>
           </div>
           <button

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookmarkPlus,
   Bot,
+  ChevronDown,
   CheckCircle2,
   Download,
   Loader2,
@@ -62,6 +63,20 @@ const sessionTime = (value?: string) => {
   return time.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 };
 
+const appendDistinctSessions = (
+  current: LocalAssistantSession[],
+  incoming: LocalAssistantSession[],
+) => {
+  const sessionIds = new Set(current.map((session) => session.id));
+  const merged = [...current];
+  for (const session of incoming) {
+    if (sessionIds.has(session.id)) continue;
+    sessionIds.add(session.id);
+    merged.push(session);
+  }
+  return merged;
+};
+
 export const LocalAssistantPage = ({
   defaultModelSourceId,
   initialDraft,
@@ -83,6 +98,8 @@ export const LocalAssistantPage = ({
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [isLoadingMoreSessions, setIsLoadingMoreSessions] = useState(false);
+  const [nextSessionPage, setNextSessionPage] = useState<number | null>(null);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -147,8 +164,10 @@ export const LocalAssistantPage = ({
     if (!bridgeAvailable) return [];
     setIsLoadingSessions(true);
     try {
-      const nextSessions = await listLocalAssistantSessions();
+      const sessionPage = await listLocalAssistantSessions();
+      const nextSessions = sessionPage.sessions;
       setSessions(nextSessions);
+      setNextSessionPage(sessionPage.nextPage);
       setActiveSessionId((current) => (
         current && nextSessions.some((session) => session.id === current)
           ? current
@@ -162,6 +181,23 @@ export const LocalAssistantPage = ({
       setIsLoadingSessions(false);
     }
   }, [bridgeAvailable]);
+
+  const loadMoreSessions = async () => {
+    const page = nextSessionPage;
+    if (page === null || isSending || isLoadingSessions || isLoadingMoreSessions) return;
+
+    setError(null);
+    setIsLoadingMoreSessions(true);
+    try {
+      const sessionPage = await listLocalAssistantSessions(page);
+      setSessions((current) => appendDistinctSessions(current, sessionPage.sessions));
+      setNextSessionPage(sessionPage.nextPage);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setIsLoadingMoreSessions(false);
+    }
+  };
 
   useEffect(() => {
     void refreshSessions();
@@ -397,8 +433,8 @@ export const LocalAssistantPage = ({
     <div className="kd-assistant-page">
       <header className="kd-assistant-hero">
         <div>
-          <p>本机助手</p>
-          <h2>把阅读、想法和待办留在同一个私有工作台。</h2>
+          <p>FOCUS ROOM / LOCAL MODEL</p>
+          <h2>让当前的线索，在不中断思考的地方继续。</h2>
           <span><ShieldCheck size={14} /> 仅使用已保存的本机模型；不读取文件、不执行命令。</span>
         </div>
         <div className="kd-assistant-hero-actions">
@@ -425,7 +461,7 @@ export const LocalAssistantPage = ({
           <div className="kd-assistant-sessions-header">
             <div>
               <span>对话记录</span>
-              <strong>{sessions.length} 条</strong>
+              <strong>{nextSessionPage === null ? `${sessions.length} 条` : `已加载 ${sessions.length} 条`}</strong>
             </div>
             <button aria-label="新建对话" className="kd-icon-button" disabled={isSending} onClick={startNewConversation} type="button">
               <Plus size={17} />
@@ -437,7 +473,11 @@ export const LocalAssistantPage = ({
           <div className="kd-assistant-session-list">
             {isLoadingSessions ? <div className="kd-assistant-loading"><Loader2 className="kd-spin" size={17} /> 正在读取…</div> : null}
             {!isLoadingSessions && sessions.length === 0 ? (
-              <p className="kd-assistant-empty-list">第一条消息会自动保存成新对话。</p>
+              <p className="kd-assistant-empty-list">
+                {nextSessionPage === null
+                  ? '第一条消息会自动保存成新对话。'
+                  : '最近记录中还没有本机助手对话，可继续加载更早记录。'}
+              </p>
             ) : null}
             {sessions.map((session) => (
               <div className={`kd-assistant-session ${activeSessionId === session.id ? 'is-active' : ''}`} key={session.id}>
@@ -456,6 +496,17 @@ export const LocalAssistantPage = ({
                 </button>
               </div>
             ))}
+            {nextSessionPage !== null ? (
+              <button
+                className="kd-assistant-load-more"
+                disabled={isSending || isLoadingSessions || isLoadingMoreSessions}
+                onClick={() => void loadMoreSessions()}
+                type="button"
+              >
+                {isLoadingMoreSessions ? <Loader2 className="kd-spin" size={15} /> : <ChevronDown size={15} />}
+                {isLoadingMoreSessions ? '正在加载…' : '加载更早的对话'}
+              </button>
+            ) : null}
           </div>
         </aside>
 

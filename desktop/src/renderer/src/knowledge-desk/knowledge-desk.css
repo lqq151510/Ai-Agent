@@ -2561,7 +2561,31 @@
   background: var(--accent-alpha-10);
 }
 
+.kd-assistant-load-more {
+  min-height: 34px;
+  width: calc(100% - 16px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 8px;
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kd-assistant-load-more:hover:not(:disabled) {
+  border-color: var(--accent-alpha-40);
+  background: var(--accent-alpha-10);
+  color: var(--accent);
+}
+
 .kd-assistant-new:disabled,
+.kd-assistant-load-more:disabled,
 .kd-assistant-session button:disabled,
 .kd-assistant-composer button:disabled {
   cursor: default;
@@ -2860,6 +2884,7 @@
 .kd-assistant-composer textarea:focus-visible,
 .kd-assistant-model-select select:focus-visible,
 .kd-assistant-new:focus-visible,
+.kd-assistant-load-more:focus-visible,
 .kd-assistant-session button:focus-visible {
   outline: 2px solid var(--accent-alpha-40);
   outline-offset: 2px;
@@ -3111,5 +3136,1298 @@
 
   .kd-assistant-composer .kd-primary-button {
     width: 100%;
+  }
+}
+
+/* ============================================================
+   Obsidian Index
+   A private knowledge system: graphite field, bone records,
+   chartreuse locator, and a single signal-orange state marker.
+   ============================================================ */
+.kd-app--obsidian-index {
+  --kd-graphite: #111311;
+  --kd-ink: #0a0c0b;
+  --kd-panel: #1a1e1b;
+  --kd-panel-raised: #222722;
+  --kd-bone: #f4f1e8;
+  --kd-muted: #a1a89e;
+  --kd-faint: #697168;
+  --kd-lime: #dfff33;
+  --kd-orange: #ff5a36;
+  --kd-display: "Iowan Old Style", "Songti SC", STSong, serif;
+  --kd-ui: "Avenir Next", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --kd-mono: "SFMono-Regular", "SF Mono", Menlo, monospace;
+  --font-sans: var(--kd-ui);
+  --font-mono: var(--kd-mono);
+  --surface-page: var(--kd-graphite);
+  --surface-card: var(--kd-panel);
+  --surface-page-alpha-40: rgba(17, 19, 17, 0.4);
+  --surface-page-alpha-78: rgba(17, 19, 17, 0.78);
+  --surface-page-alpha-85: rgba(17, 19, 17, 0.85);
+  --surface-card-alpha-8: rgba(244, 241, 232, 0.08);
+  --surface-card-alpha-90: rgba(26, 30, 27, 0.9);
+  --surface-secondary: var(--kd-ink);
+  --surface-tertiary: #292f2a;
+  --surface-accent-subtle: rgba(223, 255, 51, 0.08);
+  --surface-hover: rgba(244, 241, 232, 0.055);
+  --surface-active: rgba(223, 255, 51, 0.11);
+  --surface-disabled: #303630;
+  --surface-backdrop: rgba(10, 12, 11, 0.82);
+  --surface-overlay: rgba(0, 0, 0, 0.7);
+  --surface-inverse: var(--kd-bone);
+  --surface-code: #0d100e;
+  --surface-terminal: #090b0a;
+  --surface-terminal-header: #131613;
+  --text-primary: var(--kd-bone);
+  --text-secondary: var(--kd-muted);
+  --text-tertiary: var(--kd-faint);
+  --text-disabled: #586057;
+  --text-heading: var(--kd-bone);
+  --text-inverse: #111311;
+  --text-on-dark: var(--kd-bone);
+  --text-terminal: var(--kd-muted);
+  --border-default: rgba(244, 241, 232, 0.13);
+  --border-strong: rgba(244, 241, 232, 0.22);
+  --border-hover: rgba(223, 255, 51, 0.66);
+  --border-accent: rgba(223, 255, 51, 0.28);
+  --border-error: rgba(255, 109, 86, 0.42);
+  --border-warning: rgba(255, 171, 75, 0.42);
+  --border-success: rgba(181, 235, 109, 0.36);
+  --border-terminal: #303830;
+  --accent: var(--kd-lime);
+  --accent-hover: #efff8a;
+  --accent-light: #ebff75;
+  --accent-gradient: linear-gradient(90deg, var(--kd-lime), #f0ff8d);
+  --accent-alpha-4: rgba(223, 255, 51, 0.04);
+  --accent-alpha-5: rgba(223, 255, 51, 0.05);
+  --accent-alpha-6: rgba(223, 255, 51, 0.06);
+  --accent-alpha-8: rgba(223, 255, 51, 0.08);
+  --accent-alpha-10: rgba(223, 255, 51, 0.1);
+  --accent-alpha-12: rgba(223, 255, 51, 0.12);
+  --accent-alpha-15: rgba(223, 255, 51, 0.15);
+  --accent-alpha-20: rgba(223, 255, 51, 0.2);
+  --accent-alpha-25: rgba(223, 255, 51, 0.25);
+  --accent-alpha-30: rgba(223, 255, 51, 0.3);
+  --accent-alpha-35: rgba(223, 255, 51, 0.35);
+  --accent-alpha-40: rgba(223, 255, 51, 0.4);
+  --accent-glow: 0 0 0 1px rgba(223, 255, 51, 0.18), 0 0 22px rgba(223, 255, 51, 0.1);
+  --success: #b5eb6d;
+  --success-alpha-3: rgba(181, 235, 109, 0.03);
+  --success-alpha-8: rgba(181, 235, 109, 0.08);
+  --success-alpha-15: rgba(181, 235, 109, 0.15);
+  --success-alpha-20: rgba(181, 235, 109, 0.2);
+  --success-alpha-40: rgba(181, 235, 109, 0.4);
+  --warning: #ffb35a;
+  --warning-alpha-5: rgba(255, 179, 90, 0.05);
+  --warning-alpha-15: rgba(255, 179, 90, 0.15);
+  --warning-alpha-40: rgba(255, 179, 90, 0.4);
+  --error: #ff765f;
+  --error-alpha-3: rgba(255, 118, 95, 0.03);
+  --error-alpha-8: rgba(255, 118, 95, 0.08);
+  --error-alpha-15: rgba(255, 118, 95, 0.15);
+  --error-alpha-20: rgba(255, 118, 95, 0.2);
+  --shadow-sm: none;
+  --shadow-md: 0 16px 42px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.32);
+  --shadow-xl: 0 30px 100px rgba(0, 0, 0, 0.42);
+  position: relative;
+  isolation: isolate;
+  grid-template-columns: 268px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 81% -8%, rgba(223, 255, 51, 0.1), transparent 31rem),
+    radial-gradient(circle at 5% 108%, rgba(255, 90, 54, 0.06), transparent 28rem),
+    var(--kd-graphite);
+  color: var(--kd-bone);
+  font-family: var(--kd-ui);
+  letter-spacing: -0.015em;
+}
+
+.kd-app--obsidian-index::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  opacity: 0.42;
+  background-image:
+    linear-gradient(rgba(244, 241, 232, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(244, 241, 232, 0.025) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(90deg, transparent, black 13%, black 87%, transparent);
+}
+
+.kd-app--obsidian-index > * {
+  position: relative;
+  z-index: 0;
+}
+
+.kd-app--obsidian-index button,
+.kd-app--obsidian-index input,
+.kd-app--obsidian-index select,
+.kd-app--obsidian-index textarea,
+.kd-app--obsidian-index kbd {
+  font-family: inherit;
+}
+
+.kd-app--obsidian-index .kd-sidebar {
+  position: relative;
+  padding: 25px 12px 15px;
+  border-right-color: rgba(244, 241, 232, 0.1);
+  background:
+    linear-gradient(180deg, rgba(244, 241, 232, 0.025), transparent 170px),
+    var(--kd-ink);
+}
+
+.kd-app--obsidian-index .kd-sidebar::after {
+  position: absolute;
+  top: 24px;
+  right: -1px;
+  bottom: 24px;
+  width: 1px;
+  content: "";
+  background: linear-gradient(180deg, transparent, var(--kd-lime), transparent);
+  opacity: 0.45;
+}
+
+.kd-app--obsidian-index .kd-brand {
+  gap: 11px;
+  padding: 3px 9px 28px;
+}
+
+.kd-app--obsidian-index .kd-brand-mark {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+}
+
+.kd-app--obsidian-index .kd-brand-name {
+  color: var(--kd-bone);
+  font-family: var(--kd-ui);
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+
+.kd-app--obsidian-index .kd-brand-subtitle {
+  margin-top: 2px;
+  color: var(--kd-faint);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+.kd-app--obsidian-index .kd-nav {
+  gap: 2px;
+}
+
+.kd-app--obsidian-index .kd-nav-item {
+  min-height: 42px;
+  border-radius: 3px;
+  color: #a9b1a6;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.kd-app--obsidian-index .kd-nav-item:hover {
+  color: var(--kd-bone);
+  background: rgba(244, 241, 232, 0.06);
+  transform: translateX(2px);
+}
+
+.kd-app--obsidian-index .kd-nav-item.is-active {
+  border-color: rgba(223, 255, 51, 0.18);
+  background: rgba(223, 255, 51, 0.1);
+  color: var(--kd-lime);
+  box-shadow: inset 0 0 0 1px rgba(223, 255, 51, 0.03);
+}
+
+.kd-app--obsidian-index .kd-nav-item.is-active::before {
+  left: -12px;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 0;
+  background: var(--kd-lime);
+  box-shadow: 0 0 13px rgba(223, 255, 51, 0.65);
+}
+
+.kd-app--obsidian-index .kd-nav-badge {
+  min-width: 19px;
+  height: 18px;
+  border-radius: 2px;
+  background: rgba(223, 255, 51, 0.15);
+  color: var(--kd-lime);
+  font-family: var(--kd-mono);
+  font-size: 10px;
+}
+
+.kd-app--obsidian-index .kd-import-box {
+  margin-top: 27px;
+  padding: 17px 3px 0;
+  border-top-color: rgba(244, 241, 232, 0.1);
+}
+
+.kd-app--obsidian-index .kd-import-title {
+  color: var(--kd-faint);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+}
+
+.kd-app--obsidian-index .kd-import-action {
+  min-height: 34px;
+  border-radius: 3px;
+  color: var(--kd-muted);
+  font-size: 12px;
+}
+
+.kd-app--obsidian-index .kd-import-action:hover {
+  color: var(--kd-bone);
+  background: rgba(244, 241, 232, 0.06);
+}
+
+.kd-app--obsidian-index .kd-user-card {
+  min-height: 57px;
+  border-color: rgba(244, 241, 232, 0.13);
+  border-radius: 3px;
+  background: #171a18;
+}
+
+.kd-app--obsidian-index .kd-avatar,
+.kd-app--obsidian-index .kd-profile-avatar {
+  border-radius: 3px;
+  background: var(--kd-orange);
+  color: var(--kd-ink);
+}
+
+.kd-app--obsidian-index .kd-user-meta span {
+  color: var(--kd-faint);
+}
+
+.kd-app--obsidian-index .kd-main {
+  background: linear-gradient(180deg, rgba(10, 12, 11, 0.26), transparent 310px);
+}
+
+.kd-app--obsidian-index .kd-topbar {
+  min-height: 102px;
+  padding: 23px 36px 19px;
+  border-bottom-color: rgba(244, 241, 232, 0.1);
+  background: rgba(17, 19, 17, 0.79);
+  backdrop-filter: blur(22px) saturate(0.9);
+}
+
+.kd-app--obsidian-index .kd-kicker {
+  color: var(--kd-lime);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.125em;
+}
+
+.kd-app--obsidian-index .kd-topbar h1 {
+  margin-top: 2px;
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.055em;
+}
+
+.kd-app--obsidian-index .kd-command-search {
+  width: min(404px, 38vw);
+  height: 38px;
+  border-color: rgba(244, 241, 232, 0.15);
+  border-radius: 3px;
+  background: #0d0f0e;
+  box-shadow: none;
+  color: var(--kd-muted);
+  font-size: 12px;
+}
+
+.kd-app--obsidian-index .kd-command-search:hover {
+  border-color: rgba(223, 255, 51, 0.54);
+  color: var(--kd-bone);
+}
+
+.kd-app--obsidian-index .kd-command-search > svg {
+  color: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-command-search kbd {
+  border-color: rgba(244, 241, 232, 0.13);
+  border-radius: 2px;
+  background: #1b201c;
+  color: var(--kd-faint);
+  font-family: var(--kd-mono);
+  font-size: 10px;
+}
+
+.kd-app--obsidian-index .kd-topbar-actions {
+  gap: 7px;
+}
+
+.kd-app--obsidian-index .kd-primary-button,
+.kd-app--obsidian-index .kd-search-box button {
+  min-height: 38px;
+  border: 1px solid var(--kd-lime);
+  border-radius: 3px;
+  background: var(--kd-lime);
+  color: #111311;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.kd-app--obsidian-index .kd-primary-button:hover:not(:disabled),
+.kd-app--obsidian-index .kd-search-box button:hover:not(:disabled) {
+  background: #efff8a;
+  box-shadow: 0 7px 20px rgba(223, 255, 51, 0.2);
+  transform: translateY(-1px);
+}
+
+.kd-app--obsidian-index .kd-sync-badge,
+.kd-app--obsidian-index .kd-refresh-button,
+.kd-app--obsidian-index .kd-connection-banner button {
+  min-height: 29px;
+  border-color: rgba(244, 241, 232, 0.13);
+  border-radius: 3px;
+  background: #171a18;
+  color: var(--kd-muted);
+  font-family: var(--kd-mono);
+  font-size: 10px;
+}
+
+.kd-app--obsidian-index .kd-sync-badge--api {
+  border-color: rgba(223, 255, 51, 0.24);
+  background: rgba(223, 255, 51, 0.1);
+  color: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-workspace,
+.kd-app--obsidian-index .kd-settings-content {
+  padding: 34px 36px 58px;
+}
+
+.kd-app--obsidian-index .kd-context-rail {
+  border-left-color: rgba(244, 241, 232, 0.1);
+  background: rgba(10, 12, 11, 0.42);
+}
+
+.kd-app--obsidian-index .kd-search-hero--index {
+  position: relative;
+  min-height: 232px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 178px auto;
+  gap: 28px;
+  align-items: center;
+  overflow: hidden;
+  padding: 29px 30px;
+  border-color: rgba(223, 255, 51, 0.34);
+  border-radius: 4px;
+  background:
+    linear-gradient(110deg, rgba(223, 255, 51, 0.12), transparent 48%),
+    linear-gradient(180deg, #1b201d, #151816);
+  box-shadow: none;
+}
+
+.kd-app--obsidian-index .kd-search-hero--index::after {
+  position: absolute;
+  right: 18px;
+  bottom: -43px;
+  color: rgba(244, 241, 232, 0.035);
+  content: "INDEX";
+  font-family: var(--kd-display);
+  font-size: 132px;
+  letter-spacing: -0.1em;
+  pointer-events: none;
+}
+
+.kd-app--obsidian-index .kd-index-hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.kd-app--obsidian-index .kd-search-hero--index p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 13px;
+  color: var(--kd-lime);
+  font-family: var(--kd-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.kd-app--obsidian-index .kd-index-hero-signal {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--kd-orange);
+  box-shadow: 0 0 0 4px rgba(255, 90, 54, 0.1);
+}
+
+.kd-app--obsidian-index .kd-search-hero--index h2 {
+  max-width: 560px;
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: clamp(29px, 3vw, 42px);
+  font-weight: 500;
+  letter-spacing: -0.065em;
+  line-height: 1.06;
+}
+
+.kd-app--obsidian-index .kd-search-hero--index h2 em {
+  color: var(--kd-lime);
+  font-style: normal;
+}
+
+.kd-app--obsidian-index .kd-index-hero-caption {
+  display: block;
+  max-width: 520px;
+  margin-top: 17px;
+  color: var(--kd-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.kd-app--obsidian-index .kd-index-hero-map {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 13px;
+  align-items: center;
+}
+
+.kd-app--obsidian-index .kd-index-hero-image {
+  width: 80px;
+  height: 80px;
+  border-radius: 19px;
+  object-fit: cover;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+}
+
+.kd-app--obsidian-index .kd-index-hero-map-lines {
+  display: grid;
+  gap: 7px;
+  color: var(--kd-faint);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.055em;
+}
+
+.kd-app--obsidian-index .kd-index-hero-map-lines span {
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(244, 241, 232, 0.12);
+}
+
+.kd-app--obsidian-index .kd-search-hero--index .kd-primary-button {
+  position: relative;
+  z-index: 2;
+  align-self: end;
+  margin-bottom: 3px;
+}
+
+.kd-app--obsidian-index .kd-stat-grid {
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid rgba(244, 241, 232, 0.13);
+  border-radius: 4px;
+  background: rgba(244, 241, 232, 0.13);
+}
+
+.kd-app--obsidian-index .kd-metric {
+  position: relative;
+  min-height: 128px;
+  padding: 18px;
+  border: 0;
+  border-radius: 0;
+  background: #191d1a;
+  box-shadow: none;
+}
+
+.kd-app--obsidian-index .kd-metric::after {
+  position: absolute;
+  top: 13px;
+  right: 15px;
+  color: rgba(244, 241, 232, 0.22);
+  content: "01";
+  font-family: var(--kd-mono);
+  font-size: 9px;
+}
+
+.kd-app--obsidian-index .kd-metric:nth-child(2)::after { content: "02"; }
+.kd-app--obsidian-index .kd-metric:nth-child(3)::after { content: "03"; }
+.kd-app--obsidian-index .kd-metric:nth-child(4)::after { content: "04"; }
+
+.kd-app--obsidian-index .kd-metric span {
+  color: var(--kd-faint);
+  font-family: var(--kd-mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+}
+
+.kd-app--obsidian-index .kd-metric strong {
+  margin: 11px 0 4px;
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: -0.055em;
+}
+
+.kd-app--obsidian-index .kd-metric p {
+  max-width: 84%;
+  color: var(--kd-muted);
+  font-size: 11px;
+}
+
+.kd-app--obsidian-index .kd-review-dashboard-card {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  min-height: 72px;
+  padding: 16px 18px;
+  border-color: rgba(223, 255, 51, 0.25);
+  border-radius: 4px;
+  background: #141815;
+}
+
+.kd-app--obsidian-index .kd-review-dashboard-card:hover {
+  border-color: var(--kd-lime);
+  box-shadow: var(--accent-glow);
+}
+
+.kd-app--obsidian-index .kd-review-dashboard-card > span,
+.kd-app--obsidian-index .kd-review-dashboard-card > em {
+  color: var(--kd-lime);
+  font-family: var(--kd-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.kd-app--obsidian-index .kd-review-dashboard-card > strong {
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: 27px;
+  font-weight: 500;
+}
+
+.kd-app--obsidian-index .kd-review-dashboard-card > p {
+  color: var(--kd-muted);
+  font-size: 12px;
+}
+
+.kd-app--obsidian-index .kd-two-column {
+  gap: 12px;
+}
+
+.kd-app--obsidian-index .kd-panel,
+.kd-app--obsidian-index .kd-context-block,
+.kd-app--obsidian-index .kd-library-item,
+.kd-app--obsidian-index .kd-inbox-row,
+.kd-app--obsidian-index .kd-filter-rail,
+.kd-app--obsidian-index .kd-search-result,
+.kd-app--obsidian-index .kd-empty-state,
+.kd-app--obsidian-index .kd-archive-item,
+.kd-app--obsidian-index .kd-model-card,
+.kd-app--obsidian-index .kd-profile-band,
+.kd-app--obsidian-index .kd-backup-card,
+.kd-app--obsidian-index .kd-preference-list,
+.kd-app--obsidian-index .kd-danger-zone {
+  border-color: rgba(244, 241, 232, 0.13);
+  border-radius: 4px;
+  background: #191d1a;
+  box-shadow: none;
+}
+
+.kd-app--obsidian-index .kd-panel {
+  padding: 18px;
+}
+
+.kd-app--obsidian-index .kd-panel header {
+  margin-bottom: 14px;
+  color: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-panel h2,
+.kd-app--obsidian-index .kd-context-block h2,
+.kd-app--obsidian-index .kd-section-title,
+.kd-app--obsidian-index .kd-filter-group h3 {
+  color: var(--kd-bone);
+  font-family: var(--kd-ui);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.kd-app--obsidian-index .kd-compact-item {
+  padding: 9px 8px;
+  border-radius: 3px;
+  color: var(--kd-bone);
+}
+
+.kd-app--obsidian-index .kd-compact-item:hover {
+  background: rgba(244, 241, 232, 0.055);
+}
+
+.kd-app--obsidian-index .kd-compact-item small,
+.kd-app--obsidian-index .kd-muted,
+.kd-app--obsidian-index .kd-meta-line,
+.kd-app--obsidian-index .kd-result-head {
+  color: var(--kd-muted);
+}
+
+.kd-app--obsidian-index .kd-tag {
+  border: 1px solid rgba(223, 255, 51, 0.21);
+  border-radius: 2px;
+  background: rgba(223, 255, 51, 0.08);
+  color: var(--kd-lime);
+  font-family: var(--kd-mono);
+  font-size: 10px;
+}
+
+.kd-app--obsidian-index .kd-page-identity {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  min-height: 114px;
+  overflow: hidden;
+  padding: 21px 23px;
+  border: 1px solid rgba(244, 241, 232, 0.14);
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg, rgba(223, 255, 51, 0.09), transparent 48%),
+    #171b18;
+}
+
+.kd-app--obsidian-index .kd-page-identity::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 62px;
+  height: 2px;
+  content: "";
+  background: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-page-identity p {
+  margin: 0 0 8px;
+  color: var(--kd-lime);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+}
+
+.kd-app--obsidian-index .kd-page-identity h2 {
+  margin: 0;
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.kd-app--obsidian-index .kd-page-identity span {
+  display: block;
+  margin-top: 7px;
+  color: var(--kd-muted);
+  font-size: 12px;
+}
+
+.kd-app--obsidian-index .kd-page-identity strong {
+  align-self: center;
+  color: rgba(244, 241, 232, 0.12);
+  font-family: var(--kd-display);
+  font-size: 59px;
+  font-weight: 500;
+  letter-spacing: -0.08em;
+}
+
+.kd-app--obsidian-index .kd-page-identity--library {
+  background:
+    linear-gradient(90deg, rgba(255, 90, 54, 0.075), transparent 50%),
+    #171b18;
+}
+
+.kd-app--obsidian-index .kd-page-identity--library::before {
+  background: var(--kd-orange);
+}
+
+.kd-app--obsidian-index .kd-page-identity--library p {
+  color: #ff8a6e;
+}
+
+.kd-app--obsidian-index .kd-page-tools {
+  min-height: 45px;
+}
+
+.kd-app--obsidian-index .kd-segmented {
+  gap: 0;
+  padding: 2px;
+  border-color: rgba(244, 241, 232, 0.14);
+  border-radius: 3px;
+  background: #0e100f;
+}
+
+.kd-app--obsidian-index .kd-segmented button {
+  min-height: 30px;
+  border-radius: 2px;
+  color: var(--kd-muted);
+  font-size: 11px;
+}
+
+.kd-app--obsidian-index .kd-segmented button.is-active {
+  background: var(--kd-lime);
+  color: #111311;
+  box-shadow: none;
+  font-weight: 800;
+}
+
+.kd-app--obsidian-index .kd-segment-count {
+  border-radius: 2px;
+  background: rgba(244, 241, 232, 0.08);
+  color: inherit;
+  font-family: var(--kd-mono);
+  font-size: 9px;
+}
+
+.kd-app--obsidian-index .kd-segmented button.is-active .kd-segment-count {
+  background: rgba(17, 19, 17, 0.15);
+}
+
+.kd-app--obsidian-index .kd-page-tools button,
+.kd-app--obsidian-index .kd-icon-button,
+.kd-app--obsidian-index .kd-secondary-button {
+  border-color: rgba(244, 241, 232, 0.15);
+  border-radius: 3px;
+  background: #1b201c;
+  color: var(--kd-bone);
+  box-shadow: none;
+}
+
+.kd-app--obsidian-index .kd-page-tools button:hover:not(:disabled),
+.kd-app--obsidian-index .kd-icon-button:hover:not(:disabled),
+.kd-app--obsidian-index .kd-secondary-button:hover:not(:disabled) {
+  border-color: var(--kd-lime);
+  color: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-tool-note {
+  color: var(--kd-muted);
+  font-size: 11px;
+}
+
+.kd-app--obsidian-index .kd-inbox-board,
+.kd-app--obsidian-index .kd-library-list,
+.kd-app--obsidian-index .kd-search-results {
+  gap: 7px;
+}
+
+.kd-app--obsidian-index .kd-inbox-row {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  min-height: 104px;
+  padding: 16px;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.kd-app--obsidian-index .kd-inbox-row:hover,
+.kd-app--obsidian-index .kd-library-item:hover,
+.kd-app--obsidian-index .kd-search-result:hover {
+  border-color: rgba(223, 255, 51, 0.46);
+  background: #1d221e;
+  transform: translateX(2px);
+}
+
+.kd-app--obsidian-index .kd-source-icon {
+  border-radius: 3px;
+  background: rgba(244, 241, 232, 0.07);
+  color: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-row-titleline h3,
+.kd-app--obsidian-index .kd-library-item h3,
+.kd-app--obsidian-index .kd-search-result h3 {
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.kd-app--obsidian-index .kd-inbox-row p,
+.kd-app--obsidian-index .kd-library-item p,
+.kd-app--obsidian-index .kd-search-result p {
+  color: var(--kd-muted);
+  font-size: 12px;
+}
+
+.kd-app--obsidian-index .kd-status {
+  border-radius: 2px;
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.kd-app--obsidian-index .kd-action-button {
+  border-color: rgba(244, 241, 232, 0.15);
+  border-radius: 3px;
+  background: #171a18;
+  color: var(--kd-lime);
+  font-size: 11px;
+}
+
+.kd-app--obsidian-index .kd-action-button--primary {
+  border-color: rgba(223, 255, 51, 0.32);
+  background: rgba(223, 255, 51, 0.1);
+}
+
+.kd-app--obsidian-index .kd-library-layout,
+.kd-app--obsidian-index .kd-search-layout {
+  grid-template-columns: 226px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.kd-app--obsidian-index .kd-filter-rail {
+  padding: 16px;
+  background: #121512;
+}
+
+.kd-app--obsidian-index .kd-filter-group {
+  gap: 7px;
+}
+
+.kd-app--obsidian-index .kd-filter-group h3 {
+  color: var(--kd-faint);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.kd-app--obsidian-index .kd-filter-group label {
+  color: var(--kd-muted);
+  font-size: 12px;
+}
+
+.kd-app--obsidian-index .kd-filter-summary {
+  border-color: rgba(244, 241, 232, 0.13);
+  border-radius: 3px;
+  background: #1b201c;
+  color: var(--kd-muted);
+}
+
+.kd-app--obsidian-index .kd-filter-summary strong {
+  color: var(--kd-bone);
+}
+
+.kd-app--obsidian-index .kd-filter-summary button {
+  border-color: rgba(223, 255, 51, 0.22);
+  border-radius: 2px;
+  color: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-library-cards {
+  gap: 8px;
+}
+
+.kd-app--obsidian-index .kd-library-item {
+  min-height: 185px;
+  padding: 18px;
+}
+
+.kd-app--obsidian-index .kd-type-badge {
+  border-radius: 2px;
+  background: rgba(255, 90, 54, 0.12);
+  color: #ff9a84;
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.kd-app--obsidian-index .kd-assistant-page {
+  gap: 12px;
+}
+
+.kd-app--obsidian-index .kd-assistant-hero {
+  min-height: 168px;
+  padding: 25px 28px;
+  border-color: rgba(223, 255, 51, 0.31);
+  border-radius: 4px;
+  background:
+    linear-gradient(110deg, rgba(223, 255, 51, 0.13), transparent 55%),
+    #181d19;
+  box-shadow: none;
+}
+
+.kd-app--obsidian-index .kd-assistant-hero p {
+  color: var(--kd-lime);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.kd-app--obsidian-index .kd-assistant-hero h2 {
+  max-width: 650px;
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: 31px;
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 1.1;
+}
+
+.kd-app--obsidian-index .kd-assistant-hero > div > span {
+  color: var(--kd-muted);
+  font-size: 11px;
+}
+
+.kd-app--obsidian-index .kd-assistant-model-select {
+  color: var(--kd-faint);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+.kd-app--obsidian-index .kd-assistant-model-select select {
+  border-color: rgba(244, 241, 232, 0.15);
+  border-radius: 3px;
+  background: #0d0f0e;
+  color: var(--kd-bone);
+  font-family: var(--kd-ui);
+  font-size: 11px;
+}
+
+.kd-app--obsidian-index .kd-assistant-layout {
+  min-height: 600px;
+  border-color: rgba(244, 241, 232, 0.14);
+  border-radius: 4px;
+  background: #171a18;
+  box-shadow: none;
+}
+
+.kd-app--obsidian-index .kd-assistant-sessions {
+  border-right-color: rgba(244, 241, 232, 0.12);
+  background: #101310;
+}
+
+.kd-app--obsidian-index .kd-assistant-sessions-header span {
+  color: var(--kd-faint);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.kd-app--obsidian-index .kd-assistant-sessions-header strong {
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.kd-app--obsidian-index .kd-assistant-new,
+.kd-app--obsidian-index .kd-assistant-load-more {
+  border-color: rgba(223, 255, 51, 0.34);
+  border-radius: 3px;
+  background: rgba(223, 255, 51, 0.07);
+  color: var(--kd-lime);
+  font-size: 11px;
+}
+
+.kd-app--obsidian-index .kd-assistant-session {
+  position: relative;
+  border-radius: 3px;
+}
+
+.kd-app--obsidian-index .kd-assistant-session.is-active {
+  border-color: rgba(223, 255, 51, 0.23);
+  background: rgba(223, 255, 51, 0.1);
+}
+
+.kd-app--obsidian-index .kd-assistant-session.is-active::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: -8px;
+  width: 2px;
+  content: "";
+  background: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-assistant-session > button:first-child {
+  color: var(--kd-bone);
+}
+
+.kd-app--obsidian-index .kd-assistant-session > button:first-child strong {
+  font-size: 12px;
+}
+
+.kd-app--obsidian-index .kd-assistant-session > button:first-child span,
+.kd-app--obsidian-index .kd-assistant-empty-list,
+.kd-app--obsidian-index .kd-assistant-loading {
+  color: var(--kd-muted);
+}
+
+.kd-app--obsidian-index .kd-assistant-conversation-header {
+  border-bottom-color: rgba(244, 241, 232, 0.12);
+  background: #171a18;
+}
+
+.kd-app--obsidian-index .kd-assistant-conversation-header > div > svg {
+  color: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-assistant-conversation-header strong {
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.kd-app--obsidian-index .kd-assistant-conversation-header span {
+  color: var(--kd-muted);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+
+.kd-app--obsidian-index .kd-assistant-messages {
+  background:
+    linear-gradient(rgba(244, 241, 232, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(244, 241, 232, 0.022) 1px, transparent 1px),
+    #131613;
+  background-size: 24px 24px;
+}
+
+.kd-app--obsidian-index .kd-assistant-welcome {
+  color: var(--kd-muted);
+}
+
+.kd-app--obsidian-index .kd-assistant-welcome svg {
+  color: var(--kd-lime);
+}
+
+.kd-app--obsidian-index .kd-assistant-welcome strong {
+  color: var(--kd-bone);
+  font-family: var(--kd-display);
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.kd-app--obsidian-index .kd-assistant-message {
+  border-color: rgba(244, 241, 232, 0.13);
+  border-radius: 3px;
+  background: #1d211e;
+  box-shadow: none;
+}
+
+.kd-app--obsidian-index .kd-assistant-message--user {
+  border-color: rgba(223, 255, 51, 0.34);
+  background: rgba(223, 255, 51, 0.1);
+}
+
+.kd-app--obsidian-index .kd-assistant-message-role {
+  color: var(--kd-lime);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.kd-app--obsidian-index .kd-assistant-message p {
+  color: var(--kd-bone);
+  font-size: 13px;
+}
+
+.kd-app--obsidian-index .kd-assistant-composer {
+  border-top-color: rgba(244, 241, 232, 0.12);
+  background: #171a18;
+}
+
+.kd-app--obsidian-index .kd-assistant-composer textarea {
+  border-color: rgba(244, 241, 232, 0.14);
+  border-radius: 3px;
+  background: #0e100f;
+  color: var(--kd-bone);
+  font-size: 13px;
+}
+
+.kd-app--obsidian-index .kd-assistant-composer textarea::placeholder {
+  color: var(--kd-faint);
+}
+
+.kd-app--obsidian-index .kd-assistant-composer > div > span {
+  color: var(--kd-faint);
+  font-family: var(--kd-mono);
+  font-size: 9px;
+}
+
+.kd-app--obsidian-index .kd-search-hero:not(.kd-search-hero--index),
+.kd-app--obsidian-index .kd-review-hero,
+.kd-app--obsidian-index .kd-review-card,
+.kd-app--obsidian-index .kd-detail,
+.kd-app--obsidian-index .kd-settings,
+.kd-app--obsidian-index .kd-import-panel,
+.kd-app--obsidian-index .kd-search-box {
+  border-color: rgba(244, 241, 232, 0.14);
+  border-radius: 4px;
+  background: #191d1a;
+  box-shadow: none;
+}
+
+.kd-app--obsidian-index .kd-search-box input,
+.kd-app--obsidian-index input,
+.kd-app--obsidian-index textarea,
+.kd-app--obsidian-index select {
+  accent-color: var(--kd-lime);
+}
+
+.kd-app--obsidian-index :focus-visible {
+  outline: 2px solid rgba(223, 255, 51, 0.72);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1180px) {
+  .kd-app--obsidian-index {
+    grid-template-columns: 238px minmax(0, 1fr);
+  }
+
+  .kd-app--obsidian-index .kd-search-hero--index {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .kd-app--obsidian-index .kd-index-hero-map {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .kd-app--obsidian-index {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .kd-app--obsidian-index .kd-sidebar {
+    display: none;
+  }
+
+  .kd-app--obsidian-index .kd-topbar {
+    min-height: 0;
+    padding: 19px 18px 15px;
+  }
+
+  .kd-app--obsidian-index .kd-topbar h1 {
+    font-size: 30px;
+  }
+
+  .kd-app--obsidian-index .kd-command-search {
+    width: 100%;
+  }
+
+  .kd-app--obsidian-index .kd-mobile-nav-item {
+    border-color: rgba(244, 241, 232, 0.14);
+    border-radius: 3px;
+    background: #171a18;
+    color: var(--kd-muted);
+  }
+
+  .kd-app--obsidian-index .kd-mobile-nav-item.is-active {
+    border-color: rgba(223, 255, 51, 0.28);
+    background: rgba(223, 255, 51, 0.1);
+    color: var(--kd-lime);
+  }
+
+  .kd-app--obsidian-index .kd-workspace,
+  .kd-app--obsidian-index .kd-settings-content {
+    padding: 19px 16px 36px;
+  }
+
+  .kd-app--obsidian-index .kd-search-hero--index {
+    min-height: 0;
+    grid-template-columns: 1fr;
+    gap: 19px;
+    padding: 24px 21px;
+  }
+
+  .kd-app--obsidian-index .kd-search-hero--index h2 {
+    font-size: 32px;
+  }
+
+  .kd-app--obsidian-index .kd-search-hero--index .kd-primary-button {
+    width: 100%;
+    margin: 0;
+  }
+
+  .kd-app--obsidian-index .kd-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kd-app--obsidian-index .kd-metric {
+    min-height: 116px;
+  }
+
+  .kd-app--obsidian-index .kd-review-dashboard-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .kd-app--obsidian-index .kd-review-dashboard-card > p {
+    grid-column: 1 / -1;
+  }
+
+  .kd-app--obsidian-index .kd-review-dashboard-card > em {
+    justify-self: end;
+  }
+
+  .kd-app--obsidian-index .kd-page-identity {
+    min-height: 0;
+    padding: 20px 18px;
+  }
+
+  .kd-app--obsidian-index .kd-page-identity h2 {
+    font-size: 23px;
+    line-height: 1.2;
+  }
+
+  .kd-app--obsidian-index .kd-page-identity strong {
+    font-size: 47px;
+  }
+
+  .kd-app--obsidian-index .kd-inbox-row {
+    grid-template-columns: 1fr;
+  }
+
+  .kd-app--obsidian-index .kd-library-layout,
+  .kd-app--obsidian-index .kd-search-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .kd-app--obsidian-index .kd-filter-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kd-app--obsidian-index .kd-filter-summary {
+    grid-column: 1 / -1;
+  }
+
+  .kd-app--obsidian-index .kd-assistant-hero {
+    min-height: 0;
+    padding: 23px 20px;
+  }
+
+  .kd-app--obsidian-index .kd-assistant-hero h2 {
+    font-size: 29px;
+  }
+
+  .kd-app--obsidian-index .kd-assistant-layout {
+    border-radius: 4px;
   }
 }
