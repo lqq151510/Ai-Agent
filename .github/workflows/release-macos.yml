@@ -64,6 +64,10 @@ jobs:
   release-macos-arm64:
     name: Build signed macOS arm64 candidate
     needs: compose-release-config
+    # Personal beta tags use the locally built, explicitly unsigned artifacts
+    # uploaded to the GitHub prerelease. Only non-beta tags enter the Apple
+    # Developer signing and notarization gate below.
+    if: ${{ !contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-beta.') }}
     runs-on: macos-15
     # The formal gate notarizes both the app bundle and the final DMG.
     timeout-minutes: 75
