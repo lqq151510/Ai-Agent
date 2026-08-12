@@ -82,6 +82,10 @@ export const SettingsPage = ({
       })}
     </aside>
     <section className="kd-settings-content">
+      <header className="kd-settings-index">
+        <p>LOCAL CONTROL / SETTINGS</p>
+        <span>05</span>
+      </header>
       {activeTab === 'profile' ? (
         <ProfileSettings
           canUseDesktopBackupPicker={canUseDesktopBackupPicker}

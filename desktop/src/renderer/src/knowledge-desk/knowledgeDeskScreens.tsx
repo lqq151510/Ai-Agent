@@ -1250,6 +1250,14 @@ export const ArchivePage = ({
       </aside>
 
       <div className="kd-stack">
+        <header className="kd-page-identity kd-page-identity--archive">
+          <div>
+            <p>QUIET STORAGE / ARCHIVE</p>
+            <h2>暂时退出视野的资料，依然留在你的索引里。</h2>
+            <span>归档不是删除；它只是从当前工作流中安静退场。</span>
+          </div>
+          <strong aria-hidden="true">03</strong>
+        </header>
         <div className="kd-page-tools">
           <div>
             <h2 className="kd-section-title">当前页 {formatCount(filteredItems.length)} / {formatCount(pageData.total)} 条归档资料</h2>
@@ -1498,7 +1506,10 @@ export const DetailPage = ({
   return (
     <article className="kd-detail">
       <div className="kd-detail-header">
-        <div className="kd-breadcrumb">{item.status === 'archived' ? '归档库' : '知识库'} / {item.tags[0] ?? '未分类'} / {typeCopy[item.type]}</div>
+        <div className="kd-detail-identity">
+          <span className="kd-detail-index">RECORD / {item.id.slice(-4).toUpperCase()}</span>
+          <div className="kd-breadcrumb">{item.status === 'archived' ? '归档库' : '知识库'} / {item.tags[0] ?? '未分类'} / {typeCopy[item.type]}</div>
+        </div>
         <div className="kd-inline-actions">
           {workflowActions.length > 0 ? (
             <>
@@ -1931,6 +1942,14 @@ export const SearchPage = ({
 
   return (
     <div className="kd-search-page">
+      <header className="kd-page-identity kd-page-identity--search">
+        <div>
+          <p>QUERY ROOM / GLOBAL SEARCH</p>
+          <h2>不是翻找，是重新抵达。</h2>
+          <span>从主题、来源、标签或一句关键话，回到它最初留下来的位置。</span>
+        </div>
+        <strong aria-hidden="true">04</strong>
+      </header>
       <div className="kd-search-box">
         <Search size={24} />
         <input

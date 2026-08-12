@@ -122,8 +122,8 @@ export const ReviewPage = ({ apiEnabled, onOpenDetail, onReviewCompleted }: Revi
     <div className="kd-review-page">
       <section className="kd-review-hero">
         <div>
-          <p>每日回顾</p>
-          <h2>先凭记忆找回，再决定下一次相遇的时间。</h2>
+          <p>SPACED RECALL / DAILY REVIEW</p>
+          <h2>先凭记忆找回，<em>再决定下一次相遇。</em></h2>
           <span>{reviewQueueCopy(queue.items.length, queue.dueCount)}</span>
         </div>
         <button className="kd-secondary-button" disabled={isLoading || isSubmitting !== null} onClick={() => void reload()} type="button">
