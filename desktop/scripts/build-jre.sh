@@ -20,7 +20,7 @@ rm -rf "$OUTPUT_DIR/jre"
 mkdir -p "$OUTPUT_DIR"
 
 jlink \
-    --add-modules java.base,java.sql,java.naming,java.management,java.security.jgss,java.instrument,java.desktop \
+    --add-modules java.base,java.sql,java.naming,java.management,java.security.jgss,java.instrument,java.desktop,jdk.unsupported \
     --output "$OUTPUT_DIR/jre" \
     --strip-debug \
     --no-header-files \

@@ -83,6 +83,8 @@ app:
     read-timeout-ms: ${MODEL_READ_TIMEOUT_MS:45000}
     total-timeout-ms: ${MODEL_TOTAL_TIMEOUT_MS:300000}
     idempotent-retries: ${MODEL_IDEMPOTENT_RETRIES:1}
+  pg-vector:
+    enabled: false
   rate-limit:
     login-per-minute: ${LOGIN_RATE_LIMIT_PER_MIN:200}
     register-per-minute: ${REGISTER_RATE_LIMIT_PER_MIN:100}

@@ -415,11 +415,20 @@ public class AppProperties {
 
     /** PgVector 连接配置。 */
     public static class PgVector {
+        private boolean enabled = true;
         private String host = "localhost";
         private int port = 5432;
         private String database = "ai_agent";
         private String username = "postgres";
         private String password = "change-me";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
 
         public String getHost() {
             return host;

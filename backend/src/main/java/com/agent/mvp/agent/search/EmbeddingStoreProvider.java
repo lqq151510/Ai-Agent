@@ -83,8 +83,15 @@ public class EmbeddingStoreProvider {
      * InMemoryEmbeddingStore}。
      */
     public EmbeddingStore<TextSegment> createEmbeddingStore(String tableName, int dimension) {
+        AppProperties.PgVector pgVector = appProperties.getPgVector();
+        if (!pgVector.isEnabled()) {
+            log.info(
+                    "PgVector is disabled; using InMemoryEmbeddingStore for table '{}'.",
+                    tableName);
+            return new InMemoryEmbeddingStore<>();
+        }
+
         try {
-            AppProperties.PgVector pgVector = appProperties.getPgVector();
             log.info(
                     "Initializing PgVectorEmbeddingStore for table '{}' with host: {}, port: {}",
                     tableName,
