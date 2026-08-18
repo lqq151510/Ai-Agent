@@ -1,14 +1,26 @@
-# AI Agent Knowledge Desk (Beta Delivery Baseline)
+# AI Agent Knowledge Desk
 
-This repo delivers a runnable Beta stack:
-- `backend`: Spring Boot API (JWT auth, sessions, SSE chat, system readiness/models API)
-- `desktop`: Electron + React desktop client, including threads, review, skills, terminal, and Computer Use entrypoints
+AI Agent Knowledge Desk is a local-first desktop knowledge application and a full-stack AI portfolio project. Its primary deliverable is the Electron desktop app backed by Spring Boot; the repository also contains a TypeScript CLI and an optional deployable server stack.
+
+## Personal desktop Beta scope
+
+- The macOS installer bundles the backend JAR and a Java runtime, and starts a local H2 database automatically. Normal desktop use does not require a separate Java, PostgreSQL, or Docker installation.
+- Knowledge capture, import, search, tagging, review, backup, and restore work without a model provider.
+- AI organization and assistant features require a user-configured local OpenAI-compatible endpoint on `localhost`, `127.0.0.1`, or `::1`.
+- The backend contains OpenAI, DeepSeek, OpenRouter, Anthropic, and generic OpenAI-compatible provider integrations, but the current Knowledge Desk desktop flow deliberately exposes only local providers. Third-party cloud API configuration is not part of this personal Beta.
+- API keys stored by the backend use encrypted model-source persistence and are excluded from Knowledge Desk backups.
+
+Repository components:
+
+- `backend`: Spring Boot API for authentication, knowledge workflows, model sources, sessions, and SSE chat
+- `desktop`: Electron + React desktop client with a bundled standalone runtime
+- `python-service`: local document parsing service
 - `ts-cli`: TypeScript + React (Ink) terminal client
-- `docker-compose`: single-host backend stack with PostgreSQL, Redis, Kafka, Milvus, Python parsing service, and monitoring
+- `docker-compose`: optional single-host server stack with PostgreSQL, Redis, Kafka, Milvus, parsing, and monitoring
 
-## AI + Java Dev Coach（Beta 模块）
+## AI + Java Dev Coach（supporting Beta module）
 
-The product now includes a first-pass "AI + Java development cockpit" for students and Java AI developers:
+The backend also includes a first-pass "AI + Java development cockpit" for students becoming Java + AI developers:
 
 - Requirement breakdown: turns a raw feature idea into goal, modules, data structures, APIs, risks, and test points.
 - Java AI scaffold generator: creates deterministic Spring Boot starter ZIPs with previewable file trees.
@@ -89,13 +101,13 @@ APPLE_TEAM_ID=<team-id> \
 
 ### macOS Beta candidate workflow
 
-The `macOS Release Candidate` GitHub Actions workflow builds only a signed Apple Silicon beta from an exact `v<desktop-version>` tag. It first validates the server Compose configuration, then runs Python tests, backend formatting/tests, all desktop/CLI builds, signing, notarization, Gatekeeper validation, and checksum/manifest checks before creating a **draft prerelease**.
+Personal `-beta.` tags use a locally built, explicitly unsigned DMG/ZIP and a manually reviewed GitHub prerelease. The tag must still match `desktop/package.json`, point to a commit reachable from `origin/main`, and be created only after the local release gate and main-branch CI pass.
 
-Before its first run, create the GitHub `release` Environment and add `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`. Require an independent Environment reviewer and restrict deployments to `v*` tags; also protect creation, update, and deletion of `v*` tags with an active tag ruleset. The workflow fails closed when any required value is absent, and a maintainer must review the draft before publishing it.
+Non-beta tags enter the `macOS Release Candidate` GitHub Actions job. That formal path requires the GitHub `release` Environment, Developer ID signing credentials, notarization, Gatekeeper validation, checksums, and release-manifest verification before it creates a draft release. Personal Beta convenience does not weaken the formal release gate.
 
 The packaged beta deliberately excludes legacy developer tooling, including Computer Use, even if `AI_AGENT_ENABLE_LEGACY_DEVTOOLS=1` is supplied at runtime. That capability remains source-checkout-only until its approval, window allowlist, and screenshot privacy controls are production-ready.
 
-See [the macOS beta release checklist](docs/release/macos-beta.md) for the required GitHub protection, local verification, tag, review, and rollback steps.
+See [the macOS beta release checklist](docs/release/macos-beta.md) for local Beta packaging, formal signed-release requirements, tag provenance, review, and rollback steps.
 
 To regenerate evidence for existing artifacts without rebuilding:
 
@@ -275,7 +287,7 @@ SMOKE_RENDER_PDF=true ./scripts/smoke.sh dev
 - `POST /api/v1/agent/chat/stream` (SSE, includes `event: heartbeat`)
 
 ### Dev Coach
-- These Coach endpoints are legacy opt-in and require the corresponding legacy runtime configuration.
+- These Coach endpoints are available in the backend, but they are a supporting module rather than the primary Knowledge Desk desktop flow.
 - `POST /api/v1/coach/requirements/breakdown`
 - `POST /api/v1/coach/scaffolds`
 - `GET /api/v1/coach/scaffolds/{id}/download`

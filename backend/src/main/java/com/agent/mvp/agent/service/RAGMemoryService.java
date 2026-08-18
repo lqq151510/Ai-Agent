@@ -1,6 +1,5 @@
 package com.agent.mvp.agent.service;
 
-import static com.agent.mvp.agent.search.SearchQueryUtils.MAX_VECTOR_CANDIDATES;
 import static com.agent.mvp.agent.search.SearchQueryUtils.normalizeMaxResults;
 import static com.agent.mvp.agent.search.SearchQueryUtils.normalizeQuery;
 
@@ -86,7 +85,8 @@ public class RAGMemoryService {
                 return results;
             }
             dev.langchain4j.store.embedding.filter.Filter userFilter =
-                    dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey("userId")
+                    dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey(
+                                    "userId")
                             .isEqualTo(userId.toString());
             EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
             EmbeddingSearchRequest request =

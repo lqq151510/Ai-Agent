@@ -395,8 +395,7 @@ public class SettingsService {
         return tagIdsByItem;
     }
 
-    private Map<UUID, KnowledgeSourceAsset> collectSourceAssetsByItem(
-            List<KnowledgeItem> items) {
+    private Map<UUID, KnowledgeSourceAsset> collectSourceAssetsByItem(List<KnowledgeItem> items) {
         if (knowledgeSourceAssetRepository == null || items.isEmpty()) {
             return Map.of();
         }
@@ -460,8 +459,7 @@ public class SettingsService {
             return;
         }
         for (ImportReviewStatePlan sourceState : reviewStates) {
-            KnowledgeItem importedItem =
-                    importedItemsByBackupId.get(sourceState.knowledgeItemId());
+            KnowledgeItem importedItem = importedItemsByBackupId.get(sourceState.knowledgeItemId());
             if (importedItem == null) {
                 throw new IllegalStateException(
                         "Validated review state lost its imported knowledge item");
@@ -596,10 +594,10 @@ public class SettingsService {
         Set<UUID> reviewStateItemIds = new HashSet<>();
         List<ImportReviewStatePlan> reviewStatePlans = new ArrayList<>();
         for (SettingsBackupReviewState reviewState : reviewStates) {
-            ImportReviewStatePlan reviewStatePlan =
-                    validateReviewState(reviewState, itemPlansById);
+            ImportReviewStatePlan reviewStatePlan = validateReviewState(reviewState, itemPlansById);
             if (!reviewStateItemIds.add(reviewStatePlan.knowledgeItemId())) {
-                throw new BadRequestException("Backup contains duplicate review states for one item");
+                throw new BadRequestException(
+                        "Backup contains duplicate review states for one item");
             }
             reviewStatePlans.add(reviewStatePlan);
         }
@@ -750,10 +748,9 @@ public class SettingsService {
                         .value();
         KnowledgeSourceAssetAvailability.from(
                 requiredText(
-                        sourceAsset.availability(),
-                        24,
-                        "knowledgeItems.sourceAsset.availability"));
-        return new SourceAssetBackupPlan(originalFilename, mediaType, sourceAsset.byteSize(), origin);
+                        sourceAsset.availability(), 24, "knowledgeItems.sourceAsset.availability"));
+        return new SourceAssetBackupPlan(
+                originalFilename, mediaType, sourceAsset.byteSize(), origin);
     }
 
     private ImportReviewStatePlan validateReviewState(
@@ -767,7 +764,8 @@ public class SettingsService {
         }
         if (!KnowledgeItemStatus.READY.value().equals(item.status())
                 && !KnowledgeItemStatus.ARCHIVED.value().equals(item.status())) {
-            throw new BadRequestException("Review states require ready or archived knowledge items");
+            throw new BadRequestException(
+                    "Review states require ready or archived knowledge items");
         }
         if (state.dueAt() == null) {
             throw new BadRequestException("reviewStates.dueAt is required");
@@ -783,7 +781,9 @@ public class SettingsService {
         if (state.repetitions() == null || state.repetitions() < 0) {
             throw new BadRequestException("reviewStates.repetitions must be non-negative");
         }
-        if (state.lastReviewedAt() == null || state.createdAt() == null || state.updatedAt() == null) {
+        if (state.lastReviewedAt() == null
+                || state.createdAt() == null
+                || state.updatedAt() == null) {
             throw new BadRequestException(
                     "reviewStates.lastReviewedAt, createdAt and updatedAt are required");
         }

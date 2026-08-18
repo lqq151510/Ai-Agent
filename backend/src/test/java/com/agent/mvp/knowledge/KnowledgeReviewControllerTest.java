@@ -49,11 +49,17 @@ class KnowledgeReviewControllerTest {
     @Test
     void queueAndSummaryUseAuthenticatedUserOnly() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(reviewService.getQueue(userId, 7)).thenReturn(new KnowledgeReviewQueueResponse(List.of(), 0));
+        when(reviewService.getQueue(userId, 7))
+                .thenReturn(new KnowledgeReviewQueueResponse(List.of(), 0));
         when(reviewService.getSummary(userId))
-                .thenReturn(new KnowledgeReviewSummaryResponse(0, Instant.parse("2026-08-06T12:00:00Z")));
+                .thenReturn(
+                        new KnowledgeReviewSummaryResponse(
+                                0, Instant.parse("2026-08-06T12:00:00Z")));
 
-        mockMvc.perform(get("/api/v1/knowledge-reviews/queue").param("limit", "7").principal(authentication(userId)))
+        mockMvc.perform(
+                        get("/api/v1/knowledge-reviews/queue")
+                                .param("limit", "7")
+                                .principal(authentication(userId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items").isArray())
                 .andExpect(jsonPath("$.rawContent").doesNotExist());

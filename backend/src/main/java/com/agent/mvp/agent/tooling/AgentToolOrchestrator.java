@@ -30,9 +30,9 @@ public class AgentToolOrchestrator {
                                 new ToolSpec(
                                         "execute_cli_command",
                                         """
-                                        Run a bash command on the user's local machine via the CLI \
-                                        client. Use this to read files, run tests, list \
-                                        dirs, or edit code locally.""",
+Run a bash command on the user's local machine via the CLI \
+client. Use this to read files, run tests, list \
+dirs, or edit code locally.""",
                                         schema(
                                                 List.of("command"),
                                                 "command",

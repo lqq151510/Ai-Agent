@@ -16,13 +16,15 @@ public class SentinelAlertBroadcaster {
 
     public SseEmitter subscribe(UUID userId) {
         SseEmitter emitter = new SseEmitter(0L);
-        CopyOnWriteArrayList<SseEmitter> userEmitters = emitters.computeIfAbsent(userId, ignored -> new CopyOnWriteArrayList<>());
+        CopyOnWriteArrayList<SseEmitter> userEmitters =
+                emitters.computeIfAbsent(userId, ignored -> new CopyOnWriteArrayList<>());
         synchronized (userEmitters) {
             if (userEmitters.size() >= MAX_EMITTERS_PER_USER) {
                 if (userEmitters.isEmpty()) {
                     emitters.remove(userId, userEmitters);
                 }
-                emitter.completeWithError(new IllegalStateException("Too many alert subscriptions"));
+                emitter.completeWithError(
+                        new IllegalStateException("Too many alert subscriptions"));
                 return emitter;
             }
             userEmitters.add(emitter);
@@ -67,5 +69,4 @@ public class SentinelAlertBroadcaster {
             }
         }
     }
-
 }

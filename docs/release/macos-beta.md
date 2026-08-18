@@ -1,10 +1,16 @@
 # macOS Beta 发行清单
 
-当前候选版本由 `desktop/package.json` 作为单一版本源，所有可发行组件必须与它一致。当前计划版本为 `0.1.0-beta.1`，对应 Git tag 为 `v0.1.0-beta.1`。
+当前候选版本由 `desktop/package.json` 作为单一版本源，所有可发行组件必须与它一致。当前计划版本为 `0.1.0-beta.2`，对应 Git tag 为 `v0.1.0-beta.2`。
 
-macOS bundle 的 Apple 版本字段单独受数值格式约束：本候选把 npm 版本 `0.1.0-beta.1` 映射为 `CFBundleShortVersionString=0.1.0` 和仓库控制的 `CFBundleVersion=1`。后续每个候选必须保留前者与 npm 版本的三段数字核心一致，并在 `desktop/electron-builder.yml` 中单调递增后者；不要使用可重跑的 GitHub run number。
+macOS bundle 的 Apple 版本字段单独受数值格式约束：本候选把 npm 版本 `0.1.0-beta.2` 映射为 `CFBundleShortVersionString=0.1.0` 和仓库控制的 `CFBundleVersion=2`。后续每个候选必须保留前者与 npm 版本的三段数字核心一致，并在 `desktop/electron-builder.yml` 中单调递增后者；不要使用可重跑的 GitHub run number。
 
-## 发布前的外部配置
+## 发布模式
+
+- 带 `-beta.` 的个人 Beta 使用本机生成、明确未签名/未公证的 DMG 和 ZIP，并手工创建 GitHub prerelease。它适合个人演示和作品集下载，但首次打开可能需要用户在 macOS 中确认信任。
+- 不带 `-beta.` 的正式版本才进入 `macOS Release Candidate` GitHub Actions job，严格执行 Developer ID 签名、公证、staple、Gatekeeper 和下载回验。
+- 个人 Beta 只放宽 Apple 信任链，不放宽版本一致性、源码 tag、依赖审计、测试、构建、校验和及真实启动 smoke。
+
+## 正式签名发布的外部配置
 
 1. 在 GitHub 创建 `release` Environment，并配置以下 secrets：
    - `CSC_LINK`
@@ -46,14 +52,20 @@ APPLE_TEAM_ID=<team-id> \
 
 正式门禁要求构建前 `desktop/release/` 完全为空（包括旧 staging app、manifest 和辅助文件），构建后只允许本次架构的 `mac-arm64/` staging 目录作为 macOS app 证据；若目录留有任何旧条目，门禁会失败而不会自动删除它们。请使用干净 checkout 或先人工归档、核验旧产物。
 
-## 触发与审核
+## 个人 Beta 触发与审核
 
-1. 确认 `./scripts/check-release-version.sh` 通过。
-2. 创建与 `desktop/package.json` 匹配的精确 tag，例如 `v0.1.0-beta.1`。
-3. 由 `macOS Release Candidate` 工作流构建、签名、公证并上传 draft prerelease。它会反复以远端 tag 的 peeled commit 确认候选身份，并核验 release 的 tag、draft/prerelease 状态、标题和完整资产集合；不依赖可能仅显示默认分支的 `targetCommitish` 字段。只要同 tag 的 release 已存在（包括 draft），工作流都会 fail-closed，不会自动覆盖资产；经人工核验后清理错误 draft，再重新触发。
-4. draft 创建后，工作流会从 GitHub Release 重新下载精确的 DMG、ZIP、`release-manifest.json` 和 `SHA256SUMS`，逐项比对本机刚生成候选的 SHA-256，再校验 checksum、manifest commit/资产名；随后先验证下载 DMG 外层的 stapler 与 Gatekeeper，再挂载它并验证其中 app 的 codesign、Gatekeeper、stapler 以及嵌入式 JRE 的 `java -version`。临时下载目录和 DMG 挂载点会在完成或失败时清理并安全 detach。
-5. 第 4 步是下载物完整性与 macOS 信任链验证，不代替真机 GUI smoke。仍须在干净的 macOS Apple Silicon 设备上从 draft 下载，确认启动、登录、会话、流式对话与嵌入式后端。
-6. GUI smoke 通过后，复核 draft 的 `release-manifest.json`、`SHA256SUMS` 与工作流记录，再由指定 release maintainer 手工发布 draft。工作流运行和下载验证期间，任何人不得通过网页或 API 发布 draft、替换资产或移动 tag；GitHub Release API 没有能与上传原子绑定的发布锁。
+1. 确认 `./scripts/check-release-version.sh` 和 `./scripts/release-check.sh dev` 通过，且 `main` 的 GitHub CI 全绿。
+2. 在干净源码提交上用 Node.js 22 运行 `RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true RELEASE_CHECK_PREPARE_DESKTOP_BACKEND=true ./scripts/release-check.sh dev`，生成本次 DMG、ZIP、`release-manifest.json` 和 `SHA256SUMS`。
+3. 创建与 `desktop/package.json` 匹配、且指向该提交的精确 tag，例如 `v0.1.0-beta.2`；禁止移动或覆盖旧 tag。
+4. 创建 GitHub prerelease，上传本次四个资产，并从 GitHub 重新下载核对 SHA-256、manifest commit、资产名和嵌入式 JRE。
+5. 在 Apple Silicon macOS 上挂载 DMG，复制并启动应用，确认嵌入式后端就绪、登录/知识库主流程可用。未签名个人 Beta 的信任提示属于已知分发限制，不得写成已签名或已公证。
+
+## 正式版本触发与审核
+
+1. 创建不带 `-beta.`、与 `desktop/package.json` 匹配且可从 `origin/main` 到达的 tag。
+2. 由 `macOS Release Candidate` workflow 构建、签名、公证并上传 draft release。只要同 tag release 已存在，工作流都会 fail-closed，不自动覆盖资产。
+3. 工作流重新下载 DMG、ZIP、manifest 和 checksum，校验资产完整性、codesign、Gatekeeper、stapler 与嵌入式 JRE。
+4. 真机 GUI smoke 通过后，由 release maintainer 人工发布 draft；构建和审核期间不得替换资产或移动 tag。
 
 ## Beta 范围与回滚
 

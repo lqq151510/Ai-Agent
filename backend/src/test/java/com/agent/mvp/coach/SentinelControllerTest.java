@@ -22,13 +22,18 @@ class SentinelControllerTest {
         RateLimiterService rateLimiter = mock(RateLimiterService.class);
         ThreadPoolTaskExecutor executor = mock(ThreadPoolTaskExecutor.class);
         UUID owner = UUID.randomUUID();
-        org.mockito.Mockito.when(rateLimiter.allow(eq("sentinel:github-actions"), eq(10L), eq(Duration.ofMinutes(1))))
+        org.mockito.Mockito.when(
+                        rateLimiter.allow(
+                                eq("sentinel:github-actions"), eq(10L), eq(Duration.ofMinutes(1))))
                 .thenReturn(true);
-        org.mockito.Mockito.when(rateLimiter.allow(eq("sentinel:gitlab"), eq(10L), eq(Duration.ofMinutes(1))))
+        org.mockito.Mockito.when(
+                        rateLimiter.allow(
+                                eq("sentinel:gitlab"), eq(10L), eq(Duration.ofMinutes(1))))
                 .thenReturn(true);
 
-        SentinelController controller = new SentinelController(
-                coachService, mock(SentinelAlertBroadcaster.class), rateLimiter, executor);
+        SentinelController controller =
+                new SentinelController(
+                        coachService, mock(SentinelAlertBroadcaster.class), rateLimiter, executor);
         controller.report(
                 new SentinelReportRequest("attacker-controlled-project", "stack trace"),
                 new UsernamePasswordAuthenticationToken(
@@ -38,7 +43,8 @@ class SentinelControllerTest {
                 new UsernamePasswordAuthenticationToken(
                         new SentinelServicePrincipal(owner, "gitlab"), null));
 
-        verify(rateLimiter).allow(eq("sentinel:github-actions"), eq(10L), eq(Duration.ofMinutes(1)));
+        verify(rateLimiter)
+                .allow(eq("sentinel:github-actions"), eq(10L), eq(Duration.ofMinutes(1)));
         verify(rateLimiter).allow(eq("sentinel:gitlab"), eq(10L), eq(Duration.ofMinutes(1)));
     }
 }

@@ -4,10 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doThrow;
 
 import com.agent.mvp.agent.ModelProviderType;
 import com.agent.mvp.agent.dto.ModelChatResponse;
@@ -122,33 +122,52 @@ class CoachServiceTest {
                 .thenReturn(List.of("public class Demo {}"));
 
         UUID owner = UUID.randomUUID();
-        service.handleSentinelReport(new SentinelReportRequest("demo-project", "stack trace"), owner);
+        service.handleSentinelReport(
+                new SentinelReportRequest("demo-project", "stack trace"), owner);
 
         verify(broadcaster)
                 .publish(
                         eq(owner),
-                        eq(new SentinelAlertResponse(
-                                "Missing OPENAI_API_KEY", "Set OPENAI_API_KEY in env/dev.env")));
+                        eq(
+                                new SentinelAlertResponse(
+                                        "Missing OPENAI_API_KEY",
+                                        "Set OPENAI_API_KEY in env/dev.env")));
     }
 
     @Test
     void handleSentinelReportShouldPublishSafeErrorWhenRagFails() {
         ModelGateway gateway = mock(ModelGateway.class);
-        com.agent.mvp.agent.service.CodeRAGService rag = mock(com.agent.mvp.agent.service.CodeRAGService.class);
+        com.agent.mvp.agent.service.CodeRAGService rag =
+                mock(com.agent.mvp.agent.service.CodeRAGService.class);
         SentinelAlertBroadcaster broadcaster = mock(SentinelAlertBroadcaster.class);
-        doThrow(new IllegalStateException("provider secret")).when(rag).searchRelatedCode(any(), eq(3));
-        CoachService service = new CoachService(
-                gateway, new CoachPromptService(), new ScaffoldTemplateRegistry(), new ScaffoldZipService(),
-                mock(DevCoachRunRepository.class), new AppProperties(), new ObjectMapper(),
-                mock(RAGMemoryService.class), mock(com.agent.mvp.auth.service.UserService.class),
-                mock(com.agent.mvp.coach.agent.SupervisorAgent.class), rag, broadcaster,
-                new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+        doThrow(new IllegalStateException("provider secret"))
+                .when(rag)
+                .searchRelatedCode(any(), eq(3));
+        CoachService service =
+                new CoachService(
+                        gateway,
+                        new CoachPromptService(),
+                        new ScaffoldTemplateRegistry(),
+                        new ScaffoldZipService(),
+                        mock(DevCoachRunRepository.class),
+                        new AppProperties(),
+                        new ObjectMapper(),
+                        mock(RAGMemoryService.class),
+                        mock(com.agent.mvp.auth.service.UserService.class),
+                        mock(com.agent.mvp.coach.agent.SupervisorAgent.class),
+                        rag,
+                        broadcaster,
+                        new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
         UUID owner = UUID.randomUUID();
 
-        service.handleSentinelReport(new SentinelReportRequest("secret-project", "stack trace"), owner);
+        service.handleSentinelReport(
+                new SentinelReportRequest("secret-project", "stack trace"), owner);
 
-        verify(broadcaster).publish(owner, new SentinelAlertResponse(
-                "Unable to generate structured diagnosis.",
-                "Inspect the stack trace and model provider configuration."));
+        verify(broadcaster)
+                .publish(
+                        owner,
+                        new SentinelAlertResponse(
+                                "Unable to generate structured diagnosis.",
+                                "Inspect the stack trace and model provider configuration."));
     }
 }

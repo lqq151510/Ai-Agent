@@ -79,8 +79,8 @@ public class EmbeddingStoreProvider {
     /**
      * 创建一个新的 EmbeddingStore（独立的 PgVector 表 + InMemory 回退）。
      *
-     * <p>复用本 Provider 的 PG 连接配置，按 {@code tableName} 和 {@code dimension} 建立独立的向量存储；
-     * 创建失败时回退到 {@link InMemoryEmbeddingStore}。
+     * <p>复用本 Provider 的 PG 连接配置，按 {@code tableName} 和 {@code dimension} 建立独立的向量存储； 创建失败时回退到 {@link
+     * InMemoryEmbeddingStore}。
      */
     public EmbeddingStore<TextSegment> createEmbeddingStore(String tableName, int dimension) {
         try {

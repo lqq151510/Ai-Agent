@@ -62,8 +62,7 @@ class KnowledgeReviewSchedulerTest {
 
     @Test
     void againResetsRepetitionsAndNeverDropsEaseBelowOnePointThree() {
-        ReviewSchedule next =
-                scheduler.next(state(10, 1.35, 5), KnowledgeReviewRating.AGAIN, NOW);
+        ReviewSchedule next = scheduler.next(state(10, 1.35, 5), KnowledgeReviewRating.AGAIN, NOW);
 
         assertSchedule(next, 1, 1.3, 0, NOW.plus(1, ChronoUnit.DAYS));
     }

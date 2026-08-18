@@ -51,6 +51,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -59,8 +60,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -72,9 +73,8 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import java.util.regex.Pattern;
-import jakarta.annotation.PreDestroy;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,13 +95,14 @@ public class KnowledgeItemService {
      * Bounded thread pool for organize operations. Limited to 3 threads to avoid overwhelming the
      * LLM API while still allowing concurrent processing of batch organize requests.
      */
-    private final ExecutorService organizeExecutor = Executors.newFixedThreadPool(
-            3,
-            r -> {
-                Thread t = new Thread(r, "knowledge-organize");
-                t.setDaemon(true);
-                return t;
-            });
+    private final ExecutorService organizeExecutor =
+            Executors.newFixedThreadPool(
+                    3,
+                    r -> {
+                        Thread t = new Thread(r, "knowledge-organize");
+                        t.setDaemon(true);
+                        return t;
+                    });
 
     @PreDestroy
     void shutdownOrganizeExecutor() {
@@ -310,7 +311,8 @@ public class KnowledgeItemService {
     public KnowledgeItemResponse importWeb(UUID userId, ImportWebKnowledgeItemRequest request) {
         UserProfile profile = userProfileService.getOrCreate(userId);
         String sourceUri = SourceUriSanitizer.sanitize(request.url());
-        String resolvedTitle = fallbackTitle(request.title(), SourceUriSanitizer.displayName(sourceUri));
+        String resolvedTitle =
+                fallbackTitle(request.title(), SourceUriSanitizer.displayName(sourceUri));
         KnowledgeItem item =
                 createImportedItem(
                         userId,
@@ -331,7 +333,8 @@ public class KnowledgeItemService {
             throw new BadRequestException("File import only supports markdown or pdf source types");
         }
         String sourceUri = SourceUriSanitizer.sanitize(request.sourceUri());
-        String resolvedTitle = fallbackTitle(request.title(), SourceUriSanitizer.displayName(sourceUri));
+        String resolvedTitle =
+                fallbackTitle(request.title(), SourceUriSanitizer.displayName(sourceUri));
         KnowledgeItem item =
                 createImportedItem(
                         userId,
@@ -488,8 +491,7 @@ public class KnowledgeItemService {
         }
     }
 
-    public ImportPreflightResponse preflightImport(
-            UUID userId, ImportPreflightRequest request) {
+    public ImportPreflightResponse preflightImport(UUID userId, ImportPreflightRequest request) {
         userProfileService.requireUser(userId);
         List<String> contentHashes = normalizeContentHashes(request.contentHashes());
         List<String> existingContentHashes =
@@ -635,11 +637,19 @@ public class KnowledgeItemService {
         List<KnowledgeItem> items = knowledgeItemRepository.selectList(wrapper);
         // 并发执行 organize：每个任务在独立的短事务中运行（runOrganize 内部自带 @Transactional
         // 边界与事务模板），互不干扰。线程池有界（3 个），避免压垮 LLM API。
-        List<CompletableFuture<KnowledgeItemResponse>> futures = items.stream()
-                .map(item -> CompletableFuture.supplyAsync(
-                        () -> runOrganize(userId, item, false, IngestionJobType.ORGANIZE.value()),
-                        organizeExecutor))
-                .toList();
+        List<CompletableFuture<KnowledgeItemResponse>> futures =
+                items.stream()
+                        .map(
+                                item ->
+                                        CompletableFuture.supplyAsync(
+                                                () ->
+                                                        runOrganize(
+                                                                userId,
+                                                                item,
+                                                                false,
+                                                                IngestionJobType.ORGANIZE.value()),
+                                                organizeExecutor))
+                        .toList();
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                     .orTimeout(10, TimeUnit.MINUTES)
@@ -867,7 +877,9 @@ public class KnowledgeItemService {
             long byteSize,
             String originalFilename,
             String mediaType) {
-        if (sourceAssetRequest == null || mediaType == null || knowledgeSourceAssetRepository == null) {
+        if (sourceAssetRequest == null
+                || mediaType == null
+                || knowledgeSourceAssetRepository == null) {
             return null;
         }
         KnowledgeSourceAsset existingAsset =
@@ -1072,7 +1084,8 @@ public class KnowledgeItemService {
         return contentHashes.stream()
                 .map(
                         contentHash -> {
-                            if (contentHash == null || !SHA_256_HEX.matcher(contentHash).matches()) {
+                            if (contentHash == null
+                                    || !SHA_256_HEX.matcher(contentHash).matches()) {
                                 throw new BadRequestException(
                                         "content hash must be a 64-character hexadecimal SHA-256");
                             }
@@ -1355,10 +1368,8 @@ public class KnowledgeItemService {
 
     private KnowledgeItemPageResponse toPageResponse(Page<KnowledgeItem> itemPage) {
         List<UUID> itemIds = itemPage.getRecords().stream().map(KnowledgeItem::getId).toList();
-        Map<UUID, List<TagResponse>> tagsByItemId =
-                getTagsByItemIds(itemIds);
-        Map<UUID, KnowledgeSourceAsset> sourceAssetsByItemId =
-                getSourceAssetsByItemIds(itemIds);
+        Map<UUID, List<TagResponse>> tagsByItemId = getTagsByItemIds(itemIds);
+        Map<UUID, KnowledgeSourceAsset> sourceAssetsByItemId = getSourceAssetsByItemIds(itemIds);
         return new KnowledgeItemPageResponse(
                 itemPage.getRecords().stream()
                         .map(
@@ -1464,8 +1475,7 @@ public class KnowledgeItemService {
         }
         return new KnowledgeSourceAssetResponse(
                 sourceAsset.getId(),
-                SourceUriSanitizer.safeBasename(
-                        sourceAsset.getOriginalFilename(), "local-file"),
+                SourceUriSanitizer.safeBasename(sourceAsset.getOriginalFilename(), "local-file"),
                 sourceAsset.getMediaType(),
                 sourceAsset.getByteSize() == null ? 0L : sourceAsset.getByteSize(),
                 sourceAsset.getOrigin(),

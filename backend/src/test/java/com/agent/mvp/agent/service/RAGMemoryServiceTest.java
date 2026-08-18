@@ -12,7 +12,6 @@ import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
-import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import java.util.List;
@@ -67,7 +66,10 @@ class RAGMemoryServiceTest {
                                 Map.of(
                                         "embedding_id", UUID.randomUUID(),
                                         "text", "owned",
-                                        "metadata", new StringBuilder("{\"userId\":\"").append(userId).append("\"}"))));
+                                        "metadata",
+                                                new StringBuilder("{\"userId\":\"")
+                                                        .append(userId)
+                                                        .append("\"}"))));
 
         List<Map<String, Object>> memories = service(provider).listAllMemories(userId);
 

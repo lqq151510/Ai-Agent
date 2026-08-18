@@ -7,6 +7,8 @@ import com.agent.mvp.system.dto.ModelsResponse;
 import com.agent.mvp.system.dto.ProviderOption;
 import com.agent.mvp.system.dto.ReadinessCheck;
 import com.agent.mvp.system.dto.ReadinessResponse;
+import io.netty.channel.ChannelOption;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -14,8 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import io.netty.channel.ChannelOption;
-import io.netty.handler.timeout.ReadTimeoutHandler;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -55,15 +55,14 @@ public class SystemDiagnosticsService {
                         .clientConnector(
                                 new ReactorClientHttpConnector(
                                         HttpClient.create()
-                                                .option(
-                                                        ChannelOption.CONNECT_TIMEOUT_MILLIS,
-                                                        5000)
+                                                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)
                                                 .doOnConnected(
                                                         conn ->
                                                                 conn.addHandlerLast(
                                                                         new ReadTimeoutHandler(
                                                                                 10,
-                                                                                TimeUnit.SECONDS)))))
+                                                                                TimeUnit
+                                                                                        .SECONDS)))))
                         .build();
     }
 

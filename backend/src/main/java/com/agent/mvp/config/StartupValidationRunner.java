@@ -101,7 +101,8 @@ public class StartupValidationRunner implements ApplicationRunner {
     private boolean isH2Profile() {
         String[] activeProfiles = env.getActiveProfiles();
         String datasourceUrl = env.getProperty("spring.datasource.url");
-        return (activeProfiles != null && java.util.Arrays.stream(activeProfiles).anyMatch("desktop"::equals))
+        return (activeProfiles != null
+                        && java.util.Arrays.stream(activeProfiles).anyMatch("desktop"::equals))
                 || (datasourceUrl != null && datasourceUrl.startsWith("jdbc:h2:"));
     }
 

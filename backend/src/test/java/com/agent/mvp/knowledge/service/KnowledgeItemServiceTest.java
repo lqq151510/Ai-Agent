@@ -205,11 +205,7 @@ class KnowledgeItemServiceTest {
 
         var response =
                 service.importUpload(
-                        userId,
-                        file,
-                        null,
-                        sourceAssetId.toString(),
-                        "watched_folder");
+                        userId, file, null, sourceAssetId.toString(), "watched_folder");
 
         ArgumentCaptor<KnowledgeItem> itemCaptor = ArgumentCaptor.forClass(KnowledgeItem.class);
         verify(itemRepository).insert(itemCaptor.capture());
@@ -236,7 +232,8 @@ class KnowledgeItemServiceTest {
         assertEquals("watched_folder", response.sourceAsset().origin());
         assertEquals("available", response.sourceAsset().availability());
 
-        String responseJson = new ObjectMapper().findAndRegisterModules().writeValueAsString(response);
+        String responseJson =
+                new ObjectMapper().findAndRegisterModules().writeValueAsString(response);
         assertFalse(responseJson.contains(persistedAsset.getContentHash()));
         assertFalse(responseJson.contains("contentHash"));
         assertFalse(responseJson.contains("storageKey"));
@@ -269,7 +266,10 @@ class KnowledgeItemServiceTest {
                                 service.importUpload(
                                         UUID.randomUUID(),
                                         new MockMultipartFile(
-                                                "file", "legacy.doc", "application/msword", "bytes".getBytes()),
+                                                "file",
+                                                "legacy.doc",
+                                                "application/msword",
+                                                "bytes".getBytes()),
                                         null));
         BadRequestException pptException =
                 assertThrows(
@@ -319,9 +319,7 @@ class KnowledgeItemServiceTest {
                 () -> service.importUpload(UUID.randomUUID(), file, null, "not-a-uuid", "picker"));
         assertThrows(
                 BadRequestException.class,
-                () ->
-                        service.importUpload(
-                                UUID.randomUUID(), file, null, null, "watched_folder"));
+                () -> service.importUpload(UUID.randomUUID(), file, null, null, "watched_folder"));
         assertThrows(
                 BadRequestException.class,
                 () ->
@@ -462,7 +460,8 @@ class KnowledgeItemServiceTest {
                                         sourceAssetId.toString(),
                                         "watched_folder"));
 
-        assertEquals("Managed source asset conflicts with an existing import", exception.getMessage());
+        assertEquals(
+                "Managed source asset conflicts with an existing import", exception.getMessage());
         verifyNoInteractions(markItDownService);
         verify(itemRepository, never()).insert(any(KnowledgeItem.class));
     }
@@ -531,7 +530,8 @@ class KnowledgeItemServiceTest {
         when(itemRepository.selectCount(any())).thenReturn(1L);
 
         ConflictException exception =
-                assertThrows(ConflictException.class, () -> service.importUpload(userId, file, null));
+                assertThrows(
+                        ConflictException.class, () -> service.importUpload(userId, file, null));
 
         assertEquals("An identical file has already been imported", exception.getMessage());
         verifyNoInteractions(markItDownService);
@@ -677,7 +677,8 @@ class KnowledgeItemServiceTest {
 
         var response =
                 service.preflightImport(
-                        userId, new ImportPreflightRequest(List.of(existing.toUpperCase(), missing)));
+                        userId,
+                        new ImportPreflightRequest(List.of(existing.toUpperCase(), missing)));
 
         assertEquals(List.of(existing), response.existingContentHashes());
         ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
@@ -935,11 +936,7 @@ class KnowledgeItemServiceTest {
         ArgumentCaptor<UpdateWrapper> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
         verify(itemRepository).update(Mockito.isNull(), wrapperCaptor.capture());
         assertTrue(wrapperCaptor.getValue().getCustomSqlSegment().contains("status"));
-        assertTrue(
-                wrapperCaptor
-                        .getValue()
-                        .getParamNameValuePairs()
-                        .containsValue("processing"));
+        assertTrue(wrapperCaptor.getValue().getParamNameValuePairs().containsValue("processing"));
         verify(itemRepository, never()).updateById(any(KnowledgeItem.class));
     }
 
@@ -1205,9 +1202,7 @@ class KnowledgeItemServiceTest {
                                         + "V12__knowledge_source_assets.sql"));
         String h2Sql =
                 Files.readString(
-                        Path.of(
-                                "src/main/resources/db/h2/"
-                                        + "V12__knowledge_source_assets.sql"));
+                        Path.of("src/main/resources/db/h2/" + "V12__knowledge_source_assets.sql"));
 
         for (String migration : List.of(postgresSql, h2Sql)) {
             assertTrue(migration.contains("CREATE TABLE knowledge_source_assets"));

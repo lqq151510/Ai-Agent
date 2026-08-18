@@ -11,7 +11,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -341,8 +340,7 @@ class SettingsServiceTest {
         assertEquals(List.of(tagId), backup.knowledgeItems().getFirst().tagIds());
         assertEquals("upload://rag.md", backup.knowledgeItems().getFirst().sourceUri());
         assertEquals(sourceAsset.getId(), backup.knowledgeItems().getFirst().sourceAsset().id());
-        assertEquals(
-                "rag.md", backup.knowledgeItems().getFirst().sourceAsset().originalFilename());
+        assertEquals("rag.md", backup.knowledgeItems().getFirst().sourceAsset().originalFilename());
         String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(backup);
         assertFalse(json.contains("apiKey"));
         assertFalse(json.contains("sk-local-secret"));
@@ -423,8 +421,7 @@ class SettingsServiceTest {
         assertTrue(createdRagTag.getId() != null);
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<KnowledgeItemTag>> relationCaptor =
-                ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<KnowledgeItemTag>> relationCaptor = ArgumentCaptor.forClass(List.class);
         verify(knowledgeItemTagRepository).insertBatch(relationCaptor.capture());
         assertEquals(2, relationCaptor.getValue().size());
         assertTrue(

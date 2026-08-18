@@ -143,7 +143,8 @@ class AgentControllerTest {
                         heartbeatScheduler,
                         new SimpleMeterRegistry());
 
-        Mockito.when(rateLimiter.allow(any(), any(Long.class), any(Duration.class))).thenReturn(true);
+        Mockito.when(rateLimiter.allow(any(), any(Long.class), any(Duration.class)))
+                .thenReturn(true);
         Mockito.when(heartbeatScheduler.getScheduledExecutor()).thenReturn(scheduledExecutor);
         Mockito.doReturn(heartbeat)
                 .when(scheduledExecutor)
@@ -156,14 +157,7 @@ class AgentControllerTest {
         SseEmitter emitter =
                 controller.stream(
                         new ChatRequest(
-                                UUID.randomUUID(),
-                                "hello",
-                                null,
-                                null,
-                                null,
-                                null,
-                                null,
-                                null),
+                                UUID.randomUUID(), "hello", null, null, null, null, null, null),
                         auth);
 
         ArgumentCaptor<Runnable> heartbeatTask = ArgumentCaptor.forClass(Runnable.class);

@@ -34,8 +34,7 @@ public final class SourceUriSanitizer {
 
         String value = decodeOnce(rawValue.trim());
         int schemeSeparator = value.indexOf(':');
-        if (schemeSeparator >= 0
-                && value.substring(0, schemeSeparator).equalsIgnoreCase("file")) {
+        if (schemeSeparator >= 0 && value.substring(0, schemeSeparator).equalsIgnoreCase("file")) {
             value = value.substring(schemeSeparator + 1);
         } else if (value.regionMatches(true, 0, UPLOAD_URI_PREFIX, 0, UPLOAD_URI_PREFIX.length())) {
             value = value.substring(UPLOAD_URI_PREFIX.length());

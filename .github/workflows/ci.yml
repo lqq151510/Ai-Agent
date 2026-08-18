@@ -140,7 +140,7 @@ jobs:
 
       - name: Run Pytest
         working-directory: ./python-service
-        run: pytest
+        run: python -m pytest -p no:cacheprovider
 
   backend-quality:
     runs-on: ubuntu-latest

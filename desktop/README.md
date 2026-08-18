@@ -194,8 +194,8 @@ cd ..
 
 ```
 desktop/release/                       # 仅正式 macOS 候选使用
-├── AI Agent-0.1.0-beta.1-mac-arm64.dmg
-├── AI Agent-0.1.0-beta.1-mac-arm64.zip
+├── AI Agent-0.1.0-beta.2-mac-arm64.dmg
+├── AI Agent-0.1.0-beta.2-mac-arm64.zip
 ├── release-manifest.json
 └── SHA256SUMS
 

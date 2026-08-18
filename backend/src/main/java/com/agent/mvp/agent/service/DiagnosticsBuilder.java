@@ -4,8 +4,8 @@ import com.agent.mvp.agent.dto.AgentExecutionDiagnostics;
 import org.springframework.stereotype.Component;
 
 /**
- * 抽取自 AgentService，统一构造 AgentExecutionDiagnostics，消除 doChat / doStreamChat /
- * executeMainLoop / initialExecutionDiagnostics 中重复的 record 构造逻辑。
+ * 抽取自 AgentService，统一构造 AgentExecutionDiagnostics，消除 doChat / doStreamChat / executeMainLoop /
+ * initialExecutionDiagnostics 中重复的 record 构造逻辑。
  */
 @Component
 public class DiagnosticsBuilder {

@@ -95,20 +95,28 @@ public class CoachService {
     public void handleSentinelReport(SentinelReportRequest request, UUID ownerUserId) {
         String report = sanitizeSentinelContent(request.stackTrace());
         try {
-            log.info("Received sentinel report: source=sentinel, owner={}, length={}", ownerUserId, report.length());
+            log.info(
+                    "Received sentinel report: source=sentinel, owner={}, length={}",
+                    ownerUserId,
+                    report.length());
             List<String> codeContext = codeRAGService.searchRelatedCode(report, 3);
             String contextStr = String.join("\n---\n", codeContext);
-            LogDiagnosisAnalysis analysis =
-                    analyzeLog(report, contextStr, null, null, null, null);
+            LogDiagnosisAnalysis analysis = analyzeLog(report, contextStr, null, null, null, null);
             SentinelAlertResponse alert =
                     new SentinelAlertResponse(
                             analysis.diagnosis().rootCause(), analysis.diagnosis().minimalFix());
             if (ownerUserId != null) sentinelAlertBroadcaster.publish(ownerUserId, alert);
             if (analysis.parseWarning() != null) {
-                log.warn("Sentinel diagnosis parse warning: source=sentinel, owner={}, length={}", ownerUserId, report.length());
+                log.warn(
+                        "Sentinel diagnosis parse warning: source=sentinel, owner={}, length={}",
+                        ownerUserId,
+                        report.length());
             }
         } catch (Exception ex) {
-            log.warn("Failed to analyze sentinel report: source=sentinel, owner={}, length={}", ownerUserId, report.length());
+            log.warn(
+                    "Failed to analyze sentinel report: source=sentinel, owner={}, length={}",
+                    ownerUserId,
+                    report.length());
             SentinelAlertResponse safeError =
                     new SentinelAlertResponse(
                             "Unable to generate structured diagnosis.",

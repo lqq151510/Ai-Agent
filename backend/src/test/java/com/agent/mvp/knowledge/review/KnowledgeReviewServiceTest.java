@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -80,7 +79,9 @@ class KnowledgeReviewServiceTest {
         var queue = service.getQueue(userId, 10);
 
         assertEquals(2, queue.dueCount());
-        assertEquals(List.of(dueItem.getId(), unseenItem.getId()), queue.items().stream().map(item -> item.id()).toList());
+        assertEquals(
+                List.of(dueItem.getId(), unseenItem.getId()),
+                queue.items().stream().map(item -> item.id()).toList());
         assertEquals("RAG", queue.items().getFirst().tags().getFirst().name());
         String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(queue);
         assertFalse(json.contains("rawContent"));

@@ -1,8 +1,8 @@
 package com.agent.mvp.agent.service;
 
 import com.agent.mvp.agent.search.EmbeddingStoreProvider;
-import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.document.Metadata;
+import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
@@ -56,7 +56,8 @@ public class SemanticCacheService {
                 return Optional.empty();
             }
             dev.langchain4j.store.embedding.filter.Filter userFilter =
-                    dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey("userId")
+                    dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey(
+                                    "userId")
                             .isEqualTo(userId.toString());
             EmbeddingSearchRequest request =
                     EmbeddingSearchRequest.builder()
@@ -91,7 +92,10 @@ public class SemanticCacheService {
     @Async
     public void cacheResponseAsync(UUID userId, String prompt, String response) {
         String normalizedPrompt = normalizePrompt(prompt);
-        if (normalizedPrompt.isBlank() || response == null || response.isBlank() || userId == null) {
+        if (normalizedPrompt.isBlank()
+                || response == null
+                || response.isBlank()
+                || userId == null) {
             return;
         }
         try {
@@ -101,9 +105,7 @@ public class SemanticCacheService {
             }
             Metadata metadata =
                     Metadata.from(
-                            java.util.Map.of(
-                                    "response", response,
-                                    "userId", userId.toString()));
+                            java.util.Map.of("response", response, "userId", userId.toString()));
             TextSegment segment = TextSegment.from(normalizedPrompt, metadata);
             embeddingStore.add(embedding, segment);
             log.info("Successfully cached new QA pair asynchronously for user: {}", userId);

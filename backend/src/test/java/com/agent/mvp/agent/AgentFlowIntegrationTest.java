@@ -55,7 +55,8 @@ class AgentFlowIntegrationTest {
     static final GenericContainer<?> REDIS =
             new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
 
-    // WireMock 2 conflicts with the pinned Jetty security line; use the JDK server like the E2E test.
+    // WireMock 2 conflicts with the pinned Jetty security line; use the JDK server like the E2E
+    // test.
     static final HttpServer OPENAI_MOCK = startOpenAiMock();
     static final AtomicBoolean INVALID_CHOICES_RESPONSE = new AtomicBoolean(false);
 
@@ -77,9 +78,7 @@ class AgentFlowIntegrationTest {
         registry.add("spring.data.redis.password", () -> "");
 
         registry.add("security.jwt.secret", () -> "01234567890123456789012345678901");
-        registry.add(
-                "security.db.encryption-key",
-                () -> "integration-test-db-encryption-key");
+        registry.add("security.db.encryption-key", () -> "integration-test-db-encryption-key");
         registry.add("app.default-provider", () -> "OPENAI");
         registry.add("app.default-openai-model", () -> "mock-model");
         registry.add(

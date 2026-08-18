@@ -42,14 +42,17 @@ public class SentinelRequestFilter extends OncePerRequestFilter {
         this.ownerUserId = parseOwner(ownerUserId);
         this.source = new SentinelServicePrincipal(null, source).source();
         if (enabled && this.receiverToken.isBlank()) {
-            throw new IllegalStateException("BUG_SENTINEL_TOKEN is required when Sentinel is enabled");
+            throw new IllegalStateException(
+                    "BUG_SENTINEL_TOKEN is required when Sentinel is enabled");
         }
         if (enabled && this.ownerUserId == null) {
-            throw new IllegalStateException("BUG_SENTINEL_OWNER_USER_ID is required when Sentinel is enabled");
+            throw new IllegalStateException(
+                    "BUG_SENTINEL_OWNER_USER_ID is required when Sentinel is enabled");
         }
     }
 
-    public SentinelRequestFilter(String receiverToken, int maxBytes, String ownerUserId, String source) {
+    public SentinelRequestFilter(
+            String receiverToken, int maxBytes, String ownerUserId, String source) {
         this(receiverToken, maxBytes, ownerUserId, source, false);
     }
 
@@ -75,15 +78,20 @@ public class SentinelRequestFilter extends OncePerRequestFilter {
             response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
             return;
         }
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        new SentinelServicePrincipal(ownerUserId, source), null, List.of()));
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        new UsernamePasswordAuthenticationToken(
+                                new SentinelServicePrincipal(ownerUserId, source),
+                                null,
+                                List.of()));
         request.setAttribute("sentinel.source", source);
         chain.doFilter(new CachedBodyRequest(request, body), response);
     }
 
     private boolean isValidAuthorization(String authorization) {
-        if (receiverToken.isBlank() || authorization == null || !authorization.startsWith("Sentinel ")) {
+        if (receiverToken.isBlank()
+                || authorization == null
+                || !authorization.startsWith("Sentinel ")) {
             return false;
         }
         return MessageDigest.isEqual(
@@ -120,15 +128,39 @@ public class SentinelRequestFilter extends OncePerRequestFilter {
         public ServletInputStream getInputStream() {
             ByteArrayInputStream input = new ByteArrayInputStream(body);
             return new ServletInputStream() {
-                @Override public int read() { return input.read(); }
-                @Override public int read(byte[] b, int off, int len) { return input.read(b, off, len); }
-                @Override public boolean isFinished() { return input.available() == 0; }
-                @Override public boolean isReady() { return true; }
-                @Override public void setReadListener(jakarta.servlet.ReadListener listener) { }
+                @Override
+                public int read() {
+                    return input.read();
+                }
+
+                @Override
+                public int read(byte[] b, int off, int len) {
+                    return input.read(b, off, len);
+                }
+
+                @Override
+                public boolean isFinished() {
+                    return input.available() == 0;
+                }
+
+                @Override
+                public boolean isReady() {
+                    return true;
+                }
+
+                @Override
+                public void setReadListener(jakarta.servlet.ReadListener listener) {}
             };
         }
 
-        @Override public int getContentLength() { return body.length; }
-        @Override public long getContentLengthLong() { return body.length; }
+        @Override
+        public int getContentLength() {
+            return body.length;
+        }
+
+        @Override
+        public long getContentLengthLong() {
+            return body.length;
+        }
     }
 }

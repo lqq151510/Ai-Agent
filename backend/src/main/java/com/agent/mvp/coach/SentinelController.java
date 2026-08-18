@@ -1,9 +1,9 @@
 package com.agent.mvp.coach;
 
+import com.agent.mvp.auth.security.AuthUtils;
 import com.agent.mvp.coach.dto.SentinelReportRequest;
 import com.agent.mvp.coach.service.CoachService;
 import com.agent.mvp.coach.service.SentinelAlertBroadcaster;
-import com.agent.mvp.auth.security.AuthUtils;
 import com.agent.mvp.common.exception.ApiException;
 import com.agent.mvp.infra.RateLimiterService;
 import jakarta.validation.Valid;
@@ -12,8 +12,8 @@ import java.util.concurrent.RejectedExecutionException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -49,7 +49,8 @@ public class SentinelController {
                 || principal.ownerUserId() == null) {
             throw new ApiException("UNAUTHORIZED", "Sentinel service authentication required");
         }
-        if (!rateLimiterService.allow("sentinel:" + principal.source(), 10, Duration.ofMinutes(1))) {
+        if (!rateLimiterService.allow(
+                "sentinel:" + principal.source(), 10, Duration.ofMinutes(1))) {
             throw new ApiException("TOO_MANY_REQUESTS", "Sentinel report rate limit exceeded");
         }
         try {

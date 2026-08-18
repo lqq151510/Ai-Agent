@@ -74,7 +74,8 @@ public class SecurityConfig {
                                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                                             response.setContentType(
                                                     MediaType.APPLICATION_JSON_VALUE);
-                                            response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+                                            response.setHeader(
+                                                    HttpHeaders.WWW_AUTHENTICATE, "Bearer");
                                             String requestId = RequestContext.ensureRequestId();
                                             response.setHeader(
                                                     RequestContext.REQUEST_ID_HEADER, requestId);
@@ -90,8 +91,8 @@ public class SecurityConfig {
                                                                             "requestId",
                                                                             requestId)));
                                         }))
-                 .addFilterBefore(requestContextFilter, UsernamePasswordAuthenticationFilter.class)
-                 .addFilterBefore(sentinelRequestFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(requestContextFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(sentinelRequestFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(
                         jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

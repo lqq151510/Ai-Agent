@@ -77,11 +77,13 @@ public class KnowledgeReviewService {
         userProfileService.requireUser(userId);
         int limit = normalizeLimit(requestedLimit);
         Instant now = clock.instant();
-        List<KnowledgeItem> dueItems = knowledgeItemRepository.findDueReviewItems(userId, now, limit);
+        List<KnowledgeItem> dueItems =
+                knowledgeItemRepository.findDueReviewItems(userId, now, limit);
         int remaining = Math.max(0, limit - dueItems.size());
-        List<KnowledgeItem> unseenItems = remaining == 0
-                ? List.of()
-                : knowledgeItemRepository.findUnreviewedReadyItems(userId, remaining);
+        List<KnowledgeItem> unseenItems =
+                remaining == 0
+                        ? List.of()
+                        : knowledgeItemRepository.findUnreviewedReadyItems(userId, remaining);
 
         List<KnowledgeItem> queueItems = new ArrayList<>(dueItems.size() + unseenItems.size());
         queueItems.addAll(dueItems);
@@ -148,7 +150,8 @@ public class KnowledgeReviewService {
         Instant now = clock.instant();
         long unreviewedCount = knowledgeItemRepository.countUnreviewedReadyItems(userId);
         long dueCount = knowledgeItemRepository.countDueReviewItems(userId, now) + unreviewedCount;
-        Instant nextDueAt = unreviewedCount > 0 ? now : knowledgeItemRepository.findNextReviewDueAt(userId);
+        Instant nextDueAt =
+                unreviewedCount > 0 ? now : knowledgeItemRepository.findNextReviewDueAt(userId);
         return new KnowledgeReviewSummaryResponse(dueCount, nextDueAt);
     }
 

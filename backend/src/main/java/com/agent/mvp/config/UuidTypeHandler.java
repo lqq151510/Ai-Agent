@@ -13,12 +13,11 @@ import org.apache.ibatis.type.MappedTypes;
 /**
  * UUID 类型处理器。
  *
- * <p>PostgreSQL 原生支持 UUID 类型，JDBC 驱动会自动处理。H2 内存数据库（测试环境）也接受 UUID
- * 对象，因此写入时必须保留 UUID 类型，不能降级为字符串。
+ * <p>PostgreSQL 原生支持 UUID 类型，JDBC 驱动会自动处理。H2 内存数据库（测试环境）也接受 UUID 对象，因此写入时必须保留 UUID 类型，不能降级为字符串。
  *
  * <p>本处理器支持两种存储格式： 1. 字符串形式（如 "550e8400-e29b-41d4-a716-446655440000"） 2. 字节数组形式（16 字节 BINARY）
  *
-     * <p>通过 application.yml 的 mybatis-plus.type-handlers-package 注册。
+ * <p>通过 application.yml 的 mybatis-plus.type-handlers-package 注册。
  */
 @MappedTypes(UUID.class)
 @MappedJdbcTypes(value = JdbcType.OTHER, includeNullJdbcType = true)

@@ -18,15 +18,18 @@ public class KnowledgeReviewScheduler {
             throw new IllegalArgumentException("reviewedAt is required");
         }
 
-        int repetitions = current == null || current.getRepetitions() == null
-                ? 0
-                : Math.max(0, current.getRepetitions());
-        int currentIntervalDays = current == null || current.getIntervalDays() == null
-                ? 1
-                : Math.max(1, current.getIntervalDays());
-        double currentEaseFactor = current == null || current.getEaseFactor() == null
-                ? INITIAL_EASE_FACTOR
-                : Math.max(MIN_EASE_FACTOR, current.getEaseFactor());
+        int repetitions =
+                current == null || current.getRepetitions() == null
+                        ? 0
+                        : Math.max(0, current.getRepetitions());
+        int currentIntervalDays =
+                current == null || current.getIntervalDays() == null
+                        ? 1
+                        : Math.max(1, current.getIntervalDays());
+        double currentEaseFactor =
+                current == null || current.getEaseFactor() == null
+                        ? INITIAL_EASE_FACTOR
+                        : Math.max(MIN_EASE_FACTOR, current.getEaseFactor());
 
         int intervalDays;
         int nextRepetitions;
@@ -43,12 +46,14 @@ public class KnowledgeReviewScheduler {
                 nextEaseFactor = Math.max(MIN_EASE_FACTOR, currentEaseFactor - 0.15);
             }
             case GOOD -> {
-                intervalDays = goodIntervalDays(repetitions, currentIntervalDays, currentEaseFactor);
+                intervalDays =
+                        goodIntervalDays(repetitions, currentIntervalDays, currentEaseFactor);
                 nextRepetitions = repetitions + 1;
                 nextEaseFactor = currentEaseFactor;
             }
             case EASY -> {
-                intervalDays = easyIntervalDays(repetitions, currentIntervalDays, currentEaseFactor);
+                intervalDays =
+                        easyIntervalDays(repetitions, currentIntervalDays, currentEaseFactor);
                 nextRepetitions = repetitions + 1;
                 nextEaseFactor = currentEaseFactor + 0.15;
             }

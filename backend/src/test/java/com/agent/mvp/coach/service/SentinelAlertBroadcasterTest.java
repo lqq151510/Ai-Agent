@@ -7,9 +7,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.agent.mvp.coach.dto.SentinelAlertResponse;
-import java.util.UUID;
 import java.lang.reflect.Field;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -43,7 +43,8 @@ class SentinelAlertBroadcasterTest {
         broadcaster.publish(a, new SentinelAlertResponse("A", "fix"));
 
         verify(aEmitter).send(org.mockito.ArgumentMatchers.any(SseEmitter.SseEventBuilder.class));
-        verify(bEmitter, never()).send(org.mockito.ArgumentMatchers.any(SseEmitter.SseEventBuilder.class));
+        verify(bEmitter, never())
+                .send(org.mockito.ArgumentMatchers.any(SseEmitter.SseEventBuilder.class));
     }
 
     @Test
@@ -62,8 +63,8 @@ class SentinelAlertBroadcasterTest {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<UUID, CopyOnWriteArrayList<SseEmitter>> emitters(SentinelAlertBroadcaster broadcaster)
-            throws Exception {
+    private Map<UUID, CopyOnWriteArrayList<SseEmitter>> emitters(
+            SentinelAlertBroadcaster broadcaster) throws Exception {
         Field field = SentinelAlertBroadcaster.class.getDeclaredField("emitters");
         field.setAccessible(true);
         return (Map<UUID, CopyOnWriteArrayList<SseEmitter>>) field.get(broadcaster);

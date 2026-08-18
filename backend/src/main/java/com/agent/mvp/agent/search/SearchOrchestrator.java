@@ -135,10 +135,7 @@ public class SearchOrchestrator {
         }
         if (groupedResults.size() == 1) {
             return truncate(
-                    groupedResults.get(0).stream()
-                            .map(SearchResult::content)
-                            .toList(),
-                    maxResults);
+                    groupedResults.get(0).stream().map(SearchResult::content).toList(), maxResults);
         }
         return fusioner.fuse(groupedResults, maxResults);
     }

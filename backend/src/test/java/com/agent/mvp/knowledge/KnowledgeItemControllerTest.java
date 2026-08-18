@@ -182,13 +182,8 @@ class KnowledgeItemControllerTest {
                                 4,
                                 "picker",
                                 "available"));
-        when(
-                        knowledgeItemService.importUpload(
-                                eq(userId),
-                                any(),
-                                eq("notes"),
-                                eq(sourceAssetId.toString()),
-                                eq("picker")))
+        when(knowledgeItemService.importUpload(
+                        eq(userId), any(), eq("notes"), eq(sourceAssetId.toString()), eq("picker")))
                 .thenReturn(response);
 
         mockMvc.perform(
@@ -216,11 +211,7 @@ class KnowledgeItemControllerTest {
 
         verify(knowledgeItemService)
                 .importUpload(
-                        eq(userId),
-                        any(),
-                        eq("notes"),
-                        eq(sourceAssetId.toString()),
-                        eq("picker"));
+                        eq(userId), any(), eq("notes"), eq(sourceAssetId.toString()), eq("picker"));
     }
 
     private Authentication authentication(UUID userId) {

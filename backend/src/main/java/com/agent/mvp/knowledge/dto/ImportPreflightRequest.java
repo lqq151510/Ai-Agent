@@ -14,6 +14,7 @@ public record ImportPreflightRequest(
                                 @Pattern(
                                         regexp = "^[0-9a-fA-F]{64}$",
                                         message =
-                                                "content hash must be a 64-character hexadecimal SHA-256")
+                                                "content hash must be a 64-character hexadecimal"
+                                                        + " SHA-256")
                                 String>
                         contentHashes) {}

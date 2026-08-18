@@ -33,7 +33,8 @@ public class ExecutorConfig {
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(32);
         executor.setThreadNamePrefix("sentinel-");
-        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+        executor.setRejectedExecutionHandler(
+                new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
         executor.setDaemon(true);
         executor.initialize();
         return executor;

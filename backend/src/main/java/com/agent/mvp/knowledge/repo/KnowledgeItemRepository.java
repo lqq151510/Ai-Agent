@@ -43,34 +43,34 @@ public interface KnowledgeItemRepository extends BaseMapper<KnowledgeItem> {
 
     @Select(
             """
-            SELECT ki.id, ki.user_id, ki.source_type, ki.title, ki.summary, ki.status, ki.updated_at
-            FROM knowledge_review_states review_state
-            JOIN knowledge_items ki ON ki.id = review_state.knowledge_item_id
-            WHERE review_state.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
-              AND review_state.due_at <= #{now}
-              AND ki.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
-              AND ki.status = 'ready'
-            ORDER BY review_state.due_at ASC, ki.updated_at DESC
-            LIMIT #{limit}
-            """)
+SELECT ki.id, ki.user_id, ki.source_type, ki.title, ki.summary, ki.status, ki.updated_at
+FROM knowledge_review_states review_state
+JOIN knowledge_items ki ON ki.id = review_state.knowledge_item_id
+WHERE review_state.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
+  AND review_state.due_at <= #{now}
+  AND ki.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
+  AND ki.status = 'ready'
+ORDER BY review_state.due_at ASC, ki.updated_at DESC
+LIMIT #{limit}
+""")
     List<KnowledgeItem> findDueReviewItems(
             @Param("userId") UUID userId, @Param("now") Instant now, @Param("limit") int limit);
 
     @Select(
             """
-            SELECT ki.id, ki.user_id, ki.source_type, ki.title, ki.summary, ki.status, ki.updated_at
-            FROM knowledge_items ki
-            WHERE ki.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
-              AND ki.status = 'ready'
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM knowledge_review_states review_state
-                  WHERE review_state.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
-                    AND review_state.knowledge_item_id = ki.id
-              )
-            ORDER BY ki.updated_at DESC
-            LIMIT #{limit}
-            """)
+SELECT ki.id, ki.user_id, ki.source_type, ki.title, ki.summary, ki.status, ki.updated_at
+FROM knowledge_items ki
+WHERE ki.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
+  AND ki.status = 'ready'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM knowledge_review_states review_state
+      WHERE review_state.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
+        AND review_state.knowledge_item_id = ki.id
+  )
+ORDER BY ki.updated_at DESC
+LIMIT #{limit}
+""")
     List<KnowledgeItem> findUnreviewedReadyItems(
             @Param("userId") UUID userId, @Param("limit") int limit);
 
@@ -88,17 +88,17 @@ public interface KnowledgeItemRepository extends BaseMapper<KnowledgeItem> {
 
     @Select(
             """
-            SELECT COUNT(*)
-            FROM knowledge_items ki
-            WHERE ki.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
-              AND ki.status = 'ready'
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM knowledge_review_states review_state
-                  WHERE review_state.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
-                    AND review_state.knowledge_item_id = ki.id
-              )
-            """)
+SELECT COUNT(*)
+FROM knowledge_items ki
+WHERE ki.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
+  AND ki.status = 'ready'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM knowledge_review_states review_state
+      WHERE review_state.user_id = #{userId,typeHandler=com.agent.mvp.config.UuidTypeHandler}
+        AND review_state.knowledge_item_id = ki.id
+  )
+""")
     long countUnreviewedReadyItems(@Param("userId") UUID userId);
 
     @Select(
@@ -113,7 +113,7 @@ public interface KnowledgeItemRepository extends BaseMapper<KnowledgeItem> {
     Instant findNextReviewDueAt(@Param("userId") UUID userId);
 
     @Select(
-            "SELECT id, user_id, status FROM knowledge_items "
-                    + "WHERE id = #{itemId,typeHandler=com.agent.mvp.config.UuidTypeHandler} FOR UPDATE")
+            "SELECT id, user_id, status FROM knowledge_items WHERE id ="
+                    + " #{itemId,typeHandler=com.agent.mvp.config.UuidTypeHandler} FOR UPDATE")
     KnowledgeItem findForReviewCompletion(@Param("itemId") UUID itemId);
 }

@@ -9,7 +9,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Metadata for a desktop-managed original. It deliberately contains no path, storage key, or bytes. */
+/**
+ * Metadata for a desktop-managed original. It deliberately contains no path, storage key, or bytes.
+ */
 @TableName("knowledge_source_assets")
 @Data
 @NoArgsConstructor
