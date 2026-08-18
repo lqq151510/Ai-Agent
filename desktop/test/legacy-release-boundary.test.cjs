@@ -27,11 +27,12 @@ test('packaged bootstrap initializes safe IPC collaborators before applying the 
     path.join(__dirname, '../src/main/index.ts'),
     'utf8',
   );
-  const firstLegacyGate = mainSource.indexOf('if (isLegacyEnabled)');
+  const legacyGuardDeclaration = mainSource.indexOf('const isLegacyEnabled =');
+  const firstLegacyGate = mainSource.indexOf('if (isLegacyEnabled && activeWorkspace)');
   const workspaceInitialization = mainSource.indexOf('workspaceManager = new WorkspaceManager()');
   const toolBridgeInitialization = mainSource.indexOf('toolBridge = new ToolExecutionBridge(');
 
-  assert.ok(firstLegacyGate > -1, 'expected an explicit runtime legacy gate');
+  assert.ok(legacyGuardDeclaration > -1, 'expected an explicit packaged-runtime guard');
   assert.ok(workspaceInitialization > -1 && workspaceInitialization < firstLegacyGate);
   assert.ok(toolBridgeInitialization > -1 && toolBridgeInitialization < firstLegacyGate);
 });
