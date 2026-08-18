@@ -167,10 +167,24 @@ function validatePolicyShape(policy, errors) {
 }
 
 const options = parseArgs(process.argv.slice(2));
+const report = readJson(options.auditReport, 'audit report');
+
+if (!isPlainObject(report)
+  || report.auditReportVersion !== 2
+  || !isPlainObject(report.vulnerabilities)
+  || !isPlainObject(report.metadata?.vulnerabilities)) {
+  inputError('audit report must use npm auditReportVersion 2 with vulnerabilities and metadata.vulnerabilities objects');
+}
+
+const reportedVulnerabilityNames = Object.keys(report.vulnerabilities);
+if (report.metadata.vulnerabilities.total === 0 && reportedVulnerabilityNames.length === 0) {
+  console.log('[npm-audit-policy] audit passed with no vulnerabilities; no temporary exception required');
+  process.exit(0);
+}
+
 const policy = readJson(options.policy, 'policy');
 const lockfile = readJson(options.lockfile, 'lockfile');
 const packageJson = readJson(options.packageJson, 'package.json');
-const report = readJson(options.auditReport, 'audit report');
 const errors = [];
 const safePolicy = isPlainObject(policy) ? policy : {};
 

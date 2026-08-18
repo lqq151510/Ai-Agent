@@ -171,7 +171,7 @@ jobs:
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mvn --settings .mvn/settings.xml -pl backend -am clean test jacoco:report
+        run: mvn --settings .mvn/settings.xml -pl backend -am clean test
 
   desktop-test:
     runs-on: ubuntu-latest
