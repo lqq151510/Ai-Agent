@@ -10,6 +10,7 @@ import dev.langchain4j.store.embedding.EmbeddingStore;
 import jakarta.annotation.PostConstruct;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,10 +44,10 @@ public class SemanticCacheService {
         this.embeddingStore = storeProvider.createEmbeddingStore("semantic_cache", 384);
     }
 
-    /** 根据输入 prompt 查询是否有相似度极高的缓存回答 */
-    public Optional<String> findCachedResponse(String prompt) {
+    /** 根据用户 ID 和输入 prompt 查询是否有相似度极高的缓存回答（用户级隔离） */
+    public Optional<String> findCachedResponse(UUID userId, String prompt) {
         String normalizedPrompt = normalizePrompt(prompt);
-        if (normalizedPrompt.isBlank()) {
+        if (normalizedPrompt.isBlank() || userId == null) {
             return Optional.empty();
         }
         try {
@@ -54,9 +55,13 @@ public class SemanticCacheService {
             if (queryEmbedding == null) {
                 return Optional.empty();
             }
+            dev.langchain4j.store.embedding.filter.Filter userFilter =
+                    dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey("userId")
+                            .isEqualTo(userId.toString());
             EmbeddingSearchRequest request =
                     EmbeddingSearchRequest.builder()
                             .queryEmbedding(queryEmbedding)
+                            .filter(userFilter)
                             .maxResults(1)
                             .minScore(CACHE_HIT_MIN_SCORE)
                             .build();
@@ -65,7 +70,8 @@ public class SemanticCacheService {
                 EmbeddingMatch<TextSegment> match = matches.get(0);
                 String cachedResponse = match.embedded().metadata().getString("response");
                 log.info(
-                        "Semantic cache hit for prompt: {} with similarity: {}",
+                        "Semantic cache hit for user: {} prompt: {} with similarity: {}",
+                        userId,
                         normalizedPrompt,
                         match.score());
                 return Optional.ofNullable(cachedResponse);
@@ -76,11 +82,16 @@ public class SemanticCacheService {
         return Optional.empty();
     }
 
-    /** 异步将新的问答对存入缓存 */
+    /** 兼容旧接口重载（仅当无用户上下文时） */
+    public Optional<String> findCachedResponse(String prompt) {
+        return findCachedResponse((UUID) null, prompt);
+    }
+
+    /** 异步将带用户隔离的新问答对存入缓存 */
     @Async
-    public void cacheResponseAsync(String prompt, String response) {
+    public void cacheResponseAsync(UUID userId, String prompt, String response) {
         String normalizedPrompt = normalizePrompt(prompt);
-        if (normalizedPrompt.isBlank() || response == null || response.isBlank()) {
+        if (normalizedPrompt.isBlank() || response == null || response.isBlank() || userId == null) {
             return;
         }
         try {
@@ -88,13 +99,23 @@ public class SemanticCacheService {
             if (embedding == null) {
                 return;
             }
-            TextSegment segment =
-                    TextSegment.from(normalizedPrompt, Metadata.from("response", response));
+            Metadata metadata =
+                    Metadata.from(
+                            java.util.Map.of(
+                                    "response", response,
+                                    "userId", userId.toString()));
+            TextSegment segment = TextSegment.from(normalizedPrompt, metadata);
             embeddingStore.add(embedding, segment);
-            log.info("Successfully cached new QA pair asynchronously");
+            log.info("Successfully cached new QA pair asynchronously for user: {}", userId);
         } catch (Exception ex) {
             log.error("Failed to cache QA pair. Error: {}", ex.getMessage());
         }
+    }
+
+    /** 兼容旧接口重载 */
+    @Async
+    public void cacheResponseAsync(String prompt, String response) {
+        cacheResponseAsync(null, prompt, response);
     }
 
     private Embedding tryEmbedPrompt(String prompt) {

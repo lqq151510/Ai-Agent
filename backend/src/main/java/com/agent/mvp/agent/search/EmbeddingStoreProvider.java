@@ -120,7 +120,7 @@ public class EmbeddingStoreProvider {
             jdbcTemplate.execute(
                     "CREATE INDEX IF NOT EXISTS idx_engineering_memory_text_fts "
                             + "ON engineering_memory USING GIN "
-                            + "(to_tsvector('english', COALESCE(text, '')))");
+                            + "(to_tsvector('simple', COALESCE(text, '')))");
             return true;
         } catch (Exception ex) {
             log.warn("FTS index initialization skipped: {}", ex.getMessage());

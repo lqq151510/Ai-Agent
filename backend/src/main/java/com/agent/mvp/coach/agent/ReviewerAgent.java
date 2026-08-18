@@ -8,7 +8,6 @@ import com.agent.mvp.agent.service.ModelGateway;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
-@org.springframework.context.annotation.Profile("legacy")
 @Component
 public class ReviewerAgent {
 

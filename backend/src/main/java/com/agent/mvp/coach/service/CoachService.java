@@ -45,7 +45,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-@org.springframework.context.annotation.Profile("legacy")
 @Service
 public class CoachService {
     private static final Logger log = LoggerFactory.getLogger(CoachService.class);

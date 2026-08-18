@@ -72,7 +72,7 @@ public class RAGMemoryService {
         }
     }
 
-    /** 根据当前消息/症状检索相似的历史诊断记录 */
+    /** 根据当前消息/症状检索相似的历史诊断记录（基于 Pre-filtering 租户隔离） */
     public List<String> searchSimilarDiagnoses(UUID userId, String queryText, int maxResults) {
         List<String> results = new ArrayList<>();
         String normalizedQuery = normalizeQuery(queryText);
@@ -85,20 +85,23 @@ public class RAGMemoryService {
             if (queryEmbedding == null) {
                 return results;
             }
+            dev.langchain4j.store.embedding.filter.Filter userFilter =
+                    dev.langchain4j.store.embedding.filter.MetadataFilterBuilder.metadataKey("userId")
+                            .isEqualTo(userId.toString());
             EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
             EmbeddingSearchRequest request =
                     EmbeddingSearchRequest.builder()
                             .queryEmbedding(queryEmbedding)
-                            .maxResults(Math.min(safeMaxResults * 4, MAX_VECTOR_CANDIDATES))
+                            .filter(userFilter)
+                            .maxResults(safeMaxResults)
                             .build();
             List<EmbeddingMatch<TextSegment>> matches = embeddingStore.search(request).matches();
-            for (EmbeddingMatch<TextSegment> match : matches) {
-                String matchUserId = match.embedded().metadata().getString("userId");
-                if (userId.toString().equals(matchUserId)) {
+            if (matches != null) {
+                for (EmbeddingMatch<TextSegment> match : matches) {
                     results.add(match.embedded().text());
-                }
-                if (results.size() >= safeMaxResults) {
-                    break;
+                    if (results.size() >= safeMaxResults) {
+                        break;
+                    }
                 }
             }
         } catch (Exception ex) {

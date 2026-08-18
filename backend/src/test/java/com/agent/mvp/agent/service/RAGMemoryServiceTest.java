@@ -1,6 +1,7 @@
 package com.agent.mvp.agent.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -23,7 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class RAGMemoryServiceTest {
 
     @Test
-    void searchSimilarDiagnosesReturnsOnlyOwnedMemories() {
+    void searchSimilarDiagnosesSendsUserFilterToEmbeddingStore() {
         UUID userId = UUID.randomUUID();
         EmbeddingStoreProvider provider = mock(EmbeddingStoreProvider.class);
         @SuppressWarnings("unchecked")
@@ -31,20 +32,20 @@ class RAGMemoryServiceTest {
         Embedding embedding = Embedding.from(new float[] {1.0f});
         when(provider.tryEmbedQuery("timeout")).thenReturn(embedding);
         when(provider.getEmbeddingStore()).thenReturn(store);
-        when(store.search(org.mockito.ArgumentMatchers.any(EmbeddingSearchRequest.class)))
+        when(store.search(
+                        argThat(
+                                request ->
+                                        request.filter() != null
+                                                && request.filter()
+                                                        .toString()
+                                                        .contains(userId.toString()))))
                 .thenReturn(
                         new EmbeddingSearchResult<>(
                                 List.of(
                                         match(
                                                 "owned",
                                                 Metadata.from("userId", userId.toString()),
-                                                embedding),
-                                        match(
-                                                "other",
-                                                Metadata.from(
-                                                        "userId", UUID.randomUUID().toString()),
-                                                embedding),
-                                        match("unscoped", new Metadata(), embedding))));
+                                                embedding))));
 
         RAGMemoryService service = service(provider);
 
@@ -65,16 +66,13 @@ class RAGMemoryServiceTest {
                         List.of(
                                 Map.of(
                                         "embedding_id", UUID.randomUUID(),
-                                        "text", "memory",
-                                        "metadata",
-                                                new StringBuilder("{\"userId\":\"")
-                                                        .append(userId)
-                                                        .append("\"}"))));
+                                        "text", "owned",
+                                        "metadata", new StringBuilder("{\"userId\":\"").append(userId).append("\"}"))));
 
         List<Map<String, Object>> memories = service(provider).listAllMemories(userId);
 
         assertEquals(1, memories.size());
-        assertEquals("memory", memories.getFirst().get("text"));
+        assertEquals("owned", memories.getFirst().get("text"));
         assertEquals("{\"userId\":\"" + userId + "\"}", memories.getFirst().get("metadata"));
     }
 

@@ -18,16 +18,23 @@ public class SemanticCacheWriter {
     }
 
     /**
-     * 异步写入语义缓存。当 response 为空时直接跳过；任何异常都被吞噬并仅记录警告日志。
+     * 异步写入语义缓存（带用户隔离）。当 response 为空时直接跳过；任何异常都被吞噬并仅记录警告日志。
      */
-    public void writeAsync(String prompt, String response) {
-        if (response == null || response.isBlank()) {
+    public void writeAsync(java.util.UUID userId, String prompt, String response) {
+        if (response == null || response.isBlank() || userId == null) {
             return;
         }
         try {
-            semanticCacheService.cacheResponseAsync(prompt, response);
+            semanticCacheService.cacheResponseAsync(userId, prompt, response);
         } catch (Exception ex) {
-            log.warn("Semantic cache write failed, ignoring", ex);
+            log.warn("Semantic cache write failed for user {}, ignoring", userId, ex);
         }
+    }
+
+    /**
+     * 兼容旧版写入方法
+     */
+    public void writeAsync(String prompt, String response) {
+        writeAsync(null, prompt, response);
     }
 }

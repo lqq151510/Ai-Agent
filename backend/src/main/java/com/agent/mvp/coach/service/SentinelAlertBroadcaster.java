@@ -8,7 +8,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-@org.springframework.context.annotation.Profile("legacy")
 @Service
 public class SentinelAlertBroadcaster {
     private static final int MAX_EMITTERS_PER_USER = 5;

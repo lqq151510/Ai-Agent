@@ -56,11 +56,11 @@ spring:
 
 security:
   jwt:
-    secret: ${JWT_SECRET}
+    secret: ${JWT_SECRET:local-desktop-jwt-secret-key-32chars-min-auto}
     access-exp-seconds: ${JWT_ACCESS_EXP_SECONDS:86400}
     refresh-exp-seconds: ${JWT_REFRESH_EXP_SECONDS:2592000}
   db:
-    encryption-key: ${SECURITY_DB_ENCRYPTION_KEY}
+    encryption-key: ${SECURITY_DB_ENCRYPTION_KEY:local-desktop-db-encryption-key-32chars}
     legacy-encryption-key: ${SECURITY_DB_LEGACY_ENCRYPTION_KEY:}
 
 app:
@@ -94,7 +94,7 @@ app:
     model-probe-timeout-ms: ${MODEL_PROBE_TIMEOUT_MS:3000}
     model-probe-retries: ${MODEL_PROBE_RETRIES:1}
   openai:
-    base-url: ${OPENAI_BASE_URL:http://10.115.10.220:1234/v1}
+    base-url: ${OPENAI_BASE_URL:http://localhost:1234/v1}
     api-key: ${OPENAI_API_KEY:sk-placeholder}
 
 logging:

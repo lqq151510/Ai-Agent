@@ -29,7 +29,6 @@ import org.springframework.stereotype.Component;
  * Path#normalize()} + {@link Path#startsWith(Path)} 防止路径穿越），并维护 {@code .manifest.json} 记录写入的文件清单，支持
  * {@link #rollback(UUID)} 回滚清理。
  */
-@org.springframework.context.annotation.Profile("legacy")
 @Component
 public class SandboxManager {
 

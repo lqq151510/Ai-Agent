@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
-@org.springframework.context.annotation.Profile("legacy")
 @Component
 public class SupervisorAgent {
 

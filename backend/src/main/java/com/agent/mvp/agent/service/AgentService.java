@@ -48,6 +48,7 @@ public class AgentService {
     private final MessageHistoryProcessor messageHistoryProcessor;
     private final ToolCallManager toolCallManager;
     private final ModelSourceResolver modelSourceResolver;
+    private final SemanticCacheService semanticCacheService;
     private final SemanticCacheWriter semanticCacheWriter;
     private final DiagnosticsBuilder diagnosticsBuilder;
 
@@ -66,6 +67,7 @@ public class AgentService {
             MessageHistoryProcessor messageHistoryProcessor,
             ToolCallManager toolCallManager,
             ModelSourceResolver modelSourceResolver,
+            SemanticCacheService semanticCacheService,
             SemanticCacheWriter semanticCacheWriter,
             DiagnosticsBuilder diagnosticsBuilder) {
         this.sessionService = sessionService;
@@ -82,6 +84,7 @@ public class AgentService {
         this.messageHistoryProcessor = messageHistoryProcessor;
         this.toolCallManager = toolCallManager;
         this.modelSourceResolver = modelSourceResolver;
+        this.semanticCacheService = semanticCacheService;
         this.semanticCacheWriter = semanticCacheWriter;
         this.diagnosticsBuilder = diagnosticsBuilder;
     }
@@ -121,15 +124,12 @@ public class AgentService {
                 agentContextService.resolveContextTokenBudget(request.maxContextTokens(), session);
 
         Optional<String> cachedResponseOpt = Optional.empty();
-        // [SECURITY] Temporarily disable semantic cache to prevent context leak between sessions
-        /*
         try {
-            cachedResponseOpt = semanticCacheService.findCachedResponse(request.message());
+            cachedResponseOpt = semanticCacheService.findCachedResponse(userId, request.message());
         } catch (Exception ex) {
             log.warn("Semantic cache lookup failed, continuing without cache", ex);
             cachedResponseOpt = Optional.empty();
         }
-        */
         if (cachedResponseOpt.isPresent()) {
             String cachedResponse = cachedResponseOpt.get();
             sessionService.saveMessage(
@@ -177,7 +177,7 @@ public class AgentService {
                         request.allowsTools(),
                         rejectClientTool);
 
-        semanticCacheWriter.writeAsync(request.message(), loop.reply());
+        semanticCacheWriter.writeAsync(userId, request.message(), loop.reply());
 
         return new ChatResponse(
                 session.getId(),
@@ -247,15 +247,12 @@ public class AgentService {
                         initialExecutionDiagnostics(maxContextTokens)));
 
         Optional<String> cachedResponseOpt = Optional.empty();
-        // [SECURITY] Temporarily disable semantic cache to prevent context leak between sessions
-        /*
         try {
-            cachedResponseOpt = semanticCacheService.findCachedResponse(request.message());
+            cachedResponseOpt = semanticCacheService.findCachedResponse(userId, request.message());
         } catch (Exception ex) {
             log.warn("Semantic cache lookup failed, continuing without cache", ex);
             cachedResponseOpt = Optional.empty();
         }
-        */
         if (cachedResponseOpt.isPresent()) {
             String cachedResponse = cachedResponseOpt.get();
             sessionService.saveMessage(
@@ -333,7 +330,7 @@ public class AgentService {
                         request.allowsTools(),
                         clientToolInvoker);
 
-        semanticCacheWriter.writeAsync(request.message(), loop.reply());
+        semanticCacheWriter.writeAsync(userId, request.message(), loop.reply());
 
         metaConsumer.accept(
                 new ChatStreamMeta(

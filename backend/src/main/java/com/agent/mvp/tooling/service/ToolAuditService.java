@@ -15,12 +15,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
-@Profile("legacy")
 public class ToolAuditService extends ServiceImpl<ToolAuditRepository, ToolAudit> {
 
     private final ToolAuditRepository toolAuditRepository;

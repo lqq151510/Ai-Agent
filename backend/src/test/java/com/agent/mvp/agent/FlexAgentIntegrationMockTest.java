@@ -84,6 +84,7 @@ class FlexAgentIntegrationMockTest {
                         messageHistoryProcessor,
                         toolCallManager,
                         modelSourceResolver,
+                        semanticCacheService,
                         semanticCacheWriter,
                         diagnosticsBuilder);
 

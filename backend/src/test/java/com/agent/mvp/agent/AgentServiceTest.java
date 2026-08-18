@@ -308,6 +308,7 @@ class AgentServiceTest {
                         mock(com.agent.mvp.agent.service.ToolCallManager.class),
                         new com.agent.mvp.agent.service.ModelSourceResolver(
                                 mock(com.agent.mvp.modelsource.service.ModelSourceService.class)),
+                        mock(com.agent.mvp.agent.service.SemanticCacheService.class),
                         new com.agent.mvp.agent.service.SemanticCacheWriter(
                                 mock(com.agent.mvp.agent.service.SemanticCacheService.class)),
                         new com.agent.mvp.agent.service.DiagnosticsBuilder());
