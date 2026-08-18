@@ -176,28 +176,30 @@ if (!gotTheLock) {
         revealPath: (sourcePath) => shell.showItemInFolder(sourcePath),
       });
 
-      if (isLegacyEnabled) {
-        cliManager = new CliManager();
-        ptyPool = new PtyPool();
-        workspaceManager = new WorkspaceManager();
-        gitManager = new GitManager();
-        chatManager = new ChatManager();
-        localServiceManager = new LocalServiceManager();
-        threadManager = new ThreadManager(ptyPool, gitManager);
-        approvalEngine = new ApprovalEngine();
-        skillManager = new SkillManager();
-        computerUseManager = new ComputerUseManager();
-        toolBridge = new ToolExecutionBridge(
-          ptyPool,
-          approvalEngine,
-          localServiceManager,
-          () => backendManager.getBaseUrl(),
-          () => ipcRegistry.getDesktopAccessToken(),
-          () => approvalMode,
-          () => workspaceManager.getActiveWorkspace(),
-          computerUseManager,
-        );
-      }
+    // IpcRegistry always needs concrete collaborators, including in packaged
+    // Knowledge Desk builds. The registry's legacy gate controls which IPC
+    // routes are exposed; leaving these collaborators undefined crashes the
+    // packaged app before the local backend can start.
+    cliManager = new CliManager();
+    ptyPool = new PtyPool();
+    workspaceManager = new WorkspaceManager();
+    gitManager = new GitManager();
+    chatManager = new ChatManager();
+    localServiceManager = new LocalServiceManager();
+    threadManager = new ThreadManager(ptyPool, gitManager);
+    approvalEngine = new ApprovalEngine();
+    skillManager = new SkillManager();
+    computerUseManager = new ComputerUseManager();
+    toolBridge = new ToolExecutionBridge(
+      ptyPool,
+      approvalEngine,
+      localServiceManager,
+      () => backendManager.getBaseUrl(),
+      () => ipcRegistry.getDesktopAccessToken(),
+      () => approvalMode,
+      () => workspaceManager.getActiveWorkspace(),
+      computerUseManager,
+    );
 
       trayManager = new TrayManager(windowManager, backendManager);
       ipcRegistry = new IpcRegistry(

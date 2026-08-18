@@ -22,6 +22,20 @@ test('packaged builds cannot activate legacy Computer Use IPC through an environ
   assert.match(ipcRegistrySource, legacyDevtoolsGuard);
 });
 
+test('packaged bootstrap initializes safe IPC collaborators before applying the legacy gate', () => {
+  const mainSource = fs.readFileSync(
+    path.join(__dirname, '../src/main/index.ts'),
+    'utf8',
+  );
+  const firstLegacyGate = mainSource.indexOf('if (isLegacyEnabled)');
+  const workspaceInitialization = mainSource.indexOf('workspaceManager = new WorkspaceManager()');
+  const toolBridgeInitialization = mainSource.indexOf('toolBridge = new ToolExecutionBridge(');
+
+  assert.ok(firstLegacyGate > -1, 'expected an explicit runtime legacy gate');
+  assert.ok(workspaceInitialization > -1 && workspaceInitialization < firstLegacyGate);
+  assert.ok(toolBridgeInitialization > -1 && toolBridgeInitialization < firstLegacyGate);
+});
+
 test('ingestion job history is exposed through an exact read-only Knowledge IPC route', () => {
   const ipcRegistrySource = fs.readFileSync(
     path.join(__dirname, '../src/main/ipc-registry.ts'),
