@@ -111,17 +111,13 @@ export const LocalAssistantPage = ({
   const messageLoadRequestRef = useRef(0);
   const appliedDraftSeedRef = useRef<number | null>(null);
 
-  const selectedModel = availableModels.find((provider) => provider.id === selectedModelSourceId) ?? null;
-
-  useEffect(() => {
-    setSelectedModelSourceId((current) => {
-      if (current && availableModels.some((provider) => provider.id === current)) return current;
-      if (defaultModelSourceId && availableModels.some((provider) => provider.id === defaultModelSourceId)) {
-        return defaultModelSourceId;
-      }
-      return availableModels[0]?.id ?? '';
-    });
-  }, [availableModels, defaultModelSourceId]);
+  const resolvedModelSourceId = availableModels.some((provider) => provider.id === selectedModelSourceId)
+    ? selectedModelSourceId
+    : defaultModelSourceId && availableModels.some((provider) => provider.id === defaultModelSourceId)
+      ? defaultModelSourceId
+      : availableModels[0]?.id ?? '';
+  const selectedModel = availableModels.find((provider) => provider.id === resolvedModelSourceId) ?? null;
+  const visibleMessages = activeSessionId ? messages : [];
 
   useEffect(() => {
     if (
@@ -200,12 +196,13 @@ export const LocalAssistantPage = ({
   };
 
   useEffect(() => {
+    // Session history is external desktop-service state and must be synchronized on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshSessions();
   }, [refreshSessions]);
 
   useEffect(() => {
     if (!bridgeAvailable || !activeSessionId || activeStreamRef.current?.sessionId === activeSessionId) {
-      if (!activeSessionId) setMessages([]);
       return;
     }
     void loadMessages(activeSessionId);
@@ -443,7 +440,7 @@ export const LocalAssistantPage = ({
             <select
               aria-label="选择本机模型"
               onChange={(event) => setSelectedModelSourceId(event.target.value)}
-              value={selectedModelSourceId}
+              value={resolvedModelSourceId}
             >
               {availableModels.map((provider) => (
                 <option key={provider.id} value={provider.id}>{provider.provider} · {provider.model}</option>
@@ -541,14 +538,14 @@ export const LocalAssistantPage = ({
 
           <div className="kd-assistant-messages" aria-live="polite">
             {isLoadingMessages ? <div className="kd-assistant-loading"><Loader2 className="kd-spin" size={18} /> 正在读取对话…</div> : null}
-            {!isLoadingMessages && messages.length === 0 ? (
+        {!isLoadingMessages && visibleMessages.length === 0 ? (
               <div className="kd-assistant-welcome">
                 <MessageCircle size={24} />
                 <strong>从一句话开始</strong>
                 <span>例如：帮我把今天读到的内容整理成三个要点。</span>
               </div>
             ) : null}
-            {messages.map((message) => (
+        {visibleMessages.map((message) => (
               <article className={`kd-assistant-message kd-assistant-message--${message.role}`} key={message.id}>
                 <span className="kd-assistant-message-role">{message.role === 'user' ? '你' : '本机助手'}</span>
                 <p>{message.content || (message.pending ? '正在思考…' : '')}</p>

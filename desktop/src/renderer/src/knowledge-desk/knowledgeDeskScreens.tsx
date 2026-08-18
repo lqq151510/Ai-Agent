@@ -1446,10 +1446,6 @@ export const DetailPage = ({
   const itemTagDraft = item.tags.join(', ');
   const canAskWithBody = Boolean((item.cleanedContent || item.rawContent || '').trim());
 
-  useEffect(() => {
-    setVisibleParagraphCount(DETAIL_INITIAL_PARAGRAPH_COUNT);
-  }, [body, item.id]);
-
   const startEditing = () => {
     setEditError(null);
     setDraft({ title: item.title, summary: item.summary, tags: itemTagDraft });
