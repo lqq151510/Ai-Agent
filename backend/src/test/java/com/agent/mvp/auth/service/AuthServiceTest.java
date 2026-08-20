@@ -51,16 +51,18 @@ class AuthServiceTest {
 
     @Test
     void testLogoutSuccess() {
+        @SuppressWarnings("unchecked")
         Jws<Claims> accessJws = mock(Jws.class);
         Claims accessClaims = mock(Claims.class);
-        when(accessJws.getBody()).thenReturn(accessClaims);
+        when(accessJws.getPayload()).thenReturn(accessClaims);
         long futureTime = System.currentTimeMillis() + 10000;
         when(accessClaims.getExpiration()).thenReturn(new Date(futureTime));
         when(jwtService.parseToken("valid-access-token")).thenReturn(accessJws);
 
+        @SuppressWarnings("unchecked")
         Jws<Claims> refreshJws = mock(Jws.class);
         Claims refreshClaims = mock(Claims.class);
-        when(refreshJws.getBody()).thenReturn(refreshClaims);
+        when(refreshJws.getPayload()).thenReturn(refreshClaims);
         long futureTimeRefresh = System.currentTimeMillis() + 20000;
         when(refreshClaims.getExpiration()).thenReturn(new Date(futureTimeRefresh));
         when(jwtService.parseToken("valid-refresh-token")).thenReturn(refreshJws);
@@ -234,9 +236,10 @@ class AuthServiceTest {
         when(userService.getUserById(userId)).thenReturn(user);
         when(jwtService.extractTokenVersion(token)).thenReturn(5);
 
+        @SuppressWarnings("unchecked")
         Jws<Claims> refreshJws = mock(Jws.class);
         Claims refreshClaims = mock(Claims.class);
-        when(refreshJws.getBody()).thenReturn(refreshClaims);
+        when(refreshJws.getPayload()).thenReturn(refreshClaims);
         long futureTimeRefresh = System.currentTimeMillis() + 20000;
         when(refreshClaims.getExpiration()).thenReturn(new Date(futureTimeRefresh));
         when(jwtService.parseToken(token)).thenReturn(refreshJws);
@@ -268,9 +271,10 @@ class AuthServiceTest {
         when(userService.getUserById(userId)).thenReturn(user);
         when(jwtService.extractTokenVersion(token)).thenReturn(0);
 
+        @SuppressWarnings("unchecked")
         Jws<Claims> refreshJws = mock(Jws.class);
         Claims refreshClaims = mock(Claims.class);
-        when(refreshJws.getBody()).thenReturn(refreshClaims);
+        when(refreshJws.getPayload()).thenReturn(refreshClaims);
         long futureTimeRefresh = System.currentTimeMillis() + 20000;
         when(refreshClaims.getExpiration()).thenReturn(new Date(futureTimeRefresh));
         when(jwtService.parseToken(token)).thenReturn(refreshJws);

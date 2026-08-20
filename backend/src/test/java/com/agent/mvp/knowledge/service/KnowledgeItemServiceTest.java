@@ -535,7 +535,9 @@ class KnowledgeItemServiceTest {
 
         assertEquals("An identical file has already been imported", exception.getMessage());
         verifyNoInteractions(markItDownService);
-        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<QueryWrapper<KnowledgeItem>> wrapperCaptor =
+                ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectCount(wrapperCaptor.capture());
         String sqlSegment = wrapperCaptor.getValue().getCustomSqlSegment();
         assertTrue(sqlSegment.contains("user_id"));
@@ -641,9 +643,11 @@ class KnowledgeItemServiceTest {
                         "58100dc8fc06562ce3e578231dc948e083520ee49c4b4ee5a5a28bb4b4003feb"),
                 itemCaptor.getAllValues().stream().map(KnowledgeItem::getContentHash).toList());
 
-        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<QueryWrapper<KnowledgeItem>> wrapperCaptor =
+                ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository, Mockito.times(2)).selectCount(wrapperCaptor.capture());
-        List<QueryWrapper> wrappers = wrapperCaptor.getAllValues();
+        List<QueryWrapper<KnowledgeItem>> wrappers = wrapperCaptor.getAllValues();
         assertTrue(wrappers.get(0).getCustomSqlSegment().contains("user_id"));
         assertTrue(wrappers.get(1).getCustomSqlSegment().contains("user_id"));
         assertTrue(wrappers.get(0).getParamNameValuePairs().containsValue(firstUserId));
@@ -681,7 +685,9 @@ class KnowledgeItemServiceTest {
                         new ImportPreflightRequest(List.of(existing.toUpperCase(), missing)));
 
         assertEquals(List.of(existing), response.existingContentHashes());
-        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<QueryWrapper<KnowledgeItem>> wrapperCaptor =
+                ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectList(wrapperCaptor.capture());
         String sqlSegment = wrapperCaptor.getValue().getCustomSqlSegment();
         assertEquals("content_hash", wrapperCaptor.getValue().getSqlSelect());
@@ -933,7 +939,9 @@ class KnowledgeItemServiceTest {
         assertEquals("Processing item cannot be archived", exception.getMessage());
         assertEquals("ready", item.getStatus());
         assertNull(item.getArchivedAt());
-        ArgumentCaptor<UpdateWrapper> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<UpdateWrapper<KnowledgeItem>> wrapperCaptor =
+                ArgumentCaptor.forClass(UpdateWrapper.class);
         verify(itemRepository).update(Mockito.isNull(), wrapperCaptor.capture());
         assertTrue(wrapperCaptor.getValue().getCustomSqlSegment().contains("status"));
         assertTrue(wrapperCaptor.getValue().getParamNameValuePairs().containsValue("processing"));
@@ -1082,7 +1090,9 @@ class KnowledgeItemServiceTest {
 
         var response = service.search(userId, "rag", null, null, null, null, null, 1, 20);
 
-        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<QueryWrapper<KnowledgeItem>> wrapperCaptor =
+                ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectPage(any(), wrapperCaptor.capture());
         String sqlSelect = wrapperCaptor.getValue().getSqlSelect();
 
@@ -1145,7 +1155,9 @@ class KnowledgeItemServiceTest {
         service.search(
                 userId, "retrieval augmented generation", null, null, null, null, null, 1, 20);
 
-        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<QueryWrapper<KnowledgeItem>> wrapperCaptor =
+                ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectPage(any(), wrapperCaptor.capture());
         String sqlSegment = wrapperCaptor.getValue().getCustomSqlSegment();
 
@@ -1304,8 +1316,11 @@ class KnowledgeItemServiceTest {
 
         var response = service.search(userId, null, "READY", null, null, null, null, 0, 500);
 
-        ArgumentCaptor<Page> pageCaptor = ArgumentCaptor.forClass(Page.class);
-        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Page<KnowledgeItem>> pageCaptor = ArgumentCaptor.forClass(Page.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<QueryWrapper<KnowledgeItem>> wrapperCaptor =
+                ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectPage(pageCaptor.capture(), wrapperCaptor.capture());
         assertEquals(1L, pageCaptor.getValue().getCurrent());
         assertEquals(100L, pageCaptor.getValue().getSize());
@@ -1357,8 +1372,11 @@ class KnowledgeItemServiceTest {
                         0,
                         500);
 
-        ArgumentCaptor<Page> pageCaptor = ArgumentCaptor.forClass(Page.class);
-        ArgumentCaptor<QueryWrapper> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Page<KnowledgeItem>> pageCaptor = ArgumentCaptor.forClass(Page.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<QueryWrapper<KnowledgeItem>> wrapperCaptor =
+                ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectPage(pageCaptor.capture(), wrapperCaptor.capture());
 
         QueryWrapper wrapper = wrapperCaptor.getValue();
@@ -1426,7 +1444,8 @@ class KnowledgeItemServiceTest {
 
         var response = service.dashboardSummary(userId);
 
-        ArgumentCaptor<QueryWrapper> itemWrapperCaptor =
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<QueryWrapper<KnowledgeItem>> itemWrapperCaptor =
                 ArgumentCaptor.forClass(QueryWrapper.class);
         verify(itemRepository).selectList(itemWrapperCaptor.capture());
         String sqlSelect = itemWrapperCaptor.getValue().getSqlSelect();

@@ -154,6 +154,7 @@ class AgentFlowIntegrationTest {
         assertNotNull(chat.getBody());
         assertEquals("mock-openai-reply", String.valueOf(chat.getBody().get("reply")));
 
+        @SuppressWarnings("unchecked")
         Map<String, Object> execution = (Map<String, Object>) chat.getBody().get("execution");
         assertNotNull(execution);
         assertEquals(10, ((Number) execution.get("totalTokenUsage")).intValue());

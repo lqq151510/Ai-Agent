@@ -50,19 +50,19 @@ public class JwtService {
     }
 
     public UUID extractUserId(String token) {
-        return UUID.fromString(parseToken(token).getBody().get(CLAIM_USER_ID, String.class));
+        return UUID.fromString(parseToken(token).getPayload().get(CLAIM_USER_ID, String.class));
     }
 
     public String extractEmail(String token) {
-        return parseToken(token).getBody().getSubject();
+        return parseToken(token).getPayload().getSubject();
     }
 
     public boolean isAccessToken(String token) {
-        return "access".equals(parseToken(token).getBody().get(CLAIM_TOKEN_TYPE, String.class));
+        return "access".equals(parseToken(token).getPayload().get(CLAIM_TOKEN_TYPE, String.class));
     }
 
     public AuthenticatedUser parseAccessToken(String token) {
-        Claims claims = parseToken(token).getBody();
+        Claims claims = parseToken(token).getPayload();
         if (!"access".equals(claims.get(CLAIM_TOKEN_TYPE, String.class))) {
             throw new UnauthorizedException("Access token required");
         }
@@ -71,11 +71,11 @@ public class JwtService {
     }
 
     public boolean isRefreshToken(String token) {
-        return "refresh".equals(parseToken(token).getBody().get(CLAIM_TOKEN_TYPE, String.class));
+        return "refresh".equals(parseToken(token).getPayload().get(CLAIM_TOKEN_TYPE, String.class));
     }
 
     public int extractTokenVersion(String token) {
-        Integer value = parseToken(token).getBody().get(CLAIM_TOKEN_VERSION, Integer.class);
+        Integer value = parseToken(token).getPayload().get(CLAIM_TOKEN_VERSION, Integer.class);
         return value == null ? 0 : value;
     }
 

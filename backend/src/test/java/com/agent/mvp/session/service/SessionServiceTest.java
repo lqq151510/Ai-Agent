@@ -21,7 +21,6 @@ import com.agent.mvp.session.entity.ConversationSession;
 import com.agent.mvp.session.entity.Message;
 import com.agent.mvp.session.repo.ConversationSessionRepository;
 import com.agent.mvp.session.repo.MessageRepository;
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.time.Instant;
 import java.util.List;
@@ -144,7 +143,7 @@ class SessionServiceTest {
         session.setUserId(userId);
         session.setTitle("Session Title");
 
-        when(sessionRepository.selectPage(any(Page.class), any(Wrapper.class)))
+        when(sessionRepository.selectPage(any(), any()))
                 .thenAnswer(
                         invocation -> {
                             Page<ConversationSession> page = invocation.getArgument(0);
@@ -168,7 +167,7 @@ class SessionServiceTest {
         session.setId(sessionId);
         session.setUserId(userId);
 
-        when(sessionRepository.selectOne(any(Wrapper.class))).thenReturn(session);
+        when(sessionRepository.selectOne(any())).thenReturn(session);
 
         SessionResponse response = sessionService.updateContextTokenLimit(userId, sessionId, 2000);
 
@@ -185,7 +184,7 @@ class SessionServiceTest {
         session.setId(sessionId);
         session.setUserId(userId);
 
-        when(sessionRepository.selectOne(any(Wrapper.class))).thenReturn(session);
+        when(sessionRepository.selectOne(any())).thenReturn(session);
 
         SessionResponse response =
                 sessionService.updateWorkflow(userId, sessionId, "code", "write tests", "running");
@@ -200,7 +199,7 @@ class SessionServiceTest {
     void testFindOwnedSessionThrowsForbidden() {
         UUID userId = UUID.randomUUID();
         UUID sessionId = UUID.randomUUID();
-        when(sessionRepository.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(sessionRepository.selectOne(any())).thenReturn(null);
 
         assertThatThrownBy(() -> sessionService.findOwnedSession(userId, sessionId))
                 .isInstanceOf(ForbiddenException.class)
@@ -209,7 +208,7 @@ class SessionServiceTest {
 
     @Test
     void testCountActiveSessions() {
-        when(sessionRepository.selectCount(any(Wrapper.class))).thenReturn(5L);
+        when(sessionRepository.selectCount(any())).thenReturn(5L);
 
         long count = sessionService.countActiveSessions();
 
@@ -228,7 +227,7 @@ class SessionServiceTest {
                 new MessageResponse(
                         UUID.randomUUID(), "user", "hello", null, null, null, Instant.now());
 
-        when(sessionRepository.selectOne(any(Wrapper.class))).thenReturn(session);
+        when(sessionRepository.selectOne(any())).thenReturn(session);
         when(cacheService.getCachedMessages(sessionId))
                 .thenReturn(Optional.of(List.of(msgResponse)));
 
@@ -253,9 +252,9 @@ class SessionServiceTest {
         message.setRole("assistant");
         message.setContent("hi");
 
-        when(sessionRepository.selectOne(any(Wrapper.class))).thenReturn(session);
+        when(sessionRepository.selectOne(any())).thenReturn(session);
         when(cacheService.getCachedMessages(sessionId)).thenReturn(Optional.empty());
-        when(messageRepository.selectList(any(Wrapper.class))).thenReturn(List.of(message));
+        when(messageRepository.selectList(any())).thenReturn(List.of(message));
 
         List<MessageResponse> result = sessionService.listMessages(userId, sessionId);
 
@@ -279,8 +278,8 @@ class SessionServiceTest {
         message.setContent("test content");
         message.setCreatedAt(Instant.now());
 
-        when(sessionRepository.selectOne(any(Wrapper.class))).thenReturn(session);
-        when(messageRepository.selectPage(any(Page.class), any(Wrapper.class)))
+        when(sessionRepository.selectOne(any())).thenReturn(session);
+        when(messageRepository.selectPage(any(), any()))
                 .thenAnswer(
                         invocation -> {
                             Page<Message> page = invocation.getArgument(0);
@@ -316,8 +315,8 @@ class SessionServiceTest {
         message.setToolTrace("{\"tool\": \"run\"}");
         message.setCreatedAt(Instant.now());
 
-        when(sessionRepository.selectOne(any(Wrapper.class))).thenReturn(session);
-        when(messageRepository.selectList(any(Wrapper.class))).thenReturn(List.of(message));
+        when(sessionRepository.selectOne(any())).thenReturn(session);
+        when(messageRepository.selectList(any())).thenReturn(List.of(message));
 
         String markdown = sessionService.exportSessionMarkdown(userId, sessionId);
 
@@ -336,11 +335,11 @@ class SessionServiceTest {
         session.setId(sessionId);
         session.setUserId(userId);
 
-        when(sessionRepository.selectOne(any(Wrapper.class))).thenReturn(session);
+        when(sessionRepository.selectOne(any())).thenReturn(session);
 
         sessionService.deleteSession(userId, sessionId);
 
-        verify(messageRepository).delete(any(Wrapper.class));
+        verify(messageRepository).delete(any());
         verify(sessionRepository).deleteById(sessionId);
         verify(cacheService).evictMessages(sessionId);
     }

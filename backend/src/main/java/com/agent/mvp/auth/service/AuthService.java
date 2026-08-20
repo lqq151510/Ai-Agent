@@ -47,7 +47,7 @@ public class AuthService {
     private void blacklistIfValid(String token) {
         if (token != null && !token.isBlank()) {
             try {
-                Claims claims = jwtService.parseToken(token).getBody();
+                Claims claims = jwtService.parseToken(token).getPayload();
                 Date expiration = claims.getExpiration();
                 long diffSeconds = (expiration.getTime() - System.currentTimeMillis()) / 1000;
                 if (diffSeconds > 0) {

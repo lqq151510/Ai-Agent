@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,14 +50,15 @@ public class CodeRAGService {
                     .forEach(
                             method -> {
                                 String methodName = method.getNameAsString();
-                                String className = "Unknown";
-                                if (method.findAncestor(ClassOrInterfaceDeclaration.class)
-                                        .isPresent()) {
-                                    className =
-                                            method.findAncestor(ClassOrInterfaceDeclaration.class)
-                                                    .get()
-                                                    .getNameAsString();
-                                }
+                                // JavaParser 的 findAncestor 仅泛型 varargs 重载未废弃，
+                                // 泛型数组创建警告只能在调用处压制
+                                @SuppressWarnings("unchecked")
+                                Optional<ClassOrInterfaceDeclaration> ancestor =
+                                        method.findAncestor(ClassOrInterfaceDeclaration.class);
+                                String className =
+                                        ancestor
+                                                .map(ClassOrInterfaceDeclaration::getNameAsString)
+                                                .orElse("Unknown");
                                 String methodCode = method.toString();
 
                                 Map<String, String> metaMap = new HashMap<>();

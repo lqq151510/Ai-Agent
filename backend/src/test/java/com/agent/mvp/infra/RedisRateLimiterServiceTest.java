@@ -8,6 +8,7 @@ import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 
 class RedisRateLimiterServiceTest {
 
@@ -17,9 +18,7 @@ class RedisRateLimiterServiceTest {
 
         Mockito.when(
                         template.execute(
-                                any(org.springframework.data.redis.core.script.RedisScript.class),
-                                any(),
-                                any()))
+                                Mockito.<RedisScript<Long>>any(), any(), any()))
                 .thenReturn(1L, 2L, 3L);
 
         RedisRateLimiterService service = new RedisRateLimiterService(template);
@@ -29,9 +28,6 @@ class RedisRateLimiterServiceTest {
         assertFalse(service.allow("ratelimit:key", 2, Duration.ofMinutes(1)));
 
         Mockito.verify(template, Mockito.times(3))
-                .execute(
-                        any(org.springframework.data.redis.core.script.RedisScript.class),
-                        any(),
-                        any());
+                .execute(Mockito.<RedisScript<Long>>any(), any(), any());
     }
 }

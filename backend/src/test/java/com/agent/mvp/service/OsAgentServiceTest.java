@@ -6,7 +6,7 @@ import com.agent.mvp.config.StartupValidationRunner;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(
         properties = {
@@ -23,7 +23,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 @org.junit.jupiter.api.Disabled("Requires local mock server on 1234")
 public class OsAgentServiceTest {
 
-    @MockBean private StartupValidationRunner startupValidationRunner;
+    @MockitoBean private StartupValidationRunner startupValidationRunner;
 
     @Autowired private OsAgentService osAgentService;
 
