@@ -150,10 +150,13 @@ log_step "[1/6] 检查构建依赖"
 check_dependency "node" "请安装 Node.js 22.12+（小于 23）: https://nodejs.org/"
 check_dependency "npm" "请安装 npm (随 Node.js 一起提供)"
 
+ALLOW_UNSUPPORTED_NODE="${DESKTOP_ALLOW_UNSUPPORTED_NODE:-${RELEASE_CHECK_ALLOW_UNSUPPORTED_NODE:-false}}"
 read -r NODE_MAJOR NODE_MINOR < <(node -p "process.versions.node.split('.').slice(0, 2).join(' ')")
-if [[ "$NODE_MAJOR" -ne 22 || "$NODE_MINOR" -lt 12 ]]; then
-    log_error "Node.js 版本不受支持: $(node -v)，需要 >=22.12.0 <23。"
+if [[ "$NODE_MAJOR" -lt 22 || ("$NODE_MAJOR" -eq 22 && "$NODE_MINOR" -lt 12) ]]; then
+    log_error "Node.js 版本过低: $(node -v)，需要 >=22.12.0。"
     exit 1
+elif [[ "$NODE_MAJOR" -gt 22 && "$ALLOW_UNSUPPORTED_NODE" != "true" ]]; then
+    log_warn "当前 Node.js 版本 ($(node -v)) 高于官方推荐范围 (>=22.12.0 <23)，继续构建开发诊断产物。"
 fi
 log_ok "Node.js $(node -v)"
 
