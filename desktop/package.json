@@ -12,6 +12,7 @@
     "dev:attached": "DESKTOP_BACKEND_URL=${DESKTOP_BACKEND_URL:-http://127.0.0.1:18080} npm run dev",
     "build:main": "tsc -p tsconfig.main.json",
     "test:main": "npm run build:main && node --test test/*.test.cjs",
+    "test:packaged": "npm run build && node scripts/verify-packaged-app.cjs",
     "build:renderer": "cd src/renderer && npm run build && cp -R dist/. ../../dist/renderer/",
     "build": "npm run build:main && npm run build:renderer",
     "pack": "npm run build && electron-builder --dir",
