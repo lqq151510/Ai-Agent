@@ -6,6 +6,7 @@
 2. [`RESUME_PROJECT_GUIDE.md`](../../RESUME_PROJECT_GUIDE.md)：简历描述、30/90 秒介绍、技术故事、高频问答与避坑表达。
 3. [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md)：5 分钟与 10 分钟现场演示脚本、失败兜底和演示前检查。
 4. [`EVIDENCE.md`](EVIDENCE.md)：测试、覆盖率、版本、发布资产和复现命令。
+5. [`NEXT_BETA_CANDIDATE.md`](NEXT_BETA_CANDIDATE.md)：当前主线候选的已验证范围、安装包阻塞、向量索引恢复边界，以及待采集的真实基准协议。
 
 推荐使用方式：
 
@@ -21,5 +22,5 @@
 - 主运行时：Electron + React + Spring Boot + H2 + bundled Java 21。
 - AI 前置：用户自备本机 OpenAI-compatible 模型服务。
 - 发布状态：`v0.1.0-beta.2` GitHub prerelease，macOS arm64，ad-hoc signed。
-- 证据边界：Release 只证明 tag 与安装包；测试、覆盖率必须连同执行日期、命令和源代码边界引用，不能把当前未提交开发基线写成 Beta.2 结果。
+- 证据边界：Release 只证明 tag 与安装包；测试、覆盖率必须连同执行日期、命令和源代码边界引用，不能把已推送但未打 tag 的主线候选写成 Beta.2 或下一 Beta 的结果。
 - 产品边界：个人作品集 Beta，不宣称已完成企业生产验证。

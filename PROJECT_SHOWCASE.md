@@ -39,7 +39,7 @@ flowchart TB
     subgraph LocalRuntime[应用内置本地运行时]
         API[Spring Boot API<br/>认证 / 知识条目 / 标签 / 搜索<br/>复习调度 / 模型源 / SSE]
         DB[(H2 文件数据库)]
-        VEC[(InMemory Embedding Store)]
+        VEC[(Local Persistent Embedding Store<br/>JSON snapshot + in-memory search)]
         JRE[jlink Java 21 Runtime]
     end
 
@@ -174,7 +174,7 @@ sequenceDiagram
     App->>Manager: 申请可用 loopback 端口
     Manager->>Java: 启动内置 backend.jar
     Java->>API: 激活 desktop profile
-    API->>API: 初始化 H2 / Caffeine / InMemory Store
+    API->>API: 初始化 H2 / Caffeine / 本地向量索引
     Manager->>API: 轮询 readiness
     API-->>Manager: ready
     Manager-->>App: 加载主界面
@@ -185,8 +185,9 @@ sequenceDiagram
 ### Local-First，而不是默认云端 SaaS
 
 - 个人资料优先保存在本机，降低部署和隐私门槛。
-- 桌面 Profile 使用 H2、Caffeine 和内存向量库，避免把 PostgreSQL、Redis、Milvus 变成启动前置条件。
-- 代价是当前单机模式不适合多设备实时同步，也不承诺海量向量数据规模。
+- 桌面 Profile 使用 H2、Caffeine 和本地持久化向量索引；PgVector 关闭或不可用时，主知识索引写入 `${app.data-dir}/vector-store/engineering_memory.json`（可由 `DESKTOP_VECTOR_STORE_DIR` 覆盖），避免把 PostgreSQL、Redis、Milvus 变成启动前置条件。
+- 索引沿用内存检索语义，并在每次变更后以临时文件替换 JSON 快照；快照损坏时保留为 `.corrupt-<timestamp>` 并以空索引恢复，落盘失败时当前进程继续提供内存检索。语义缓存仍是瞬态缓存。
+- 代价是当前单机模式不适合多设备实时同步，也尚未给出海量向量、跨进程并发或检索质量/延迟的性能承诺。
 
 ### 单体后端作为桌面主路径，可选微服务作为扩展
 
@@ -215,6 +216,7 @@ sequenceDiagram
 - 全局搜索、详情页、来源信息与摘要
 - 每日复习队列与反馈调度
 - 本机模型源配置、连接测试和 Knowledge Assistant
+- 主知识向量索引的本地持久化、重启恢复与损坏快照隔离
 - 非敏感知识库备份与合并恢复
 - 独立 macOS arm64 打包与在线 Beta 发布
 
@@ -225,6 +227,7 @@ sequenceDiagram
 - Beta.2 为 ad-hoc 签名，不等于 Apple Developer ID 签名或公证。
 - 桌面主路径不依赖 Docker；云端 Compose/Kubernetes 是可选部署形态。
 - 覆盖率只描述后端 JaCoCo 范围；当前开发基线与已发布 Beta 的证据分开记录，不使用“高覆盖率”这类模糊宣传语。
+- 当前 `main` 的包内资源布局与 Renderer 降级契约已有自动测试；候选提交仍需在修复本机 Electron 运行时后重新生成安装包，并完成一次真实 GUI 启动 smoke，才能称为新 Beta 的安装包证据。
 
 ## 8. 可验证交付证据
 
@@ -237,13 +240,13 @@ sequenceDiagram
 
 该 tag 和资产只证明发布来源、平台与签名边界；没有对应的不可变测试归档时，不把任何当前测试或覆盖率数字归因给它。
 
-### 当前后端开发基线（2026-08-27，非发布证据）
+### 当前主线候选基线（2026-08-27，非发布证据）
 
-- 源代码边界：`main` 基于 `2dcce90`，验证时工作区含未提交改动。
+- 源代码边界：`main` 提交 [`344b740`](https://github.com/lqq151510/Ai-Agent/commit/344b7402af76f20d1898cd4c68cd8ba3e14045fc)，已推送；该提交没有 `v0.1.0-beta.3` tag 或 GitHub Release。
 - 命令：`mvn --settings .mvn/settings.xml -pl backend -am clean verify`。
-- `backend`：341 tests run，0 failures，0 errors，14 skipped；前置 `bug-sentinel-starter` 另有 4 项测试全部通过。
-- JaCoCo：Lines 5392/7152（75.4%），Branches 1612/2607（61.8%）；Maven `verify` 实际执行全局行 ≥65%、分支 ≥60% 双门禁。
-- 该结果可展示当前质量建设，但在提交、推送并对目标提交复跑前，不能写成 Beta.2 或已发布版本的质量结论。
+- `backend`：344 tests run，0 failures，0 errors，9 skipped；前置 `bug-sentinel-starter` 另有 4 项测试全部通过。
+- JaCoCo：Lines 5543/7256（76.39%），Branches 1649/2623（62.87%）；Maven `verify` 实际执行全局行 ≥65%、分支 ≥60% 双门禁。
+- 该结果可展示已推送的主线质量基线，但不是 Beta.2 的发布结论，也不能在完成候选安装包、GUI smoke、tag 和 Release 前称为新 Beta 发布结果。
 
 更细的证据和复现命令见 [`docs/portfolio/EVIDENCE.md`](docs/portfolio/EVIDENCE.md)。
 
