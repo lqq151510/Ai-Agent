@@ -22,7 +22,7 @@
 
     <!--
         Legacy profile：包含未进入 Knowledge Desk 默认产品路径的 agent-* 微服务与公共模块。
-        这些模块使用 Java 25 编译，且依赖未部署的 Kafka/Milvus 基础设施，默认不参与构建。
+        这些模块使用 Java 21 编译，且依赖未部署的 Kafka/Milvus 基础设施，默认不参与构建。
         如需构建：mvn -Plegacy verify
     -->
     <profiles>
