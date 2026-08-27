@@ -20,6 +20,7 @@ public class AppProperties {
     private final PythonService pythonService = new PythonService();
     private final VertexAi vertexAi = new VertexAi();
     private final PgVector pgVector = new PgVector();
+    private final LocalVectorStore localVectorStore = new LocalVectorStore();
 
     public ModelProviderType getDefaultProvider() {
         return defaultProvider;
@@ -79,6 +80,10 @@ public class AppProperties {
 
     public PgVector getPgVector() {
         return pgVector;
+    }
+
+    public LocalVectorStore getLocalVectorStore() {
+        return localVectorStore;
     }
 
     public String getDefaultModel(ModelProviderType provider) {
@@ -468,6 +473,28 @@ public class AppProperties {
 
         public void setPassword(String password) {
             this.password = password;
+        }
+    }
+
+    /** Desktop fallback vector index configuration. */
+    public static class LocalVectorStore {
+        private boolean enabled;
+        private String directory = "";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getDirectory() {
+            return directory;
+        }
+
+        public void setDirectory(String directory) {
+            this.directory = directory;
         }
     }
 }

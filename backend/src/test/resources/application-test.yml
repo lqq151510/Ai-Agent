@@ -74,6 +74,9 @@ app:
   openai:
     base-url: http://localhost:0/v1
     api-key: sk-test-placeholder
+  local-vector-store:
+    # Desktop profile is active in the E2E tests; keep its durable index isolated from real user data.
+    enabled: false
   desktop:
     cache:
       rate-limiter:

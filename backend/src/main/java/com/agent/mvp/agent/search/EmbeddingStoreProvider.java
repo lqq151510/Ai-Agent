@@ -10,6 +10,8 @@ import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import jakarta.annotation.PostConstruct;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
@@ -71,7 +73,7 @@ public class EmbeddingStoreProvider {
 
     @PostConstruct
     public void init() {
-        this.embeddingStore = createEmbeddingStore("engineering_memory", 384);
+        this.embeddingStore = createEmbeddingStore("engineering_memory", 384, true);
         this.pgVectorAvailable = embeddingStore instanceof PgVectorEmbeddingStore;
         this.ftsAvailable = initializeFtsIndex();
     }
@@ -83,12 +85,17 @@ public class EmbeddingStoreProvider {
      * InMemoryEmbeddingStore}。
      */
     public EmbeddingStore<TextSegment> createEmbeddingStore(String tableName, int dimension) {
+        return createEmbeddingStore(tableName, dimension, false);
+    }
+
+    EmbeddingStore<TextSegment> createEmbeddingStore(
+            String tableName, int dimension, boolean persistLocalFallback) {
         AppProperties.PgVector pgVector = appProperties.getPgVector();
         if (!pgVector.isEnabled()) {
             log.info(
                     "PgVector is disabled; using InMemoryEmbeddingStore for table '{}'.",
                     tableName);
-            return new InMemoryEmbeddingStore<>();
+            return createLocalFallback(tableName, persistLocalFallback);
         }
 
         try {
@@ -113,6 +120,41 @@ public class EmbeddingStoreProvider {
             log.warn(
                     "Failed to initialize PgVectorEmbeddingStore for table '{}'. Falling back to"
                             + " InMemoryEmbeddingStore. Error: {}",
+                    tableName,
+                    ex.getMessage());
+            return createLocalFallback(tableName, persistLocalFallback);
+        }
+    }
+
+    private EmbeddingStore<TextSegment> createLocalFallback(
+            String tableName, boolean persistLocalFallback) {
+        AppProperties.LocalVectorStore localVectorStore = appProperties.getLocalVectorStore();
+        if (!persistLocalFallback || !localVectorStore.isEnabled()) {
+            return new InMemoryEmbeddingStore<>();
+        }
+        if (localVectorStore.getDirectory() == null || localVectorStore.getDirectory().isBlank()) {
+            log.warn(
+                    "Desktop vector persistence is enabled but no directory is configured; using an in-memory index for '{}'.",
+                    tableName);
+            return new InMemoryEmbeddingStore<>();
+        }
+        if (!tableName.matches("[a-z0-9_]+")) {
+            log.warn(
+                    "Desktop vector persistence rejects unsafe index name '{}'; using an in-memory index.",
+                    tableName);
+            return new InMemoryEmbeddingStore<>();
+        }
+
+        try {
+            Path snapshot = Path.of(localVectorStore.getDirectory())
+                    .toAbsolutePath()
+                    .normalize()
+                    .resolve(tableName + ".json");
+            log.info("Using persistent desktop vector index at {}", snapshot);
+            return new PersistentInMemoryEmbeddingStore(snapshot);
+        } catch (InvalidPathException ex) {
+            log.warn(
+                    "Desktop vector persistence directory is invalid; using an in-memory index for '{}'. Error: {}",
                     tableName,
                     ex.getMessage());
             return new InMemoryEmbeddingStore<>();

@@ -85,6 +85,9 @@ app:
     idempotent-retries: ${MODEL_IDEMPOTENT_RETRIES:1}
   pg-vector:
     enabled: false
+  local-vector-store:
+    enabled: true
+    directory: ${DESKTOP_VECTOR_STORE_DIR:${app.data-dir}/vector-store}
   rate-limit:
     login-per-minute: ${LOGIN_RATE_LIMIT_PER_MIN:200}
     register-per-minute: ${REGISTER_RATE_LIMIT_PER_MIN:100}
