@@ -41,12 +41,23 @@ import com.agent.mvp.settings.entity.UserProfile;
 import com.agent.mvp.settings.repo.UserProfileRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 class SettingsServiceTest {
+
+    private static final Instant IMPORT_TIME = Instant.parse("2026-07-29T08:00:00Z");
+    private static final UUID IMPORT_ITEM_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000101");
+    private static final UUID SECOND_IMPORT_ITEM_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000102");
+    private static final UUID IMPORT_TAG_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000201");
+    private static final UUID SECOND_IMPORT_TAG_ID =
+            UUID.fromString("00000000-0000-0000-0000-000000000202");
 
     @Test
     void updateProfileShouldRejectForeignModelSource() {
@@ -816,6 +827,383 @@ class SettingsServiceTest {
                                         "markdown")));
     }
 
+    @Test
+    void importBackupShouldRejectMalformedEnvelopeAndDuplicateIdentities() {
+        SettingsBackupTag validTag = validImportTag(IMPORT_TAG_ID, "rag");
+        SettingsBackupKnowledgeItem validItem = validImportItem(IMPORT_ITEM_ID);
+        List<InvalidBackupCase> cases =
+                List.of(
+                        new InvalidBackupCase("null payload", null),
+                        new InvalidBackupCase(
+                                "unsupported schema",
+                                importBackup(
+                                        2,
+                                        IMPORT_TIME,
+                                        validImportPreferences(),
+                                        List.of(validTag),
+                                        List.of(validItem),
+                                        false,
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "missing export time",
+                                importBackup(
+                                        1,
+                                        null,
+                                        validImportPreferences(),
+                                        List.of(validTag),
+                                        List.of(validItem),
+                                        false,
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "model sources included",
+                                importBackup(
+                                        1,
+                                        IMPORT_TIME,
+                                        validImportPreferences(),
+                                        List.of(validTag),
+                                        List.of(validItem),
+                                        true,
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "missing preferences",
+                                importBackup(
+                                        1,
+                                        IMPORT_TIME,
+                                        null,
+                                        List.of(validTag),
+                                        List.of(validItem),
+                                        false,
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "missing tags",
+                                importBackup(
+                                        1,
+                                        IMPORT_TIME,
+                                        validImportPreferences(),
+                                        null,
+                                        List.of(validItem),
+                                        false,
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "missing items",
+                                importBackup(
+                                        1,
+                                        IMPORT_TIME,
+                                        validImportPreferences(),
+                                        List.of(validTag),
+                                        null,
+                                        false,
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "duplicate tag id",
+                                importBackup(
+                                        List.of(validTag, validImportTag(IMPORT_TAG_ID, "java")),
+                                        List.of(validItem),
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "duplicate normalized tag name",
+                                importBackup(
+                                        List.of(
+                                                validTag,
+                                                validImportTag(SECOND_IMPORT_TAG_ID, " RAG ")),
+                                        List.of(validItem),
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "duplicate item id",
+                                importBackup(
+                                        List.of(validTag),
+                                        List.of(validItem, validImportItem(IMPORT_ITEM_ID)),
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "null tag",
+                                importBackup(
+                                        Collections.singletonList(null),
+                                        List.of(validItem),
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "missing tag id",
+                                importBackup(
+                                        List.of(validImportTag(null, "rag")),
+                                        List.of(validItem),
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "missing tag creation time",
+                                importBackup(
+                                        List.of(
+                                                new SettingsBackupTag(
+                                                        IMPORT_TAG_ID, "rag", "#7a8a84", null)),
+                                        List.of(validItem),
+                                        List.of())));
+
+        cases.forEach(this::assertImportRejectedBeforeWriting);
+    }
+
+    @Test
+    void importBackupShouldRejectInvalidItemsAndSourceAssetMetadata() {
+        SettingsBackupTag validTag = validImportTag(IMPORT_TAG_ID, "rag");
+        List<InvalidBackupCase> cases =
+                List.of(
+                        new InvalidBackupCase(
+                                "null item",
+                                importBackup(
+                                        List.of(validTag),
+                                        Collections.singletonList(null),
+                                        List.of())),
+                        new InvalidBackupCase(
+                                "missing item id",
+                                importBackup(
+                                        List.of(validTag),
+                                        List.of(
+                                                importItem(
+                                                        null,
+                                                        "ready",
+                                                        2,
+                                                        IMPORT_TIME,
+                                                        IMPORT_TIME,
+                                                        null,
+                                                        null,
+                                                        List.of(IMPORT_TAG_ID))),
+                                        List.of())),
+                        invalidItemCase(
+                                "null word count",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        null,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        null,
+                                        null,
+                                        List.of(IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "negative word count",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        -1,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        null,
+                                        null,
+                                        List.of(IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "missing createdAt",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        2,
+                                        null,
+                                        IMPORT_TIME,
+                                        null,
+                                        null,
+                                        List.of(IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "missing updatedAt",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        2,
+                                        IMPORT_TIME,
+                                        null,
+                                        null,
+                                        null,
+                                        List.of(IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "updatedAt before createdAt",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        2,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME.minusSeconds(1),
+                                        null,
+                                        null,
+                                        List.of(IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "archived item missing archivedAt",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "archived",
+                                        2,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        null,
+                                        null,
+                                        List.of(IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "ready item with archivedAt",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        2,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        null,
+                                        List.of(IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "too many tags",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        2,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        null,
+                                        null,
+                                        Collections.nCopies(26, IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "null tag reference",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        2,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        null,
+                                        null,
+                                        Collections.singletonList(null))),
+                        invalidItemCase(
+                                "unknown tag reference",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        2,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        null,
+                                        null,
+                                        List.of(SECOND_IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "duplicate tag reference",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        2,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        null,
+                                        null,
+                                        List.of(IMPORT_TAG_ID, IMPORT_TAG_ID))),
+                        invalidItemCase(
+                                "source asset missing id",
+                                importItem(
+                                        IMPORT_ITEM_ID,
+                                        "ready",
+                                        2,
+                                        IMPORT_TIME,
+                                        IMPORT_TIME,
+                                        null,
+                                        new SettingsBackupSourceAsset(
+                                                null,
+                                                "notes.md",
+                                                "text/markdown",
+                                                42L,
+                                                "picker",
+                                                "available"),
+                                        List.of(IMPORT_TAG_ID))),
+                        invalidSourceAssetCase(
+                                "source asset missing size", validImportSourceAsset(null)),
+                        invalidSourceAssetCase(
+                                "source asset negative size", validImportSourceAsset(-1L)),
+                        invalidSourceAssetCase(
+                                "source asset over size limit",
+                                validImportSourceAsset(20L * 1024 * 1024 + 1)));
+
+        cases.forEach(this::assertImportRejectedBeforeWriting);
+    }
+
+    @Test
+    void importBackupShouldRejectInvalidOrDuplicateReviewStates() {
+        SettingsBackupTag validTag = validImportTag(IMPORT_TAG_ID, "rag");
+        SettingsBackupKnowledgeItem readyItem = validImportItem(IMPORT_ITEM_ID);
+        SettingsBackupReviewState validReview = validImportReviewState(IMPORT_ITEM_ID);
+        List<InvalidBackupCase> cases =
+                List.of(
+                        new InvalidBackupCase(
+                                "null review state",
+                                importBackup(
+                                        List.of(validTag),
+                                        List.of(readyItem),
+                                        Collections.singletonList(null))),
+                        new InvalidBackupCase(
+                                "review state missing item id",
+                                importBackup(
+                                        List.of(validTag),
+                                        List.of(readyItem),
+                                        List.of(validImportReviewState(null)))),
+                        new InvalidBackupCase(
+                                "review state references unknown item",
+                                importBackup(
+                                        List.of(validTag),
+                                        List.of(readyItem),
+                                        List.of(validImportReviewState(SECOND_IMPORT_ITEM_ID)))),
+                        new InvalidBackupCase(
+                                "review state references inbox item",
+                                importBackup(
+                                        List.of(validTag),
+                                        List.of(
+                                                importItem(
+                                                        IMPORT_ITEM_ID,
+                                                        "inbox",
+                                                        2,
+                                                        IMPORT_TIME,
+                                                        IMPORT_TIME,
+                                                        null,
+                                                        null,
+                                                        List.of(IMPORT_TAG_ID))),
+                                        List.of(validReview))),
+                        new InvalidBackupCase(
+                                "archived review continues to field validation",
+                                importBackup(
+                                        List.of(validTag),
+                                        List.of(
+                                                importItem(
+                                                        IMPORT_ITEM_ID,
+                                                        "archived",
+                                                        2,
+                                                        IMPORT_TIME,
+                                                        IMPORT_TIME,
+                                                        IMPORT_TIME,
+                                                        null,
+                                                        List.of(IMPORT_TAG_ID))),
+                                        List.of(
+                                                reviewState(
+                                                        IMPORT_ITEM_ID,
+                                                        null,
+                                                        1,
+                                                        2.5,
+                                                        1,
+                                                        IMPORT_TIME,
+                                                        IMPORT_TIME,
+                                                        IMPORT_TIME)))),
+                        new InvalidBackupCase(
+                                "duplicate review states",
+                                importBackup(
+                                        List.of(validTag),
+                                        List.of(readyItem, validImportItem(SECOND_IMPORT_ITEM_ID)),
+                                        List.of(validReview, validReview))));
+
+        cases.forEach(this::assertImportRejectedBeforeWriting);
+    }
+
+    @Test
+    void importBackupShouldAcceptEmptyPortableCollectionsWithoutBatchWrites() {
+        ImportFixture fixture = importFixture();
+        SettingsBackupPayload emptyBackup = importBackup(List.of(), List.of(), List.of());
+
+        var response = fixture.service().importBackup(fixture.userId(), emptyBackup);
+
+        assertEquals(0, response.importedItems());
+        assertEquals(0, response.createdTags());
+        verify(fixture.knowledgeTagRepository()).selectList(any());
+        verify(fixture.knowledgeTagRepository(), never()).insertBatch(any());
+        verify(fixture.knowledgeItemRepository(), never()).insertBatch(any());
+        verify(fixture.knowledgeItemTagRepository(), never()).insertBatch(any());
+        verifyNoInteractions(
+                fixture.knowledgeSourceAssetRepository(), fixture.reviewStateRepository());
+    }
+
     private SettingsBackupPayload validBackup(
             UUID itemId,
             List<SettingsBackupTag> tags,
@@ -847,4 +1235,206 @@ class SettingsServiceTest {
                                 tagIds)),
                 false);
     }
+
+    private void assertImportRejectedBeforeWriting(InvalidBackupCase invalidCase) {
+        ImportFixture fixture = importFixture();
+
+        assertThrows(
+                BadRequestException.class,
+                () -> fixture.service().importBackup(fixture.userId(), invalidCase.backup()),
+                invalidCase.name());
+
+        verifyNoInteractions(
+                fixture.userProfileRepository(),
+                fixture.modelSourceRepository(),
+                fixture.knowledgeItemRepository(),
+                fixture.knowledgeSourceAssetRepository(),
+                fixture.knowledgeTagRepository(),
+                fixture.knowledgeItemTagRepository(),
+                fixture.reviewStateRepository());
+    }
+
+    private InvalidBackupCase invalidItemCase(
+            String name, SettingsBackupKnowledgeItem invalidItem) {
+        return new InvalidBackupCase(
+                name,
+                importBackup(
+                        List.of(validImportTag(IMPORT_TAG_ID, "rag")),
+                        List.of(invalidItem),
+                        List.of()));
+    }
+
+    private InvalidBackupCase invalidSourceAssetCase(
+            String name, SettingsBackupSourceAsset sourceAsset) {
+        return invalidItemCase(
+                name,
+                importItem(
+                        IMPORT_ITEM_ID,
+                        "ready",
+                        2,
+                        IMPORT_TIME,
+                        IMPORT_TIME,
+                        null,
+                        sourceAsset,
+                        List.of(IMPORT_TAG_ID)));
+    }
+
+    private ImportFixture importFixture() {
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        UserProfileRepository userProfileRepository = mock(UserProfileRepository.class);
+        ModelSourceRepository modelSourceRepository = mock(ModelSourceRepository.class);
+        KnowledgeItemRepository knowledgeItemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeSourceAssetRepository knowledgeSourceAssetRepository =
+                mock(KnowledgeSourceAssetRepository.class);
+        KnowledgeTagRepository knowledgeTagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository knowledgeItemTagRepository =
+                mock(KnowledgeItemTagRepository.class);
+        KnowledgeReviewStateRepository reviewStateRepository =
+                mock(KnowledgeReviewStateRepository.class);
+        SettingsService service =
+                new SettingsService(
+                        userProfileService,
+                        userProfileRepository,
+                        modelSourceRepository,
+                        knowledgeItemRepository,
+                        knowledgeSourceAssetRepository,
+                        knowledgeTagRepository,
+                        knowledgeItemTagRepository,
+                        reviewStateRepository);
+        UUID userId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        when(userProfileService.requireUser(userId))
+                .thenReturn(User.builder().id(userId).email("user@example.com").build());
+        return new ImportFixture(
+                service,
+                userId,
+                userProfileRepository,
+                modelSourceRepository,
+                knowledgeItemRepository,
+                knowledgeSourceAssetRepository,
+                knowledgeTagRepository,
+                knowledgeItemTagRepository,
+                reviewStateRepository);
+    }
+
+    private SettingsBackupPayload importBackup(
+            List<SettingsBackupTag> tags,
+            List<SettingsBackupKnowledgeItem> items,
+            List<SettingsBackupReviewState> reviewStates) {
+        return importBackup(
+                1, IMPORT_TIME, validImportPreferences(), tags, items, false, reviewStates);
+    }
+
+    private SettingsBackupPayload importBackup(
+            Integer schemaVersion,
+            Instant exportedAt,
+            SettingsBackupPreferences preferences,
+            List<SettingsBackupTag> tags,
+            List<SettingsBackupKnowledgeItem> items,
+            Boolean modelSourcesIncluded,
+            List<SettingsBackupReviewState> reviewStates) {
+        return new SettingsBackupPayload(
+                schemaVersion,
+                exportedAt,
+                preferences,
+                tags,
+                items,
+                modelSourcesIncluded,
+                reviewStates);
+    }
+
+    private SettingsBackupPreferences validImportPreferences() {
+        return new SettingsBackupPreferences("泽宝", null, "manual", "local_first");
+    }
+
+    private SettingsBackupTag validImportTag(UUID id, String name) {
+        return new SettingsBackupTag(id, name, "#7a8a84", IMPORT_TIME);
+    }
+
+    private SettingsBackupKnowledgeItem validImportItem(UUID id) {
+        return importItem(
+                id, "ready", 2, IMPORT_TIME, IMPORT_TIME, null, null, List.of(IMPORT_TAG_ID));
+    }
+
+    private SettingsBackupKnowledgeItem importItem(
+            UUID id,
+            String status,
+            Integer wordCount,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant archivedAt,
+            SettingsBackupSourceAsset sourceAsset,
+            List<UUID> tagIds) {
+        return new SettingsBackupKnowledgeItem(
+                id,
+                "markdown",
+                "Imported note",
+                null,
+                "Imported content",
+                "Imported content",
+                "Imported summary",
+                status,
+                "en",
+                wordCount,
+                createdAt,
+                updatedAt,
+                archivedAt,
+                sourceAsset,
+                tagIds);
+    }
+
+    private SettingsBackupSourceAsset validImportSourceAsset(Long byteSize) {
+        return new SettingsBackupSourceAsset(
+                UUID.fromString("00000000-0000-0000-0000-000000000301"),
+                "notes.md",
+                "text/markdown",
+                byteSize,
+                "picker",
+                "available");
+    }
+
+    private SettingsBackupReviewState validImportReviewState(UUID itemId) {
+        return reviewState(
+                itemId,
+                IMPORT_TIME.plusSeconds(86_400),
+                1,
+                2.5,
+                1,
+                IMPORT_TIME,
+                IMPORT_TIME,
+                IMPORT_TIME);
+    }
+
+    private SettingsBackupReviewState reviewState(
+            UUID itemId,
+            Instant dueAt,
+            Integer intervalDays,
+            Double easeFactor,
+            Integer repetitions,
+            Instant lastReviewedAt,
+            Instant createdAt,
+            Instant updatedAt) {
+        return new SettingsBackupReviewState(
+                itemId,
+                dueAt,
+                intervalDays,
+                easeFactor,
+                repetitions,
+                "good",
+                lastReviewedAt,
+                createdAt,
+                updatedAt);
+    }
+
+    private record InvalidBackupCase(String name, SettingsBackupPayload backup) {}
+
+    private record ImportFixture(
+            SettingsService service,
+            UUID userId,
+            UserProfileRepository userProfileRepository,
+            ModelSourceRepository modelSourceRepository,
+            KnowledgeItemRepository knowledgeItemRepository,
+            KnowledgeSourceAssetRepository knowledgeSourceAssetRepository,
+            KnowledgeTagRepository knowledgeTagRepository,
+            KnowledgeItemTagRepository knowledgeItemTagRepository,
+            KnowledgeReviewStateRepository reviewStateRepository) {}
 }

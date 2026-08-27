@@ -28,6 +28,8 @@
         <postgresql.version>42.7.11</postgresql.version>
         <assertj.version>3.27.7</assertj.version>
         <spring-kafka.version>3.3.16</spring-kafka.version>
+        <jacoco.line.minimum>0.65</jacoco.line.minimum>
+        <jacoco.branch.minimum>0.60</jacoco.branch.minimum>
         <!-- Latest FlexAgent version published to GitHub Packages. -->
         <flexagent.version>1.2.0</flexagent.version>
     </properties>
@@ -416,6 +418,32 @@
                         <goals>
                             <goal>report</goal>
                         </goals>
+                    </execution>
+                    <execution>
+                        <id>coverage-check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${jacoco.line.minimum}</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${jacoco.branch.minimum}</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

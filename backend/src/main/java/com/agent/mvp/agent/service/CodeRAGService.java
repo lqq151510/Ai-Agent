@@ -56,8 +56,7 @@ public class CodeRAGService {
                                 Optional<ClassOrInterfaceDeclaration> ancestor =
                                         method.findAncestor(ClassOrInterfaceDeclaration.class);
                                 String className =
-                                        ancestor
-                                                .map(ClassOrInterfaceDeclaration::getNameAsString)
+                                        ancestor.map(ClassOrInterfaceDeclaration::getNameAsString)
                                                 .orElse("Unknown");
                                 String methodCode = method.toString();
 

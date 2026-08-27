@@ -167,11 +167,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mvn --settings .mvn/settings.xml -pl backend com.diffplug.spotless:spotless-maven-plugin:2.43.0:check
 
-      - name: JaCoCo Coverage Report
+      - name: JaCoCo Coverage Gate
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mvn --settings .mvn/settings.xml -pl backend -am clean test
+        run: mvn --settings .mvn/settings.xml -pl backend -am clean verify
 
   desktop-test:
     runs-on: ubuntu-latest

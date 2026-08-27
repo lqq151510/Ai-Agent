@@ -16,9 +16,7 @@ class RedisRateLimiterServiceTest {
     void shouldAllowWithinLimitAndRejectOverLimit() {
         StringRedisTemplate template = Mockito.mock(StringRedisTemplate.class);
 
-        Mockito.when(
-                        template.execute(
-                                Mockito.<RedisScript<Long>>any(), any(), any()))
+        Mockito.when(template.execute(Mockito.<RedisScript<Long>>any(), any(), any()))
                 .thenReturn(1L, 2L, 3L);
 
         RedisRateLimiterService service = new RedisRateLimiterService(template);
