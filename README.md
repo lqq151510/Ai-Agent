@@ -18,6 +18,12 @@ Repository components:
 - `ts-cli`: TypeScript + React (Ink) terminal client
 - `docker-compose`: optional single-host server stack with PostgreSQL, Redis, Kafka, Milvus, parsing, and monitoring
 
+Portfolio and interview materials:
+
+- [Product architecture and core flows](PROJECT_SHOWCASE.md)
+- [Resume bullets and interview playbook](RESUME_PROJECT_GUIDE.md)
+- [Demo script and verification evidence](docs/portfolio/README.md)
+
 ## AI + Java Dev Coach（supporting Beta module）
 
 The backend also includes a first-pass "AI + Java development cockpit" for students becoming Java + AI developers:
@@ -66,7 +72,7 @@ Then deploy:
 
 CI runs the same `scripts/release-check.sh dev` gate, so pull requests and local release checks fail on the same class of production/full dependency audit, build, desktop, Compose, and config regressions.
 Additionally, the GitHub Actions CI pipeline enforces the following code quality and safety gates:
-- **JaCoCo Coverage**: Enforces minimum line and branch coverage requirements.
+- **JaCoCo Coverage**: `backend` Maven `verify` enforces bundle-level line coverage ≥65% and branch coverage ≥60%. These source-quality gates are separate from any published installer release claim.
 - **Spotless Formatting**: Fails the build if Java code is not formatted according to the project style guidelines.
 - **Main Process Tests**: Runs the Electron main process tests.
 - **Full Safety Audit**: Prevents legacy/development tool exposures in production builds.
