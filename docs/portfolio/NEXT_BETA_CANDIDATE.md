@@ -12,8 +12,8 @@
 | Renderer | Node 22 显式 PATH 下 lint、Vitest、Vite build | 35 tests 通过，构建通过 | 不外推为安装包 GUI smoke |
 | Electron Main | `npm run test:main` | 25 tests 通过 | 覆盖 IPC、路径、导入、后端附着与打包保护，不等于真实 `.app` 启动 |
 | 本地向量索引 | `EmbeddingStoreProviderTest`、`PersistentInMemoryEmbeddingStoreTest` | 4 个针对性测试通过 | 覆盖持久化、恢复、损坏快照隔离和语义缓存瞬态边界 |
-| 包内资源布局 | `npm run test:packaged` | 代码已纳入自动检查；当前候选需重新执行 | 需要 Electron builder 下载器和可启动的 Electron CLI |
-| 安装包 GUI | 从 `.app` 内置 JRE 启动后端并轮询 readiness，再打开主窗口 | 待完成 | 不能用静态目录检查代替真实启动 |
+| 包内资源布局 | `npm run test:packaged` | 当前候选通过；Electron 43.1.1 / electron-builder 26.15.7，`app.asar`、backend JAR、bundled JRE 布局通过 | 只证明物理布局，不等于签名、DMG/ZIP 或 GUI 交互 |
+| 安装包启动 | 从 `.app` 内置 JRE 启动后端并轮询 readiness | 当前候选已返回 HTTP 200、`ready=true`；数据库/内存 Redis 通过，模型不可用按可选依赖处理；日志确认 `engineering_memory` 使用持久化索引 | 该次 shell smoke 没有人工观察窗口像素和完整 UI 交互，仍需 GUI 人工回归 |
 
 ## 本地向量索引的行为边界
 
@@ -28,6 +28,12 @@ Desktop Profile 关闭 PgVector 或连接失败时，主索引 `engineering_memo
 回滚到瞬态主索引时，可在受控启动环境设置 `APP_LOCAL_VECTOR_STORE_ENABLED=false` 并重启；不要直接删除用户目录中的快照。需要清理时先备份该目录，并把删除动作作为单独、明确授权的运维步骤。
 
 ## Beta.3 前必须补齐的验证
+
+### 已完成的候选安装包 smoke（2026-08-27）
+
+在临时 `--user-data-dir` 下从候选 `.app` 启动，使用 `curl --noproxy '*'` 直连 loopback，避免把 HTTP 代理误当作本机应用响应。探针命中 `http://127.0.0.1:18080/api/v1/system/health/ready`，返回 HTTP 200 和 `ready=true`；响应中 database、redis 均为 `ok=true`，model 为 `ok=false`（`localhost:1234` 未运行），但整体 readiness 仍为 true。运行日志同时确认 Java 21.0.10、H2/Flyway 13 migrations、Tomcat 18080、PgVector disabled，以及 `engineering_memory` 的 persistent desktop vector index 均正常启动。
+
+这证明“候选 `.app` 能启动内置后端并正确降级”这一层；尚未证明签名/Gatekeeper、DMG/ZIP 下载回验或人工窗口交互，后续不能把它写成完整发布验收。
 
 ### 1. 修复本机 Electron CLI 环境
 
@@ -60,7 +66,7 @@ npm run build
 npm run test:packaged
 ```
 
-`test:packaged` 只验证临时 `.app` 的 `app.asar`、`backend-jre/backend.jar` 和 bundled JRE 的物理布局；它不能替代下一步 GUI smoke。
+`test:packaged` 只验证临时 `.app` 的 `app.asar`、`backend-jre/backend.jar` 和 bundled JRE 的物理布局；上面的 readiness smoke 已补上进程启动与后端健康检查，但仍不能替代人工窗口交互回归。
 
 ### 3. 完成真实 GUI smoke
 

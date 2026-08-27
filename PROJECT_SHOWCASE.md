@@ -227,7 +227,7 @@ sequenceDiagram
 - Beta.2 为 ad-hoc 签名，不等于 Apple Developer ID 签名或公证。
 - 桌面主路径不依赖 Docker；云端 Compose/Kubernetes 是可选部署形态。
 - 覆盖率只描述后端 JaCoCo 范围；当前开发基线与已发布 Beta 的证据分开记录，不使用“高覆盖率”这类模糊宣传语。
-- 当前 `main` 的包内资源布局与 Renderer 降级契约已有自动测试；候选提交仍需在修复本机 Electron 运行时后重新生成安装包，并完成一次真实 GUI 启动 smoke，才能称为新 Beta 的安装包证据。
+- 当前 `main` 的包内资源布局与 Renderer 降级契约已有自动测试；`main@344b740` 候选 `.app` 已在隔离用户目录中完成内置后端 readiness smoke（HTTP 200、`ready=true`，模型不可用仍可启动），但尚未完成签名/Gatekeeper、下载回验或人工窗口交互，因此不能称为新 Beta 的完整安装包证据。
 
 ## 8. 可验证交付证据
 
@@ -246,7 +246,7 @@ sequenceDiagram
 - 命令：`mvn --settings .mvn/settings.xml -pl backend -am clean verify`。
 - `backend`：344 tests run，0 failures，0 errors，9 skipped；前置 `bug-sentinel-starter` 另有 4 项测试全部通过。
 - JaCoCo：Lines 5543/7256（76.39%），Branches 1649/2623（62.87%）；Maven `verify` 实际执行全局行 ≥65%、分支 ≥60% 双门禁。
-- 该结果可展示已推送的主线质量基线，但不是 Beta.2 的发布结论，也不能在完成候选安装包、GUI smoke、tag 和 Release 前称为新 Beta 发布结果。
+- 该结果可展示已推送的主线质量基线；候选 `.app` 的后端 readiness smoke 已通过，但它不是 Beta.2 的发布结论，也不能在完成签名/Gatekeeper、下载回验、人工 GUI 回归、tag 和 Release 前称为新 Beta 发布结果。
 
 更细的证据和复现命令见 [`docs/portfolio/EVIDENCE.md`](docs/portfolio/EVIDENCE.md)。
 

@@ -57,7 +57,7 @@ Java 21、Spring Boot 3.5、Spring Security、Spring Data JPA、Flyway、H2/Post
 - 问题：开发环境可运行不代表安装包可运行；曾出现 Bean 缺失、JRE 模块不完整、PgVector 驱动初始化失败。
 - 根因：Desktop Profile 仍隐式依赖遗留服务，jlink 未包含 Spring 代理所需模块，向量存储没有真正降级。
 - 修复：去除错误 Profile 限制；加入 `jdk.unsupported`；Desktop Profile 关闭 PgVector，使用带 JSON 快照的本地向量索引；把后端 JAR 与 JRE 放入 Electron resources。
-- 验证：从打包产物独立启动，轮询 readiness，并验证不依赖外部 Java、PostgreSQL 或 Docker。
+- 验证：从候选打包产物独立启动，轮询 readiness，并验证不依赖外部 Java、PostgreSQL 或 Docker；2026-08-27 隔离 smoke 返回 HTTP 200/`ready=true`，模型服务不可用仍按可选依赖降级。签名、Gatekeeper 和人工窗口交互仍需单独回归。
 
 ### 故事 C：多用户 RAG 隔离
 
@@ -155,7 +155,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 
 示例：
 
-> 打包应用曾经只能在开发机上运行。根因不是 Electron 本身，而是后端 Profile、jlink 模块和 PgVector 初始化仍带着开发环境假设。我分别修正 Bean 条件、加入 `jdk.unsupported`，让 Desktop Profile 在 PgVector 不可用时落到带 JSON 快照的本地向量索引。现有自动化覆盖资源布局与恢复边界；从 `.app` 内置 JRE 启动后端并请求 readiness 的真实 GUI smoke 仍要在修复本机 Electron ABI 后补做。代价是大规模索引和跨进程并发仍未经过基准验证。
+> 打包应用曾经只能在开发机上运行。根因不是 Electron 本身，而是后端 Profile、jlink 模块和 PgVector 初始化仍带着开发环境假设。我分别修正 Bean 条件、加入 `jdk.unsupported`，让 Desktop Profile 在 PgVector 不可用时落到带 JSON 快照的本地向量索引。现有自动化覆盖资源布局与恢复边界；2026-08-27 已从候选 `.app` 内置 JRE 启动后端并请求 readiness，返回 HTTP 200/`ready=true`，模型服务不可用也未阻塞启动。签名、Gatekeeper、下载回验、人工窗口交互以及大规模索引/跨进程并发基准仍未完成。
 
 ## 7. 不要在简历或面试中这样说
 

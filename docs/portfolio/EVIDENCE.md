@@ -40,7 +40,25 @@ mvn --settings .mvn/settings.xml -pl backend -am clean verify
 - JaCoCo bundle 行、分支双门禁均通过；精确覆盖率见第 3 节。
 - Maven reactor build success。
 
-### 2.2 历史多运行时验证（2026-08-20，非版本发布证明）
+### 2.2 当前候选安装包与启动 smoke（2026-08-27，非发布证据）
+
+候选 `.app` 由 `desktop` 的 `npm run test:packaged` 生成，使用 Electron 43.1.1、electron-builder 26.15.7 和 Node 22。包内布局测试通过，并确认 `app.asar`、`backend-jre/backend.jar` 与 bundled JRE 的 `java` 均存在且非空；此次生成的 app.asar 为 3,237,106 bytes，backend JAR 为 229,303,688 bytes。该目录是临时产物，不是 DMG/ZIP 发布资产。
+
+随后在临时 `--user-data-dir` 下直接启动：
+
+```bash
+"AI Agent.app/Contents/MacOS/AI Agent" \
+  --user-data-dir=/tmp/ai-agent-packaged-smoke.U6ztNS/user-data \
+  --disable-gpu
+curl --noproxy '*' \
+  http://127.0.0.1:18080/api/v1/system/health/ready
+```
+
+结果：HTTP 200，`ready=true`；database 与内存 redis 检查为 `ok=true`，本机模型端点 `localhost:1234` 未运行并返回可选依赖 `ok=false`，但没有阻断 Desktop Profile readiness。启动日志还确认 Java 21.0.10、H2/Flyway 13 migrations、Tomcat 18080、PgVector disabled，以及 `engineering_memory` 的 persistent desktop vector index 均正常。
+
+边界：本次是隔离 shell smoke，验证了 `.app` 进程、内置后端和 loopback readiness；没有验证 Apple 签名/Gatekeeper、DMG/ZIP 下载回验或人工窗口交互。因此不把它写成 Beta.3 发布验收。
+
+### 2.3 历史多运行时验证（2026-08-20，非版本发布证明）
 
 以下记录保留为当时的跨运行时验证快照。它们没有绑定不可变提交，不应与 `v0.1.0-beta.2` tag 或本页 2026-08-27 的 `main@344b740` 基线混用；对外使用前应在目标提交复跑。
 

@@ -57,7 +57,7 @@
 2. 展示 DMG、ZIP、manifest 和 SHA256SUMS。
 3. 说清楚这是 ad-hoc signed 的个人 Beta，不是 Apple 公证发行版。
 4. 发布物只说明版本、平台、签名和可追溯资产；不要把它和没有绑定该 tag 的测试数字混说。
-5. 如需展示当前源码质量，打开 `EVIDENCE.md` 并说明来源边界：2026-08-27 已推送的 `main@344b740` 基线中，`backend` 为 344 项测试、JaCoCo 行 76.39%/分支 62.87%，Maven `verify` 门禁为行 65%/分支 60%。它没有对应新 tag 或安装包，不能称为 Beta.2 或下一 Beta 的发布结果。
+5. 如需展示当前源码质量，打开 `EVIDENCE.md` 并说明来源边界：2026-08-27 已推送的 `main@344b740` 基线中，`backend` 为 344 项测试、JaCoCo 行 76.39%/分支 62.87%，Maven `verify` 门禁为行 65%/分支 60%。候选 `.app` 的后端 readiness smoke 另有 HTTP 200/`ready=true` 证据，但没有对应新 tag 或 Release，不能称为 Beta.2 或下一 Beta 的发布结果。
 
 ## 10 分钟版本增加内容
 
