@@ -11,6 +11,7 @@ import com.agent.mvp.modelsource.ModelSourceProviderType;
 import com.agent.mvp.modelsource.entity.ModelSource;
 import com.agent.mvp.modelsource.repo.ModelSourceRepository;
 import com.agent.mvp.modelsource.service.ModelSourceProbeService;
+import com.agent.mvp.modelsource.service.ModelUsageService;
 import com.agent.mvp.settings.entity.UserProfile;
 import com.agent.mvp.settings.service.UserProfileService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -44,6 +45,7 @@ public class KnowledgeOrganizerService {
     private final ModelSourceRepository modelSourceRepository;
     private final UserProfileService userProfileService;
     private final ModelSourceProbeService modelSourceProbeService;
+    private final ModelUsageService modelUsageService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -51,7 +53,22 @@ public class KnowledgeOrganizerService {
      * constructor below and never falls through to a cloud model.
      */
     public KnowledgeOrganizerService() {
-        this(null, null, null, null, new ObjectMapper());
+        this(null, null, null, null, null, new ObjectMapper());
+    }
+
+    public KnowledgeOrganizerService(
+            ModelGateway modelGateway,
+            ModelSourceRepository modelSourceRepository,
+            UserProfileService userProfileService,
+            ModelSourceProbeService modelSourceProbeService,
+            ObjectMapper objectMapper) {
+        this(
+                modelGateway,
+                modelSourceRepository,
+                userProfileService,
+                modelSourceProbeService,
+                null,
+                objectMapper);
     }
 
     @Autowired
@@ -60,28 +77,36 @@ public class KnowledgeOrganizerService {
             ModelSourceRepository modelSourceRepository,
             UserProfileService userProfileService,
             ModelSourceProbeService modelSourceProbeService,
+            ModelUsageService modelUsageService,
             ObjectMapper objectMapper) {
         this.modelGateway = modelGateway;
         this.modelSourceRepository = modelSourceRepository;
         this.userProfileService = userProfileService;
         this.modelSourceProbeService = modelSourceProbeService;
+        this.modelUsageService = modelUsageService;
         this.objectMapper = objectMapper;
     }
 
     public OrganizeResult organize(KnowledgeItem item) {
         String cleaned = normalize(item.getRawContent());
         try {
-            ModelSource source = resolveLocalModelSource(item.getUserId());
+            ModelSource source = resolveModelSource(item.getUserId());
             if (source != null) {
                 modelSourceProbeService.validateForUse(source);
-                ModelOrganizeResponse modelResult = requestLocalOrganization(source, item, cleaned);
+                ModelOrganizeResponse modelResult = requestModelOrganization(source, item, cleaned);
+                String strategy =
+                        ModelSourceProviderType.LOCAL_COMPATIBLE
+                                        .value()
+                                        .equalsIgnoreCase(source.getProviderType())
+                                ? "local_model"
+                                : "cloud_model";
                 return new OrganizeResult(
                         cleaned,
                         modelResult.summary(),
                         modelResult.tags(),
                         detectLanguage(cleaned),
                         countWords(cleaned),
-                        "local_model");
+                        strategy);
             }
             return organizeHeuristically(item, cleaned, "heuristic");
         } catch (RuntimeException ex) {
@@ -99,7 +124,7 @@ public class KnowledgeOrganizerService {
                 cleaned, summary, tags, language, wordCount, organizationStrategy);
     }
 
-    private ModelSource resolveLocalModelSource(UUID userId) {
+    private ModelSource resolveModelSource(UUID userId) {
         if (userId == null
                 || modelSourceRepository == null
                 || userProfileService == null
@@ -108,13 +133,13 @@ public class KnowledgeOrganizerService {
             return null;
         }
         UserProfile profile = userProfileService.getOrCreate(userId);
-        ModelSource summarySource = eligibleLocalSource(userId, profile.getSummaryModelSourceId());
+        ModelSource summarySource = eligibleModelSource(userId, profile.getSummaryModelSourceId());
         return summarySource != null
                 ? summarySource
-                : eligibleLocalSource(userId, profile.getDefaultModelSourceId());
+                : eligibleModelSource(userId, profile.getDefaultModelSourceId());
     }
 
-    private ModelSource eligibleLocalSource(UUID userId, UUID sourceId) {
+    private ModelSource eligibleModelSource(UUID userId, UUID sourceId) {
         if (sourceId == null) {
             return null;
         }
@@ -122,9 +147,6 @@ public class KnowledgeOrganizerService {
         if (source == null
                 || !userId.equals(source.getUserId())
                 || !Boolean.TRUE.equals(source.getEnabled())
-                || !ModelSourceProviderType.LOCAL_COMPATIBLE
-                        .value()
-                        .equalsIgnoreCase(source.getProviderType())
                 || !ModelSourceCheckStatus.OK.value().equalsIgnoreCase(source.getLastCheckStatus())
                 || source.getDefaultModel() == null
                 || source.getDefaultModel().isBlank()) {
@@ -133,39 +155,76 @@ public class KnowledgeOrganizerService {
         return source;
     }
 
-    private ModelOrganizeResponse requestLocalOrganization(
+    private ModelOrganizeResponse requestModelOrganization(
             ModelSource source, KnowledgeItem item, String cleaned) {
+        long startTime = System.currentTimeMillis();
         String baseUrl = normalizeBaseUrl(source.getBaseUrl());
-        ModelChatResponse response =
-                modelGateway.chat(
-                        ModelProviderType.OPENAI,
-                        new ModelChatRequest(
-                                source.getDefaultModel().trim(),
-                                List.of(
-                                        ModelChatMessage.of(
-                                                "system",
-                                                """
+        String systemPrompt =
+                """
 You organize a private local knowledge item. Return exactly one JSON object and nothing else:
 {"summary":"non-empty concise summary","tags":["non-empty concise tag"]}
 Both summary and tags are required. tags must contain one to five short strings.
-"""),
-                                        ModelChatMessage.of(
-                                                "user",
-                                                "Title: "
-                                                        + safeText(item.getTitle())
-                                                        + "\nSource type: "
-                                                        + safeText(item.getSourceType())
-                                                        + "\nContent:\n"
-                                                        + truncateForModel(cleaned))),
-                                List.of(),
-                                "none",
-                                baseUrl,
-                                safeApiKey(source.getApiKey()),
-                                LOCAL_MODEL_TIMEOUT_MS));
-        if (response == null || response.content() == null) {
-            throw new IllegalArgumentException("Local model response is empty");
+""";
+        String userPrompt =
+                "Title: "
+                        + safeText(item.getTitle())
+                        + "\nSource type: "
+                        + safeText(item.getSourceType())
+                        + "\nContent:\n"
+                        + truncateForModel(cleaned);
+
+        try {
+            ModelChatResponse response =
+                    modelGateway.chat(
+                            ModelProviderType.OPENAI,
+                            new ModelChatRequest(
+                                    source.getDefaultModel().trim(),
+                                    List.of(
+                                            ModelChatMessage.of("system", systemPrompt),
+                                            ModelChatMessage.of("user", userPrompt)),
+                                    List.of(),
+                                    "none",
+                                    baseUrl,
+                                    safeApiKey(source.getApiKey()),
+                                    LOCAL_MODEL_TIMEOUT_MS));
+            long latencyMs = System.currentTimeMillis() - startTime;
+            if (response == null || response.content() == null) {
+                throw new IllegalArgumentException("Model response is empty");
+            }
+
+            int promptTokens = (systemPrompt.length() + userPrompt.length()) / 2;
+            int completionTokens = response.content().length() / 2;
+
+            if (modelUsageService != null) {
+                modelUsageService.recordUsage(
+                        source.getUserId(),
+                        source.getId(),
+                        source.getProviderType(),
+                        source.getDefaultModel(),
+                        promptTokens,
+                        completionTokens,
+                        latencyMs,
+                        "success",
+                        null);
+            }
+
+            return parseModelOrganization(response.content());
+        } catch (Exception ex) {
+            long latencyMs = System.currentTimeMillis() - startTime;
+            if (modelUsageService != null) {
+                modelUsageService.recordUsage(
+                        source.getUserId(),
+                        source.getId(),
+                        source.getProviderType(),
+                        source.getDefaultModel(),
+                        userPrompt.length() / 2,
+                        0,
+                        latencyMs,
+                        "failed",
+                        ex.getMessage());
+            }
+            throw ex;
         }
-        return parseModelOrganization(response.content());
     }
 
     private ModelOrganizeResponse parseModelOrganization(String raw) {

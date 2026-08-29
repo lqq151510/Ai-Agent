@@ -273,6 +273,8 @@ export type UserMetrics = {
   averageLatencyMs: number;
   totalModelSources: number;
   activeModelSources: number;
+  estimatedCostCny: number;
+  estimatedCostUsd: number;
   providerTokens: Record<string, number>;
   recentLogs: ModelUsageItem[];
 };
@@ -1264,6 +1266,11 @@ export const setDefaultModelSource = async (id: string): Promise<ModelProvider> 
   return toModelProvider(result);
 };
 
+export const setSummaryModelSource = async (id: string): Promise<void> => {
+  if (isPreviewOnlyMode()) return;
+  await request('/api/v1/settings/profile', 'PUT', { summaryModelSourceId: id });
+};
+
 export const loadUserMetrics = async (): Promise<UserMetrics> => {
   if (isPreviewOnlyMode()) {
     return {
@@ -1278,6 +1285,8 @@ export const loadUserMetrics = async (): Promise<UserMetrics> => {
       averageLatencyMs: 290,
       totalModelSources: 3,
       activeModelSources: 3,
+      estimatedCostCny: 0.0298,
+      estimatedCostUsd: 0.0041,
       providerTokens: { deepseek: 12800, openai: 5650 },
       recentLogs: [
         {

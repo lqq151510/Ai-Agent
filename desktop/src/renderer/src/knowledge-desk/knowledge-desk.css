@@ -5877,6 +5877,56 @@
   color: #94a3b8;
 }
 
+.kd-badge-shortcut {
+  font-size: 10px;
+  font-family: var(--kd-mono, monospace);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+  letter-spacing: 0.5px;
+}
+
+.kd-badge-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.kd-model-edit-box {
+  padding: 14px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #3b82f6;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kd-edit-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.kd-icon-purple {
+  color: #8b5cf6;
+}
+
+.kd-icon-warning {
+  color: #f59e0b;
+}
+
 .kd-spin {
   animation: kdSpin 1s linear infinite;
 }
