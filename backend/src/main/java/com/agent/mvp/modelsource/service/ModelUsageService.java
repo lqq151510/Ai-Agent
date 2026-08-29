@@ -78,17 +78,11 @@ public class ModelUsageService {
         Instant startOfToday =
                 LocalDate.now(ZoneOffset.UTC).atStartOfDay().toInstant(ZoneOffset.UTC);
 
-        double estimatedCostCny = 0.0;
-        double estimatedCostUsd = 0.0;
-
         for (ModelUsageLog log : logs) {
             long tokens = log.getTotalTokens() != null ? log.getTotalTokens() : 0;
-            int pTokens = log.getPromptTokens() != null ? log.getPromptTokens() : 0;
-            int cTokens = log.getCompletionTokens() != null ? log.getCompletionTokens() : 0;
-
             totalTokens += tokens;
-            promptTokens += pTokens;
-            completionTokens += cTokens;
+            promptTokens += log.getPromptTokens() != null ? log.getPromptTokens() : 0;
+            completionTokens += log.getCompletionTokens() != null ? log.getCompletionTokens() : 0;
 
             if (log.getCreatedAt() != null && log.getCreatedAt().isAfter(startOfToday)) {
                 todayTokens += tokens;
@@ -102,23 +96,8 @@ public class ModelUsageService {
 
             totalLatencyMs += log.getLatencyMs() != null ? log.getLatencyMs() : 0;
 
-            String provider =
-                    log.getProviderType() != null ? log.getProviderType().toLowerCase() : "other";
+            String provider = log.getProviderType() != null ? log.getProviderType() : "other";
             providerTokens.put(provider, providerTokens.getOrDefault(provider, 0L) + tokens);
-
-            if ("deepseek".equals(provider)) {
-                double cost = (pTokens * 1.0 + cTokens * 2.0) / 1_000_000.0;
-                estimatedCostCny += cost;
-                estimatedCostUsd += cost / 7.2;
-            } else if ("openai".equals(provider)) {
-                double usdCost = (pTokens * 0.15 + cTokens * 0.60) / 1_000_000.0;
-                estimatedCostUsd += usdCost;
-                estimatedCostCny += usdCost * 7.2;
-            } else if (!"local_compatible".equals(provider)) {
-                double cost = (pTokens * 1.5 + cTokens * 3.0) / 1_000_000.0;
-                estimatedCostCny += cost;
-                estimatedCostUsd += cost / 7.2;
-            }
         }
 
         double successRate = totalCalls > 0 ? (double) successfulCalls / totalCalls * 100.0 : 100.0;
@@ -174,8 +153,6 @@ public class ModelUsageService {
                 averageLatencyMs,
                 totalModelSources,
                 activeModelSources,
-                Math.round(estimatedCostCny * 10000.0) / 10000.0,
-                Math.round(estimatedCostUsd * 10000.0) / 10000.0,
                 providerTokens,
                 recentLogs);
     }

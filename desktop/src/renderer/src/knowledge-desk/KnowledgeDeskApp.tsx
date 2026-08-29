@@ -184,11 +184,6 @@ const KnowledgeDeskApp = () => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
-        event.preventDefault();
-        setIsProfileDrawerOpen((prev) => !prev);
-        return;
-      }
       if (!isCommandSearchShortcut(event)) return;
       event.preventDefault();
       setActivePage('search');

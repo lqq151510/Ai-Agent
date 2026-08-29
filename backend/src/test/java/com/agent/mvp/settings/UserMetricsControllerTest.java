@@ -56,8 +56,6 @@ class UserMetricsControllerTest {
                                 320L,
                                 3,
                                 2,
-                                0.0152,
-                                0.0021,
                                 Map.of("deepseek", 8000L, "openai", 4500L),
                                 List.of(
                                         new UserMetricsResponse.ModelUsageItemDto(
@@ -85,8 +83,6 @@ class UserMetricsControllerTest {
                 .andExpect(jsonPath("$.successRate").value(97.6))
                 .andExpect(jsonPath("$.totalModelSources").value(3))
                 .andExpect(jsonPath("$.activeModelSources").value(2))
-                .andExpect(jsonPath("$.estimatedCostCny").value(0.0152))
-                .andExpect(jsonPath("$.estimatedCostUsd").value(0.0021))
                 .andExpect(jsonPath("$.recentLogs[0].modelName").value("deepseek-chat"));
     }
 }

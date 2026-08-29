@@ -17,8 +17,6 @@ public record UserMetricsResponse(
         long averageLatencyMs,
         int totalModelSources,
         int activeModelSources,
-        double estimatedCostCny,
-        double estimatedCostUsd,
         Map<String, Long> providerTokens,
         List<ModelUsageItemDto> recentLogs) {
 

@@ -126,7 +126,7 @@ class KnowledgeOrganizerServiceTest {
         UUID summarySourceId = UUID.randomUUID();
         UUID defaultSourceId = UUID.randomUUID();
         ModelSource cloudSummary = localSource(userId, summarySourceId, "http://127.0.0.1:1234/v1");
-        cloudSummary.setEnabled(false);
+        cloudSummary.setProviderType("openai");
         ModelSource defaultSource =
                 localSource(userId, defaultSourceId, "http://127.0.0.1:1234/v1");
         when(profileService.getOrCreate(userId))

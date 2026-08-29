@@ -19,10 +19,6 @@ import {
   Layers,
   Database,
   Terminal,
-  Edit2,
-  Coins,
-  BookOpen,
-  MessageSquare,
 } from 'lucide-react';
 import {
   type KnowledgeDeskSnapshot,
@@ -31,10 +27,8 @@ import {
   type PromptTestResult,
   loadUserMetrics,
   createModelSource,
-  updateModelSource,
   deleteModelSource,
   setDefaultModelSource,
-  setSummaryModelSource,
   testModelSource,
   testPromptOnModelSource,
   updateKnowledgeDeskSettingsProfile,
@@ -106,14 +100,6 @@ export const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
   const [formApiKey, setFormApiKey] = useState('');
   const [isSubmittingModel, setIsSubmittingModel] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-  // Edit model source state
-  const [editingModelId, setEditingModelId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editBaseUrl, setEditBaseUrl] = useState('');
-  const [editModel, setEditModel] = useState('');
-  const [editApiKey, setEditApiKey] = useState('');
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Playground state
   const [selectedPlaygroundModelId, setSelectedPlaygroundModelId] = useState<string>('');
@@ -212,73 +198,18 @@ export const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
     }
   };
 
-  const handleStartEdit = (provider: ModelProvider) => {
-    setEditingModelId(provider.id);
-    setEditName(provider.provider);
-    setEditBaseUrl(provider.baseUrl);
-    setEditModel(provider.model);
-    setEditApiKey('');
-  };
-
-  const handleCancelEdit = () => {
-    setEditingModelId(null);
-    setEditName('');
-    setEditBaseUrl('');
-    setEditModel('');
-    setEditApiKey('');
-  };
-
-  const handleSaveEdit = async (provider: ModelProvider) => {
-    if (!editName.trim() || !editBaseUrl.trim() || !editModel.trim()) {
-      setBannerMessage({ text: '名称、Base URL 与模型名称不能为空', type: 'error' });
-      return;
-    }
-    setIsSavingEdit(true);
-    try {
-      await updateModelSource(provider.id, {
-        name: editName.trim(),
-        baseUrl: editBaseUrl.trim(),
-        defaultModel: editModel.trim(),
-        apiKey: editApiKey.trim() ? editApiKey.trim() : undefined,
-      });
-      await onRefreshSnapshot();
-      await fetchMetrics();
-      setEditingModelId(null);
-      setBannerMessage({ text: `已更新模型【${editName.trim()}】配置`, type: 'success' });
-    } catch (err) {
-      setBannerMessage({ text: err instanceof Error ? err.message : '更新模型失败', type: 'error' });
-    } finally {
-      setIsSavingEdit(false);
-    }
-  };
-
   const handleSetDefault = async (provider: ModelProvider) => {
     setBusyAction(`default:${provider.id}`);
     try {
       await setDefaultModelSource(provider.id);
       await updateKnowledgeDeskSettingsProfile({
         defaultModelSourceId: provider.id,
-      });
-      await onRefreshSnapshot();
-      setBannerMessage({ text: `已将【${provider.provider}】设为主会话默认推理模型`, type: 'success' });
-    } catch (err) {
-      setBannerMessage({ text: err instanceof Error ? err.message : '设置主会话模型失败', type: 'error' });
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  const handleSetSummaryModel = async (provider: ModelProvider) => {
-    setBusyAction(`summary:${provider.id}`);
-    try {
-      await setSummaryModelSource(provider.id);
-      await updateKnowledgeDeskSettingsProfile({
         summaryModelSourceId: provider.id,
       });
       await onRefreshSnapshot();
-      setBannerMessage({ text: `已将【${provider.provider}】设为知识库自动整理与摘要模型`, type: 'success' });
+      setBannerMessage({ text: `已将【${provider.provider}】设为全局默认推理模型`, type: 'success' });
     } catch (err) {
-      setBannerMessage({ text: err instanceof Error ? err.message : '设置摘要模型失败', type: 'error' });
+      setBannerMessage({ text: err instanceof Error ? err.message : '设置默认模型失败', type: 'error' });
     } finally {
       setBusyAction(null);
     }
@@ -337,6 +268,8 @@ export const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
 
   if (!isOpen) return null;
 
+  const defaultModelSource = snapshot.modelProviders.find(p => p.id === snapshot.profile.defaultModelSourceId);
+
   return (
     <div className="kd-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div className="kd-drawer-panel" onClick={(e) => e.stopPropagation()}>
@@ -351,7 +284,6 @@ export const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
               <div className="kd-drawer-name-row">
                 <h2>{snapshot.profile.displayName || '泽宝'}</h2>
                 <span className="kd-badge-role">AI + Java 开发者</span>
-                <span className="kd-badge-shortcut" title="随时按 ⌘, 唤起/收起">⌘,</span>
               </div>
               <p className="kd-drawer-email">{snapshot.profile.email || 'zebao@agent.local'}</p>
             </div>
@@ -423,34 +355,21 @@ export const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
 
                 <div className="kd-metric-box">
                   <div className="kd-metric-head">
-                    <span className="kd-metric-title">预估 API 消费</span>
-                    <Coins size={16} className="kd-icon-warning" />
-                  </div>
-                  <div className="kd-metric-value">
-                    ¥{metrics?.estimatedCostCny ?? 0}
-                  </div>
-                  <div className="kd-metric-sub">
-                    折合约 ${metrics?.estimatedCostUsd ?? 0} USD
-                  </div>
-                </div>
-
-                <div className="kd-metric-box">
-                  <div className="kd-metric-head">
-                    <span className="kd-metric-title">API 成功率</span>
+                    <span className="kd-metric-title">API 调用成功率</span>
                     <ShieldCheck size={16} className="kd-icon-success" />
                   </div>
                   <div className="kd-metric-value">
                     {metrics?.successRate ? `${metrics.successRate}%` : '100%'}
                   </div>
                   <div className="kd-metric-sub">
-                    总调用 {metrics?.totalCalls ?? 0} 次 (失败 {metrics?.failedCalls ?? 0})
+                    总调用: {metrics?.totalCalls ?? 0} 次 (失败 {metrics?.failedCalls ?? 0})
                   </div>
                 </div>
 
                 <div className="kd-metric-box">
                   <div className="kd-metric-head">
                     <span className="kd-metric-title">平均响应延迟</span>
-                    <Clock size={16} className="kd-icon-purple" />
+                    <Clock size={16} className="kd-icon-warning" />
                   </div>
                   <div className="kd-metric-value">
                     {metrics?.averageLatencyMs ?? 0} <span className="kd-unit">ms</span>
@@ -459,12 +378,25 @@ export const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
                     模型推理平均往返耗时
                   </div>
                 </div>
+
+                <div className="kd-metric-box">
+                  <div className="kd-metric-head">
+                    <span className="kd-metric-title">已接入模型源</span>
+                    <Cpu size={16} className="kd-icon-purple" />
+                  </div>
+                  <div className="kd-metric-value">
+                    {snapshot.modelProviders.length} <span className="kd-unit">个</span>
+                  </div>
+                  <div className="kd-metric-sub">
+                    默认: {defaultModelSource?.provider || '未设置'}
+                  </div>
+                </div>
               </div>
 
               {/* Token Breakdown Bar */}
               <div className="kd-token-card">
                 <div className="kd-token-card-head">
-                  <strong>Token 结构细分与全链路归集</strong>
+                  <strong>Token 结构细分与持久化</strong>
                   <button className="kd-btn-icon-subtle" onClick={() => void fetchMetrics()} title="刷新统计">
                     <RefreshCw size={14} className={isLoadingMetrics ? 'kd-spin' : ''} />
                   </button>
@@ -479,8 +411,8 @@ export const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
                     <strong>{(metrics?.completionTokens ?? 0).toLocaleString()}</strong>
                   </div>
                   <div className="kd-token-item">
-                    <span>归集范围</span>
-                    <strong className="kd-text-success">会话 + 知识整理 + 测试</strong>
+                    <span>数据存储状态</span>
+                    <strong className="kd-text-success">MyBatis-Plus 实时入库</strong>
                   </div>
                 </div>
               </div>
@@ -642,147 +574,68 @@ export const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
                   </div>
                 ) : (
                   snapshot.modelProviders.map((provider) => {
-                    const isDefaultChat = snapshot.profile.defaultModelSourceId === provider.id;
-                    const isDefaultSummary = snapshot.profile.summaryModelSourceId === provider.id;
-                    const isEditing = editingModelId === provider.id;
+                    const isDefault = snapshot.profile.defaultModelSourceId === provider.id;
                     const isBusy = busyAction?.includes(provider.id);
 
                     return (
-                      <div className={`kd-model-item ${isDefaultChat ? 'is-default' : ''}`} key={provider.id}>
-                        {isEditing ? (
-                          <div className="kd-model-edit-box">
-                            <div className="kd-edit-title">
-                              <strong>编辑模型配置: {provider.provider}</strong>
-                              <button className="kd-btn-close" onClick={handleCancelEdit}><X size={14} /></button>
-                            </div>
-                            <div className="kd-form-grid">
-                              <label className="kd-form-field">
-                                <span>名称标识</span>
-                                <input
-                                  type="text"
-                                  value={editName}
-                                  onChange={(e) => setEditName(e.target.value)}
-                                />
-                              </label>
-                              <label className="kd-form-field">
-                                <span>Base URL</span>
-                                <input
-                                  type="text"
-                                  value={editBaseUrl}
-                                  onChange={(e) => setEditBaseUrl(e.target.value)}
-                                />
-                              </label>
-                              <label className="kd-form-field">
-                                <span>模型名称</span>
-                                <input
-                                  type="text"
-                                  value={editModel}
-                                  onChange={(e) => setEditModel(e.target.value)}
-                                />
-                              </label>
-                              <label className="kd-form-field">
-                                <span>更新 API Key (留空保持不变)</span>
-                                <input
-                                  type="password"
-                                  value={editApiKey}
-                                  onChange={(e) => setEditApiKey(e.target.value)}
-                                  placeholder="sk-••••••••"
-                                />
-                              </label>
-                            </div>
-                            <div className="kd-form-actions">
-                              <button className="kd-btn-secondary kd-btn-sm" onClick={handleCancelEdit} disabled={isSavingEdit}>
-                                取消
-                              </button>
-                              <button className="kd-btn-primary kd-btn-sm" onClick={() => void handleSaveEdit(provider)} disabled={isSavingEdit}>
-                                {isSavingEdit ? <RefreshCw size={14} className="kd-spin" /> : <Check size={14} />}
-                                保存修改
-                              </button>
+                      <div className={`kd-model-item ${isDefault ? 'is-default' : ''}`} key={provider.id}>
+                        <div className="kd-model-item-top">
+                          <div className="kd-model-title-group">
+                            <div className={`kd-provider-indicator kd-provider-indicator--${provider.lastCheckStatus || 'ok'}`} />
+                            <div>
+                              <div className="kd-model-name-row">
+                                <strong>{provider.provider}</strong>
+                                {isDefault && <span className="kd-badge-default">默认模型</span>}
+                                <span className="kd-badge-tag">{provider.providerType}</span>
+                              </div>
+                              <div className="kd-model-meta-line">
+                                <span>{provider.baseUrl}</span>
+                                <span>·</span>
+                                <span>模型: <code>{provider.model}</code></span>
+                                <span>·</span>
+                                <span>Key: {provider.keyState || '已配置'}</span>
+                              </div>
                             </div>
                           </div>
-                        ) : (
-                          <>
-                            <div className="kd-model-item-top">
-                              <div className="kd-model-title-group">
-                                <div className={`kd-provider-indicator kd-provider-indicator--${provider.lastCheckStatus || 'ok'}`} />
-                                <div>
-                                  <div className="kd-model-name-row">
-                                    <strong>{provider.provider}</strong>
-                                    {isDefaultChat && <span className="kd-badge-default" title="主会话默认模型"><MessageSquare size={12} /> 会话主模型</span>}
-                                    {isDefaultSummary && <span className="kd-badge-summary" title="知识库自动整理模型"><BookOpen size={12} /> 知识整理</span>}
-                                    <span className="kd-badge-tag">{provider.providerType}</span>
-                                  </div>
-                                  <div className="kd-model-meta-line">
-                                    <span>{provider.baseUrl}</span>
-                                    <span>·</span>
-                                    <span>模型: <code>{provider.model}</code></span>
-                                    <span>·</span>
-                                    <span>Key: {provider.keyState || '已加密存储'}</span>
-                                  </div>
-                                </div>
-                              </div>
 
-                              <div className="kd-model-item-actions">
-                                <button
-                                  className="kd-btn-subtle"
-                                  onClick={() => handleStartEdit(provider)}
-                                  title="编辑配置"
-                                >
-                                  <Edit2 size={14} />
-                                  编辑
-                                </button>
+                          <div className="kd-model-item-actions">
+                            <button
+                              className="kd-btn-subtle"
+                              onClick={() => void handleTestConnect(provider)}
+                              disabled={isBusy}
+                              title="测试连通性"
+                            >
+                              <RefreshCw size={14} className={busyAction === `test:${provider.id}` ? 'kd-spin' : ''} />
+                              测试连通
+                            </button>
 
-                                <button
-                                  className="kd-btn-subtle"
-                                  onClick={() => void handleTestConnect(provider)}
-                                  disabled={isBusy}
-                                  title="测试连通性"
-                                >
-                                  <RefreshCw size={14} className={busyAction === `test:${provider.id}` ? 'kd-spin' : ''} />
-                                  测试
-                                </button>
-
-                                {!isDefaultChat && (
-                                  <button
-                                    className="kd-btn-subtle"
-                                    onClick={() => void handleSetDefault(provider)}
-                                    disabled={isBusy}
-                                    title="设为主会话模型"
-                                  >
-                                    <MessageSquare size={14} />
-                                    设为主会话
-                                  </button>
-                                )}
-
-                                {!isDefaultSummary && (
-                                  <button
-                                    className="kd-btn-subtle"
-                                    onClick={() => void handleSetSummaryModel(provider)}
-                                    disabled={isBusy}
-                                    title="设为知识库整理模型"
-                                  >
-                                    <BookOpen size={14} />
-                                    设为整理
-                                  </button>
-                                )}
-
-                                <button
-                                  className="kd-btn-danger-subtle"
-                                  onClick={() => void handleDeleteModel(provider)}
-                                  disabled={isBusy}
-                                  title="移除模型"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </div>
-
-                            {provider.lastCheckMessage && (
-                              <div className="kd-model-item-status">
-                                <span className="kd-subtext">最近检测: {provider.lastCheckMessage}</span>
-                              </div>
+                            {!isDefault && (
+                              <button
+                                className="kd-btn-subtle"
+                                onClick={() => void handleSetDefault(provider)}
+                                disabled={isBusy}
+                                title="设为默认"
+                              >
+                                <Check size={14} />
+                                设为默认
+                              </button>
                             )}
-                          </>
+
+                            <button
+                              className="kd-btn-danger-subtle"
+                              onClick={() => void handleDeleteModel(provider)}
+                              disabled={isBusy}
+                              title="移除模型"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {provider.lastCheckMessage && (
+                          <div className="kd-model-item-status">
+                            <span className="kd-subtext">最近检测: {provider.lastCheckMessage}</span>
+                          </div>
                         )}
                       </div>
                     );
