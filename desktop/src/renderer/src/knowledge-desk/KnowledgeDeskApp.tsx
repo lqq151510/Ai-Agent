@@ -1,5 +1,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+  Bell,
+  ChevronDown,
   FolderArchive,
   BookOpen,
   Clock3,
@@ -8,12 +10,14 @@ import {
   Inbox,
   LayoutDashboard,
   MessageCircle,
+  MessageSquare,
   Plus,
   RefreshCw,
   Search,
   Settings,
   Upload,
 } from 'lucide-react';
+import { UserProfileDrawer } from './components/UserProfileDrawer';
 import {
   archiveKnowledgeItem,
   addManagedSourceFolder,
@@ -153,6 +157,7 @@ const KnowledgeDeskApp = () => {
   const [notice, setNotice] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [managedSourceFolders, setManagedSourceFolders] = useState<ManagedSourceFolder[]>([]);
   const [assistantDraft, setAssistantDraft] = useState<{ id: number; text: string } | null>(null);
+  const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
   const detailRequestRef = useRef(0);
   const detailJobsRequestRef = useRef(0);
   const desktopFilePickerAvailable = canUseDesktopFilePicker();
@@ -635,8 +640,8 @@ const KnowledgeDeskApp = () => {
           </button>
         </div>
 
-        <button aria-label="打开个人中心" className="kd-user-card" onClick={() => setActivePage('settings')} type="button">
-          <div className="kd-avatar">泽</div>
+        <button aria-label="打开个人中心" className="kd-user-card" onClick={() => setIsProfileDrawerOpen(true)} type="button">
+          <div className="kd-avatar">{snapshot.profile.displayName.slice(0, 1) || '泽'}</div>
           <div className="kd-user-meta">
             <strong>{snapshot.profile.displayName}</strong>
             <span className={snapshot.status === 'error' || snapshot.status === 'unknown' ? 'kd-user-meta--warning' : ''}>
@@ -684,6 +689,43 @@ const KnowledgeDeskApp = () => {
             >
               <RefreshCw size={15} />
               {isLoadingSnapshot ? '同步中' : '刷新'}
+            </button>
+
+            {/* SupportFlow Style User Quick Center */}
+            <div className="kd-topbar-divider" />
+            <button
+              aria-label="消息中心"
+              className="kd-topbar-icon-btn"
+              onClick={() => setActivePage('assistant')}
+              title="本机智能助手"
+              type="button"
+            >
+              <MessageSquare size={17} />
+            </button>
+            <button
+              aria-label="系统通知"
+              className="kd-topbar-icon-btn kd-has-badge"
+              onClick={() => setIsProfileDrawerOpen(true)}
+              title="通知与状态"
+              type="button"
+            >
+              <Bell size={17} />
+              <span className="kd-badge-dot">3</span>
+            </button>
+            <div className="kd-online-status-pill" onClick={() => setIsProfileDrawerOpen(true)}>
+              <span className="kd-online-dot-sm" />
+              <span>在线</span>
+            </div>
+            <button
+              aria-label="打开个人中心"
+              className="kd-user-topbar-pill"
+              onClick={() => setIsProfileDrawerOpen(true)}
+              type="button"
+            >
+              <div className="kd-topbar-avatar">
+                {snapshot.profile.displayName.slice(0, 2) || 'AS'}
+              </div>
+              <ChevronDown size={14} className="kd-topbar-chevron" />
             </button>
           </div>
         </header>
@@ -885,6 +927,18 @@ const KnowledgeDeskApp = () => {
           {notice.message}
         </div>
       ) : null}
+      <UserProfileDrawer
+        isOpen={isProfileDrawerOpen}
+        onClose={() => setIsProfileDrawerOpen(false)}
+        snapshot={snapshot}
+        onRefreshSnapshot={async () => {
+          await refreshSnapshot();
+        }}
+        onOpenSettingsTab={(tab) => {
+          setActivePage('settings');
+          setSettingsTab(tab as SettingsTab);
+        }}
+      />
     </div>
   );
 };

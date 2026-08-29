@@ -247,6 +247,47 @@ export type KnowledgeDeskSnapshot = {
   storage: StorageSummary;
 };
 
+export type ModelUsageItem = {
+  id: string;
+  modelSourceId?: string | null;
+  providerType: string;
+  modelName: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  latencyMs: number;
+  status: string;
+  errorMessage?: string | null;
+  createdAt: string;
+};
+
+export type UserMetrics = {
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  todayTokens: number;
+  totalCalls: number;
+  successfulCalls: number;
+  failedCalls: number;
+  successRate: number;
+  averageLatencyMs: number;
+  totalModelSources: number;
+  activeModelSources: number;
+  providerTokens: Record<string, number>;
+  recentLogs: ModelUsageItem[];
+};
+
+export type PromptTestResult = {
+  success: boolean;
+  reply?: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  latencyMs: number;
+  model?: string;
+  message?: string;
+};
+
 export type ImportKnowledgeKind = 'web' | 'markdown' | 'pdf' | 'snippet';
 
 export type ImportKnowledgeDraft = {
@@ -1216,6 +1257,64 @@ export const disableModelSource = async (id: string): Promise<ModelProvider> => 
 
 export const testModelSource = async (id: string): Promise<ModelSourceTestResult> => {
   return request<ModelSourceTestResult>(`/api/v1/model-sources/${id}/test`, 'POST');
+};
+
+export const setDefaultModelSource = async (id: string): Promise<ModelProvider> => {
+  const result = await request<BackendModelSource>(`/api/v1/model-sources/${id}/set-default`, 'POST');
+  return toModelProvider(result);
+};
+
+export const loadUserMetrics = async (): Promise<UserMetrics> => {
+  if (isPreviewOnlyMode()) {
+    return {
+      totalTokens: 18450,
+      promptTokens: 7120,
+      completionTokens: 11330,
+      todayTokens: 4250,
+      totalCalls: 52,
+      successfulCalls: 51,
+      failedCalls: 1,
+      successRate: 98.1,
+      averageLatencyMs: 290,
+      totalModelSources: 3,
+      activeModelSources: 3,
+      providerTokens: { deepseek: 12800, openai: 5650 },
+      recentLogs: [
+        {
+          id: 'log-1',
+          providerType: 'deepseek',
+          modelName: 'deepseek-chat',
+          promptTokens: 180,
+          completionTokens: 420,
+          totalTokens: 600,
+          latencyMs: 310,
+          status: 'success',
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    };
+  }
+  return request<UserMetrics>('/api/v1/user/metrics');
+};
+
+export const testPromptOnModelSource = async (
+  id: string,
+  prompt?: string,
+): Promise<PromptTestResult> => {
+  if (isPreviewOnlyMode()) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return {
+      success: true,
+      reply: '你好！我是接入的模型，当前接口连通性正常，可开始进行知识推理与会话。',
+      promptTokens: prompt ? prompt.length : 15,
+      completionTokens: 38,
+      totalTokens: (prompt ? prompt.length : 15) + 38,
+      latencyMs: 320,
+      model: 'deepseek-chat',
+      message: '测试调用成功',
+    };
+  }
+  return request<PromptTestResult>(`/api/v1/model-sources/${id}/test-prompt`, 'POST', { prompt });
 };
 
 export const updateKnowledgeDeskSettingsProfile = async (
