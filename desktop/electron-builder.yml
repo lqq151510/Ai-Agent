@@ -50,7 +50,7 @@ mac:
   # npm prerelease labels are not valid Apple bundle version values. Keep the
   # user-facing prerelease in package.json while emitting numeric metadata.
   bundleShortVersion: "0.1.0"
-  bundleVersion: "2"
+  bundleVersion: "3"
   category: public.app-category.developer-tools
   target:
     - dmg
