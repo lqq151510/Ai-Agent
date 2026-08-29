@@ -39,6 +39,7 @@ class EmbeddingStoreProviderTest {
                 PersistentInMemoryEmbeddingStore.class,
                 provider.createEmbeddingStore("engineering_memory", 384, true));
         assertInstanceOf(
-                InMemoryEmbeddingStore.class, provider.createEmbeddingStore("semantic_cache", 384));
+                InMemoryEmbeddingStore.class,
+                provider.createEmbeddingStore("semantic_cache", 384));
     }
 }

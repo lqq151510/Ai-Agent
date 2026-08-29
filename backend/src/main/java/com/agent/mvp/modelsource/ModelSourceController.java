@@ -5,8 +5,6 @@ import com.agent.mvp.common.AuthenticatedControllerSupport;
 import com.agent.mvp.modelsource.dto.CreateModelSourceRequest;
 import com.agent.mvp.modelsource.dto.ModelSourceResponse;
 import com.agent.mvp.modelsource.dto.ModelSourceTestResponse;
-import com.agent.mvp.modelsource.dto.PromptTestResponse;
-import com.agent.mvp.modelsource.dto.TestPromptRequest;
 import com.agent.mvp.modelsource.dto.UpdateModelSourceRequest;
 import com.agent.mvp.modelsource.service.ModelSourceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -95,16 +93,5 @@ public class ModelSourceController extends AuthenticatedControllerSupport {
             @PathVariable("id") UUID id, Authentication authentication) {
         AuthenticatedUser user = requireAuthenticatedUser(authentication);
         return modelSourceService.test(user.userId(), id);
-    }
-
-    @PostMapping("/{id}/test-prompt")
-    @Operation(summary = "使用自定义 Prompt 在线测试模型并获取真实回复与 Token")
-    public PromptTestResponse testPrompt(
-            @PathVariable("id") UUID id,
-            @RequestBody(required = false) TestPromptRequest request,
-            Authentication authentication) {
-        AuthenticatedUser user = requireAuthenticatedUser(authentication);
-        String prompt = request != null ? request.prompt() : null;
-        return modelSourceService.testPrompt(user.userId(), id, prompt);
     }
 }

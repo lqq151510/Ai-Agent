@@ -9,7 +9,6 @@ import com.agent.mvp.modelsource.ModelSourceProviderType;
 import com.agent.mvp.modelsource.dto.CreateModelSourceRequest;
 import com.agent.mvp.modelsource.dto.ModelSourceResponse;
 import com.agent.mvp.modelsource.dto.ModelSourceTestResponse;
-import com.agent.mvp.modelsource.dto.PromptTestResponse;
 import com.agent.mvp.modelsource.dto.UpdateModelSourceRequest;
 import com.agent.mvp.modelsource.entity.ModelSource;
 import com.agent.mvp.modelsource.repo.ModelSourceRepository;
@@ -172,12 +171,6 @@ public class ModelSourceService {
                 source.getLastCheckStatus(),
                 source.getLastCheckMessage(),
                 source.getLastCheckedAt());
-    }
-
-    public PromptTestResponse testPrompt(UUID userId, UUID sourceId, String prompt) {
-        userProfileService.requireUser(userId);
-        ModelSource source = requireOwnedSource(userId, sourceId);
-        return probeService.testPrompt(source, prompt);
     }
 
     public ModelSource requireOwnedSource(UUID userId, UUID sourceId) {

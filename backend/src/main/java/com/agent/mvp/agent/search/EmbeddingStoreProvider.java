@@ -134,31 +134,27 @@ public class EmbeddingStoreProvider {
         }
         if (localVectorStore.getDirectory() == null || localVectorStore.getDirectory().isBlank()) {
             log.warn(
-                    "Desktop vector persistence is enabled but no directory is configured; using an"
-                            + " in-memory index for '{}'.",
+                    "Desktop vector persistence is enabled but no directory is configured; using an in-memory index for '{}'.",
                     tableName);
             return new InMemoryEmbeddingStore<>();
         }
         if (!tableName.matches("[a-z0-9_]+")) {
             log.warn(
-                    "Desktop vector persistence rejects unsafe index name '{}'; using an in-memory"
-                            + " index.",
+                    "Desktop vector persistence rejects unsafe index name '{}'; using an in-memory index.",
                     tableName);
             return new InMemoryEmbeddingStore<>();
         }
 
         try {
-            Path snapshot =
-                    Path.of(localVectorStore.getDirectory())
-                            .toAbsolutePath()
-                            .normalize()
-                            .resolve(tableName + ".json");
+            Path snapshot = Path.of(localVectorStore.getDirectory())
+                    .toAbsolutePath()
+                    .normalize()
+                    .resolve(tableName + ".json");
             log.info("Using persistent desktop vector index at {}", snapshot);
             return new PersistentInMemoryEmbeddingStore(snapshot);
         } catch (InvalidPathException ex) {
             log.warn(
-                    "Desktop vector persistence directory is invalid; using an in-memory index for"
-                            + " '{}'. Error: {}",
+                    "Desktop vector persistence directory is invalid; using an in-memory index for '{}'. Error: {}",
                     tableName,
                     ex.getMessage());
             return new InMemoryEmbeddingStore<>();

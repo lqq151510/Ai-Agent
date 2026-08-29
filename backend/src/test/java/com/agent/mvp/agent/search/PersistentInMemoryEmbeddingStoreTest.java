@@ -27,13 +27,8 @@ class PersistentInMemoryEmbeddingStoreTest {
 
         assertTrue(Files.size(snapshot) > 0);
         PersistentInMemoryEmbeddingStore restored = new PersistentInMemoryEmbeddingStore(snapshot);
-        var matches =
-                restored.search(
-                                EmbeddingSearchRequest.builder()
-                                        .queryEmbedding(embedding)
-                                        .maxResults(1)
-                                        .build())
-                        .matches();
+        var matches = restored.search(
+                EmbeddingSearchRequest.builder().queryEmbedding(embedding).maxResults(1).build()).matches();
 
         assertEquals(1, matches.size());
         assertEquals("persistent local retrieval entry", matches.get(0).embedded().text());
@@ -45,23 +40,18 @@ class PersistentInMemoryEmbeddingStoreTest {
         Files.writeString(snapshot, "not valid embedding-store json");
 
         PersistentInMemoryEmbeddingStore restored = new PersistentInMemoryEmbeddingStore(snapshot);
-        var matches =
-                restored.search(
-                                EmbeddingSearchRequest.builder()
-                                        .queryEmbedding(Embedding.from(new float[] {1.0f, 0.0f}))
-                                        .maxResults(1)
-                                        .build())
-                        .matches();
+        var matches = restored.search(
+                EmbeddingSearchRequest.builder()
+                        .queryEmbedding(Embedding.from(new float[] {1.0f, 0.0f}))
+                        .maxResults(1)
+                        .build())
+                .matches();
 
         assertTrue(matches.isEmpty());
         assertFalse(Files.exists(snapshot));
         try (Stream<Path> files = Files.list(temporaryDirectory)) {
             assertTrue(
-                    files.anyMatch(
-                            path ->
-                                    path.getFileName()
-                                            .toString()
-                                            .startsWith("engineering_memory.json.corrupt-")));
+                    files.anyMatch(path -> path.getFileName().toString().startsWith("engineering_memory.json.corrupt-")));
         }
     }
 }

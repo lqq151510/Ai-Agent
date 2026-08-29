@@ -2,7 +2,6 @@ package com.agent.mvp.modelsource.service;
 
 import com.agent.mvp.config.AppProperties;
 import com.agent.mvp.modelsource.ModelSourceProviderType;
-import com.agent.mvp.modelsource.dto.PromptTestResponse;
 import com.agent.mvp.modelsource.entity.ModelSource;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,7 +14,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -31,19 +29,11 @@ import reactor.netty.http.client.HttpClient;
 public class ModelSourceProbeService {
 
     private final AppProperties appProperties;
-    private final ModelUsageService modelUsageService;
     private final WebClient webClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ModelSourceProbeService(AppProperties appProperties) {
-        this(appProperties, null);
-    }
-
-    @Autowired
-    public ModelSourceProbeService(
-            AppProperties appProperties, ModelUsageService modelUsageService) {
         this.appProperties = appProperties;
-        this.modelUsageService = modelUsageService;
         // SSRF mitigation: explicitly disable redirect following
         HttpClient httpClient = HttpClient.create().followRedirect(false);
         this.webClient =
@@ -85,9 +75,7 @@ public class ModelSourceProbeService {
                         .bodyToMono(String.class)
                         .timeout(probeTimeout())
                         .block();
-                return new ProbeResult(
-                        true,
-                        providerType.value().toUpperCase(Locale.ROOT) + " endpoint reachable");
+                return new ProbeResult(true, "OpenAI-compatible endpoint reachable");
             }
 
             get(fullUrl)
@@ -116,123 +104,6 @@ public class ModelSourceProbeService {
             return new ProbeResult(false, ex.getMessage());
         } catch (Exception ex) {
             return new ProbeResult(false, classifyProbeFailure(ex));
-        }
-    }
-
-    public PromptTestResponse testPrompt(ModelSource source, String userPrompt) {
-        long startTime = System.currentTimeMillis();
-        String prompt =
-                (userPrompt == null || userPrompt.isBlank())
-                        ? "你好！请用 20 字以内简短确认你的模型名称并问候。"
-                        : userPrompt.trim();
-
-        try {
-            ModelSourceProviderType providerType =
-                    ModelSourceProviderType.from(source.getProviderType());
-            String baseUrl = normalizeBaseUrl(source.getBaseUrl());
-            String chatUrl = baseUrl + "/chat/completions";
-            validateUrl(chatUrl, providerType);
-
-            String modelName =
-                    source.getDefaultModel() != null && !source.getDefaultModel().isBlank()
-                            ? source.getDefaultModel().trim()
-                            : "gpt-3.5-turbo";
-
-            String responseBody =
-                    post(chatUrl)
-                            .header(
-                                    HttpHeaders.AUTHORIZATION,
-                                    "Bearer " + safeApiKey(source.getApiKey()))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .accept(MediaType.APPLICATION_JSON)
-                            .bodyValue(
-                                    Map.of(
-                                            "model",
-                                            modelName,
-                                            "messages",
-                                            List.of(Map.of("role", "user", "content", prompt)),
-                                            "temperature",
-                                            0.7,
-                                            "max_tokens",
-                                            256,
-                                            "stream",
-                                            false))
-                            .retrieve()
-                            .onStatus(
-                                    HttpStatusCode::is3xxRedirection,
-                                    response ->
-                                            Mono.error(
-                                                    new ProbeException(
-                                                            "Model endpoint returned a redirect")))
-                            .onStatus(
-                                    status -> !status.is2xxSuccessful(),
-                                    response ->
-                                            Mono.error(
-                                                    new ProbeException(
-                                                            "Model endpoint HTTP "
-                                                                    + response.statusCode()
-                                                                            .value())))
-                            .bodyToMono(String.class)
-                            .timeout(Duration.ofSeconds(20))
-                            .block();
-
-            long latencyMs = System.currentTimeMillis() - startTime;
-
-            JsonNode root = objectMapper.readTree(responseBody);
-            String reply =
-                    root.path("choices")
-                            .path(0)
-                            .path("message")
-                            .path("content")
-                            .asText("（模型未返回内容）");
-            JsonNode usage = root.path("usage");
-            int promptTokens = usage.path("prompt_tokens").asInt(prompt.length() / 2);
-            int completionTokens = usage.path("completion_tokens").asInt(reply.length() / 2);
-            int totalTokens = usage.path("total_tokens").asInt(promptTokens + completionTokens);
-
-            // Record real usage log
-            if (modelUsageService != null) {
-                modelUsageService.recordUsage(
-                        source.getUserId(),
-                        source.getId(),
-                        source.getProviderType(),
-                        modelName,
-                        promptTokens,
-                        completionTokens,
-                        latencyMs,
-                        "success",
-                        null);
-            }
-
-            return new PromptTestResponse(
-                    true,
-                    reply,
-                    promptTokens,
-                    completionTokens,
-                    totalTokens,
-                    latencyMs,
-                    modelName,
-                    "调用成功");
-        } catch (Exception ex) {
-            long latencyMs = System.currentTimeMillis() - startTime;
-            String errorMsg = classifyProbeFailure(ex);
-
-            // Record failed attempt
-            if (modelUsageService != null) {
-                modelUsageService.recordUsage(
-                        source.getUserId(),
-                        source.getId(),
-                        source.getProviderType(),
-                        source.getDefaultModel(),
-                        prompt.length() / 2,
-                        0,
-                        latencyMs,
-                        "failed",
-                        errorMsg);
-            }
-
-            return new PromptTestResponse(
-                    false, null, 0, 0, 0, latencyMs, source.getDefaultModel(), errorMsg);
         }
     }
 

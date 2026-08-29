@@ -15,4 +15,3 @@ export { HighlightText } from './HighlightText';
 export { VirtualList } from './VirtualList';
 export { useShouldVirtualize } from './useShouldVirtualize';
 export type { VirtualListProps } from './VirtualList';
-export { UserProfileDrawer } from './UserProfileDrawer';
