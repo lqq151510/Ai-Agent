@@ -311,12 +311,11 @@ const ModelSettings = ({
 
   return (
     <div className="kd-stack">
-      <SettingsHeader title="本机模型配置" description="知识正文只会发送给本机回环地址（localhost / 127.0.0.1 / ::1）的 OpenAI-compatible 聊天模型。" />
+      <SettingsHeader title="模型 API 配置" description="支持接入云端大模型（DeepSeek、OpenAI）及本机大模型，API Key 将加密安全存储。" />
       <div className="kd-model-grid">
         {providers.map((provider) => {
-          const isLocalProvider = provider.providerType === 'local_compatible';
-          const isVerifiedLocalProvider = isLocalProvider && provider.lastCheckStatus === 'ok';
-          const isOrganizationModel = isVerifiedLocalProvider && (profile.summaryModelSourceId === provider.id || (
+          const isVerifiedProvider = provider.lastCheckStatus === 'ok';
+          const isOrganizationModel = isVerifiedProvider && (profile.summaryModelSourceId === provider.id || (
             !profile.summaryModelSourceId && profile.defaultModelSourceId === provider.id
           ));
           const isBusy = busyAction?.endsWith(`:${provider.id}`) ?? false;
@@ -331,17 +330,17 @@ const ModelSettings = ({
                 <dd>{provider.baseUrl}</dd>
                 <dt>密钥状态</dt>
                 <dd>{provider.keyState}</dd>
-                <dt>聊天模型</dt>
+                <dt>模型名称</dt>
                 <dd>{provider.model}</dd>
               </dl>
               {provider.lastCheckMessage ? <p className="kd-text-muted">最近测试：{provider.lastCheckMessage}</p> : null}
               <div className="kd-model-actions">
-                <button disabled={isBusy || !provider.enabled || !isLocalProvider} onClick={() => void runProviderAction(provider, 'test')} type="button">
+                <button disabled={isBusy || !provider.enabled} onClick={() => void runProviderAction(provider, 'test')} type="button">
                   {busyAction === `test:${provider.id}` ? <Loader2 size={15} /> : <KeyRound size={15} />}
-                  {isLocalProvider ? '测试模型' : '仅展示'}
+                  测试连通
                 </button>
-                <button disabled={isBusy || !isVerifiedLocalProvider || isOrganizationModel} onClick={() => void runProviderAction(provider, 'organize')} type="button">
-                  {isOrganizationModel ? '当前整理模型' : isLocalProvider ? '用于整理' : '不可用于本机整理'}
+                <button disabled={isBusy || !isVerifiedProvider || isOrganizationModel} onClick={() => void runProviderAction(provider, 'organize')} type="button">
+                  {isOrganizationModel ? '当前整理模型' : '设为整理模型'}
                 </button>
               </div>
             </article>
@@ -349,38 +348,79 @@ const ModelSettings = ({
         })}
         <form className="kd-model-card kd-local-model-form" onSubmit={(event) => void submitLocalModel(event)}>
           <div className="kd-model-card-head">
-            <strong>添加本机聊天模型</strong>
+            <strong>接入大模型 API</strong>
             <Plus size={17} />
+          </div>
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+            <button
+              type="button"
+              className="kd-btn-subtle"
+              style={{ fontSize: '11px', padding: '2px 8px' }}
+              onClick={() => setDraft({
+                name: 'DeepSeek-V3 官方',
+                baseUrl: 'https://api.deepseek.com/v1',
+                defaultModel: 'deepseek-chat',
+                apiKey: '',
+              })}
+            >
+              DeepSeek
+            </button>
+            <button
+              type="button"
+              className="kd-btn-subtle"
+              style={{ fontSize: '11px', padding: '2px 8px' }}
+              onClick={() => setDraft({
+                name: 'OpenAI 官方',
+                baseUrl: 'https://api.openai.com/v1',
+                defaultModel: 'gpt-4o-mini',
+                apiKey: '',
+              })}
+            >
+              OpenAI
+            </button>
+            <button
+              type="button"
+              className="kd-btn-subtle"
+              style={{ fontSize: '11px', padding: '2px 8px' }}
+              onClick={() => setDraft({
+                name: '本机 Ollama',
+                baseUrl: 'http://127.0.0.1:11434/v1',
+                defaultModel: 'qwen2.5:latest',
+                apiKey: '',
+              })}
+            >
+              本机 Ollama
+            </button>
           </div>
           <label className="kd-field">
             <span>名称</span>
             <input onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} value={draft.name} />
           </label>
           <label className="kd-field">
-            <span>OpenAI-compatible 回环地址</span>
-            <input onChange={(event) => setDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="http://127.0.0.1:11434/v1" value={draft.baseUrl} />
+            <span>API 接口地址 (Base URL)</span>
+            <input onChange={(event) => setDraft((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="例如 https://api.deepseek.com/v1" value={draft.baseUrl} />
           </label>
           <label className="kd-field">
-            <span>聊天模型名</span>
-            <input onChange={(event) => setDraft((current) => ({ ...current, defaultModel: event.target.value }))} placeholder="例如 qwen3.5:9b" value={draft.defaultModel} />
+            <span>模型名称 (Model Name)</span>
+            <input onChange={(event) => setDraft((current) => ({ ...current, defaultModel: event.target.value }))} placeholder="例如 deepseek-chat 或 gpt-4o-mini" value={draft.defaultModel} />
           </label>
           <label className="kd-field">
-            <span>API Key（多数本机服务可留空）</span>
-            <input onChange={(event) => setDraft((current) => ({ ...current, apiKey: event.target.value }))} placeholder="留空将使用本机占位密钥" type="password" value={draft.apiKey} />
+            <span>API Key (密钥将安全加密入库)</span>
+            <input onChange={(event) => setDraft((current) => ({ ...current, apiKey: event.target.value }))} placeholder="sk-••••••••••••••••" type="password" value={draft.apiKey} />
           </label>
           {formError ? <div className="kd-form-error">{formError}</div> : null}
           <div className="kd-model-actions">
             <button disabled={busyAction === 'create'} type="submit">
               {busyAction === 'create' ? <Loader2 size={15} /> : <Plus size={15} />}
-              保存、测试并设为整理模型
+              保存并测试模型
             </button>
           </div>
         </form>
         {providers.length === 0 ? (
           <EmptyBlock
             icon={KeyRound}
-            title="尚未配置本机聊天模型"
-            description="填写本机 OpenAI-compatible 服务和聊天模型名后，先测试，再用于整理资料。"
+            title="尚未配置大模型 API"
+            description="填写云端 DeepSeek / OpenAI 或本机 OpenAI-compatible 服务后，即可用于知识库智能整理与问答。"
           />
         ) : null}
       </div>
@@ -398,14 +438,14 @@ const AiPreferenceSettings = ({
   profile: KnowledgeDeskSnapshot['profile'];
   onOrganizeModeChange: (mode: 'manual' | 'auto') => Promise<void>;
 }) => {
-  const verifiedLocalProviders = providers.filter(
-    (provider) => provider.providerType === 'local_compatible' && provider.lastCheckStatus === 'ok',
+  const verifiedProviders = providers.filter(
+    (provider) => provider.lastCheckStatus === 'ok',
   );
-  const organizationProvider = verifiedLocalProviders.find((provider) => provider.id === profile.summaryModelSourceId)
-    ?? verifiedLocalProviders.find((provider) => provider.id === profile.defaultModelSourceId)
-    ?? verifiedLocalProviders.find((provider) => provider.isDefault)
-    ?? verifiedLocalProviders[0];
-  const defaultModel = organizationProvider ? `${organizationProvider.provider} / ${organizationProvider.model}` : '未配置本机模型';
+  const organizationProvider = verifiedProviders.find((provider) => provider.id === profile.summaryModelSourceId)
+    ?? verifiedProviders.find((provider) => provider.id === profile.defaultModelSourceId)
+    ?? verifiedProviders.find((provider) => provider.isDefault)
+    ?? verifiedProviders[0];
+  const defaultModel = organizationProvider ? `${organizationProvider.provider} / ${organizationProvider.model}` : '未配置模型 (使用本地启发式整理)';
   const [isSaving, setIsSaving] = useState(false);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
 
@@ -423,10 +463,10 @@ const AiPreferenceSettings = ({
 
   return (
     <div className="kd-stack">
-      <SettingsHeader title="AI 整理偏好" description="摘要和标签来自同一个已测试的本机聊天模型；未配置或调用失败时会保留规则整理，不会外发正文。" />
+      <SettingsHeader title="AI 整理偏好" description="摘要和标签由已配置的云端 (DeepSeek / OpenAI) 或本机大模型生成；未配置时使用本地启发式引擎。" />
       <section className="kd-preference-list">
         <PreferenceRow label="知识整理模型" value={defaultModel} />
-        <PreferenceRow label="摘要和标签" value="一次本机模型请求生成" />
+        <PreferenceRow label="摘要和标签" value="大模型一次请求生成" />
         <PreferenceRow label="模型失败回退" value="本地规则整理" />
       </section>
       <section className="kd-settings-split">
@@ -444,10 +484,10 @@ const AiPreferenceSettings = ({
 
 const PrivacySettings = ({ privacyMode }: { privacyMode: string }) => (
   <div className="kd-stack">
-    <SettingsHeader title="隐私与数据控制" description="Knowledge Desk 的整理链路只会调用已经保存的本机回环模型，不会自动回退到云端模型。" />
+    <SettingsHeader title="隐私与数据控制" description="API 密钥均经由 AES-GCM 加密存储于本地数据库，不会明文泄露。" />
     <section className="kd-preference-list">
-      <PreferenceRow label="当前偏好" value={privacyMode === 'cloud_first' ? '云端优先（整理链路仍保持本机）' : '本机优先'} />
-      <PreferenceRow label="整理内容边界" value="仅 localhost / 127.0.0.1 / ::1" />
+      <PreferenceRow label="当前偏好" value={privacyMode === 'cloud_first' ? '云端优先' : '本地优先'} />
+      <PreferenceRow label="模型调用边界" value="仅向用户主动配置并测试通过的 API 发起请求" />
       <PreferenceRow label="模型失败处理" value="不上传正文，回退本地规则" />
     </section>
     <section className="kd-danger-zone">

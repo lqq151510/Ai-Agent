@@ -71,17 +71,23 @@ public class KnowledgeOrganizerService {
     public OrganizeResult organize(KnowledgeItem item) {
         String cleaned = normalize(item.getRawContent());
         try {
-            ModelSource source = resolveLocalModelSource(item.getUserId());
+            ModelSource source = resolveModelSource(item.getUserId());
             if (source != null) {
                 modelSourceProbeService.validateForUse(source);
                 ModelOrganizeResponse modelResult = requestLocalOrganization(source, item, cleaned);
+                String strategy =
+                        ModelSourceProviderType.LOCAL_COMPATIBLE
+                                        .value()
+                                        .equalsIgnoreCase(source.getProviderType())
+                                ? "local_model"
+                                : "cloud_model";
                 return new OrganizeResult(
                         cleaned,
                         modelResult.summary(),
                         modelResult.tags(),
                         detectLanguage(cleaned),
                         countWords(cleaned),
-                        "local_model");
+                        strategy);
             }
             return organizeHeuristically(item, cleaned, "heuristic");
         } catch (RuntimeException ex) {
@@ -99,7 +105,7 @@ public class KnowledgeOrganizerService {
                 cleaned, summary, tags, language, wordCount, organizationStrategy);
     }
 
-    private ModelSource resolveLocalModelSource(UUID userId) {
+    private ModelSource resolveModelSource(UUID userId) {
         if (userId == null
                 || modelSourceRepository == null
                 || userProfileService == null
@@ -108,13 +114,13 @@ public class KnowledgeOrganizerService {
             return null;
         }
         UserProfile profile = userProfileService.getOrCreate(userId);
-        ModelSource summarySource = eligibleLocalSource(userId, profile.getSummaryModelSourceId());
+        ModelSource summarySource = eligibleModelSource(userId, profile.getSummaryModelSourceId());
         return summarySource != null
                 ? summarySource
-                : eligibleLocalSource(userId, profile.getDefaultModelSourceId());
+                : eligibleModelSource(userId, profile.getDefaultModelSourceId());
     }
 
-    private ModelSource eligibleLocalSource(UUID userId, UUID sourceId) {
+    private ModelSource eligibleModelSource(UUID userId, UUID sourceId) {
         if (sourceId == null) {
             return null;
         }
@@ -122,9 +128,6 @@ public class KnowledgeOrganizerService {
         if (source == null
                 || !userId.equals(source.getUserId())
                 || !Boolean.TRUE.equals(source.getEnabled())
-                || !ModelSourceProviderType.LOCAL_COMPATIBLE
-                        .value()
-                        .equalsIgnoreCase(source.getProviderType())
                 || !ModelSourceCheckStatus.OK.value().equalsIgnoreCase(source.getLastCheckStatus())
                 || source.getDefaultModel() == null
                 || source.getDefaultModel().isBlank()) {

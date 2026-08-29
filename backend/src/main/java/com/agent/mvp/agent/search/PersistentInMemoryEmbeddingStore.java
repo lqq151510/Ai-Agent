@@ -21,12 +21,13 @@ import org.slf4j.LoggerFactory;
  * File-backed fallback for the desktop vector index.
  *
  * <p>The store keeps LangChain4j's in-memory search behavior while writing a complete JSON snapshot
- * atomically after mutations. A malformed snapshot is preserved as a diagnostic artifact and replaced
- * by an empty in-memory index so the desktop backend can still start.
+ * atomically after mutations. A malformed snapshot is preserved as a diagnostic artifact and
+ * replaced by an empty in-memory index so the desktop backend can still start.
  */
 final class PersistentInMemoryEmbeddingStore implements EmbeddingStore<TextSegment> {
 
-    private static final Logger log = LoggerFactory.getLogger(PersistentInMemoryEmbeddingStore.class);
+    private static final Logger log =
+            LoggerFactory.getLogger(PersistentInMemoryEmbeddingStore.class);
 
     private final Path storeFile;
     private InMemoryEmbeddingStore<TextSegment> delegate;
@@ -64,7 +65,8 @@ final class PersistentInMemoryEmbeddingStore implements EmbeddingStore<TextSegme
     }
 
     @Override
-    public synchronized List<String> addAll(List<Embedding> embeddings, List<TextSegment> embedded) {
+    public synchronized List<String> addAll(
+            List<Embedding> embeddings, List<TextSegment> embedded) {
         List<String> ids = delegate.addAll(embeddings, embedded);
         persist();
         return ids;
@@ -112,16 +114,19 @@ final class PersistentInMemoryEmbeddingStore implements EmbeddingStore<TextSegme
     }
 
     private void preserveCorruptSnapshot(Path path, RuntimeException cause) {
-        Path backup = path.resolveSibling(path.getFileName() + ".corrupt-" + System.currentTimeMillis());
+        Path backup =
+                path.resolveSibling(path.getFileName() + ".corrupt-" + System.currentTimeMillis());
         try {
             Files.move(path, backup, StandardCopyOption.REPLACE_EXISTING);
             log.warn(
-                    "Recovered desktop vector index from malformed snapshot; preserved corrupt file at {}. Cause: {}",
+                    "Recovered desktop vector index from malformed snapshot; preserved corrupt file"
+                            + " at {}. Cause: {}",
                     backup,
                     cause.getMessage());
         } catch (IOException moveFailure) {
             log.warn(
-                    "Failed to read desktop vector index at {} and could not preserve it. Cause: {}",
+                    "Failed to read desktop vector index at {} and could not preserve it. Cause:"
+                            + " {}",
                     path,
                     moveFailure.getMessage());
         }
@@ -137,13 +142,15 @@ final class PersistentInMemoryEmbeddingStore implements EmbeddingStore<TextSegme
         Path temporaryFile = null;
         try {
             Files.createDirectories(parent);
-            temporaryFile = Files.createTempFile(parent, storeFile.getFileName().toString(), ".tmp");
+            temporaryFile =
+                    Files.createTempFile(parent, storeFile.getFileName().toString(), ".tmp");
             delegate.serializeToFile(temporaryFile);
             moveSnapshot(temporaryFile, storeFile);
             temporaryFile = null;
         } catch (IOException | RuntimeException ex) {
             log.warn(
-                    "Desktop vector index mutation remains in memory because snapshot persistence failed at {}. Cause: {}",
+                    "Desktop vector index mutation remains in memory because snapshot persistence"
+                            + " failed at {}. Cause: {}",
                     storeFile,
                     ex.getMessage());
         } finally {
@@ -151,7 +158,9 @@ final class PersistentInMemoryEmbeddingStore implements EmbeddingStore<TextSegme
                 try {
                     Files.deleteIfExists(temporaryFile);
                 } catch (IOException ignored) {
-                    log.debug("Could not remove temporary desktop vector index snapshot: {}", temporaryFile);
+                    log.debug(
+                            "Could not remove temporary desktop vector index snapshot: {}",
+                            temporaryFile);
                 }
             }
         }
