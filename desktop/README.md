@@ -60,7 +60,7 @@ desktop/
 
 | 依赖 | 版本要求 | 说明 |
 | --- | --- | --- |
-| Node.js | 18+（推荐 20 LTS） | 构建 Electron + React Renderer |
+| Node.js | 22（发布/打包基线） | 构建 Electron + React Renderer；开发环境也推荐保持一致 |
 | npm | 随 Node.js | 包管理 |
 | JDK | 21 | 编译后端 + jlink 生成 JRE |
 | Maven | 3.8+ | 后端构建 |
@@ -193,9 +193,9 @@ cd ..
 ## 构建产物路径
 
 ```
-desktop/release/                       # 仅正式 macOS 候选使用
-├── AI Agent-0.1.0-beta.2-mac-arm64.dmg
-├── AI Agent-0.1.0-beta.2-mac-arm64.zip
+desktop/release/                       # 发布或个人 Beta 打包输出；正式候选必须通过 release gate
+├── AI Agent-<version>-mac-<arch>.dmg
+├── AI Agent-<version>-mac-<arch>.zip
 ├── release-manifest.json
 └── SHA256SUMS
 

@@ -97,6 +97,23 @@ class CodeToolServiceTest {
     }
 
     @Test
+    void shouldSearchWithJavaFallbackWhenRipgrepCannotStart() throws Exception {
+        Path sourceDirectory = Files.createDirectory(workspaceRoot.resolve("src"));
+        Files.writeString(sourceDirectory.resolve("Example.java"), "class UniqueSearchNeedle {}\n");
+
+        CodeToolService.ToolCallOutput output =
+                newService(
+                                new ObjectMapper(),
+                                processBuilder -> {
+                                    throw new java.io.IOException("Cannot run program \\\"rg\\\"");
+                                })
+                        .searchCode("UniqueSearchNeedle", "*.java", 10);
+
+        assertEquals("SUCCESS", output.status());
+        assertEquals("src/Example.java:1:class UniqueSearchNeedle {}", output.output());
+    }
+
+    @Test
     void shouldReturnExplicitMessageWhenSearchHasNoMatches() {
         CodeToolService.ToolCallOutput output =
                 newService().searchCode("value-that-does-not-exist-7f109d", "", 0);
@@ -293,9 +310,14 @@ class CodeToolServiceTest {
     }
 
     private CodeToolService newService(ObjectMapper objectMapper) {
+        return newService(objectMapper, ProcessBuilder::start);
+    }
+
+    private CodeToolService newService(
+            ObjectMapper objectMapper, CodeToolService.ProcessStarter processStarter) {
         AppProperties properties = new AppProperties();
         properties.setWorkspaceRoot(workspaceRoot.toString());
-        return new CodeToolService(properties, objectMapper);
+        return new CodeToolService(properties, objectMapper, processStarter);
     }
 
     private static final class FailingObjectMapper extends ObjectMapper {

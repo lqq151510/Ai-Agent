@@ -2,20 +2,17 @@
 
 ## Summary
 - 主线按 **Desktop App + CLI** 收敛，Web 不恢复为一等入口。
-- **Phase 0（稳定化）+ Phase 1（Tool 闭环）+ Phase 2（Computer Use 骨架）** 已落地于 `b204c55`。
-- 当前状态：构建/类型检查链路已通。**安全修复分支** (`appmod/security-fix-20260620053955`) 领先 main 4 commits，已完成 Spring Boot 3.5.14 升级 + Java 25 兼容 + 编译错误修复，待合并回 main。
-- 剩余工作是 Computer Use 从"能用"到"可控" (Phase 2b)，以及后续 Automations (Phase 3)。
-- 后端测试因需要 Docker/Testcontainers 环境，`mvn test` 暂时跳过，不影响代码逻辑验证。
+- 当前主线：`main@66a1a67`；`v0.1.0-beta.3` 已作为 macOS Apple Silicon personal prerelease 发布。
+- Beta.3 可下载，但它不是 CI 全绿的发布点：release-version 检出组件版本不一致，Ubuntu backend-quality 的两个 `CodeToolServiceTest` 搜索用例失败。既有 tag 与资产不回写、不移动；修复后以新的版本候选完成收口。
+- 已合并的近期能力包括云端 DeepSeek/OpenAI/兼容端点配置、无模型本地启发式整理，以及 macOS 本地运行/打包脚本。
+- 当前优先级：先完成发布工程收口与真实安装包回归，再继续 Computer Use Phase 2b 和 Automations Phase 3。
 
 ## 已完成
 
-### 安全修复与构建稳定化（`appmod/security-fix-20260620053955`，当前分支）✅
-- [x] Spring Boot 3.5.14 升级 + 关键依赖版本覆写（commons-io, beanutils, nimbus-jose）
-- [x] 全模块 java.version=21 统一设置
-- [x] Settings customize provider 修复
-- [x] 前端编译 lint/TS 错误修复
-- [x] 后端 SandboxManager 在 Java 25 下的注入修复
-- [x] Docker Compose 配置验证通过（仅 milvus-dc.yml version 字段废弃警告）
+### 当前发布与本地化能力 ✅
+- [x] `v0.1.0-beta.3` tag 与 GitHub prerelease 已创建，绑定 `main@66a1a67`。
+- [x] DeepSeek、OpenAI 与 OpenAI-compatible 端点可由用户在 Knowledge Desk Settings 中配置；未配置或不可连接模型时基础知识管理保留本地降级能力。
+- [x] 提供 `scripts/run-macos-local.sh` 与 `scripts/package-macos-local.sh`，用于 macOS 本机零模型运行与本地打包。
 
 ### Phase 0 — 稳定化（`b204c55`）✅
 - [x] `WindowManager.loadContent()`：dev 加载本地 renderer dev URL，packaged 加载 `dist/renderer/index.html`，不再走远程页面。
@@ -42,7 +39,14 @@
 
 ## 待做
 
-### Phase 2b — Computer Use 可控化（下一优先级）
+### P0 — 发布工程收口（当前最高优先级）
+
+- [x] 本地工作树已统一 Desktop、CLI、local-service、根 Maven、backend 与 bug-sentinel-starter 为 `0.1.0-beta.3`；`./scripts/check-release-version.sh` 通过（2026-08-30）。
+- [x] 本地工作树已为 `CodeToolService` 增加 `rg` 无法启动时的 Java 回退，并通过完整 backend `clean verify`；GitHub CI 仍待提交后重新触发并确认全绿。
+- [ ] 对新候选重新下载 DMG/ZIP/SHA256SUMS，复算校验和，并验证 tag、commit 与资产绑定。
+- [ ] 在隔离用户目录中完成真实 `.app` GUI 回归：启动、导入、浏览、搜索、无模型降级、退出清理和重启持久化。
+
+### Phase 2b — Computer Use 可控化（P0/P1 后）
 
 从"能用"做成"可控"：
 
@@ -60,24 +64,17 @@
 - [ ] review queue：自动任务产出可审查 diff，确认后才合并
 - [ ] 不与主工作区直接交互
 
-## Test Plan 状态
+## 验证状态与验收计划
 
-### 基线已通过 ✅
-- `./scripts/check-consistency.sh`
-- `docker compose config --quiet && docker compose config --services`
+### 当前已通过 ✅
+- `/bin/bash ./scripts/check-consistency.sh`（2026-08-30）。
+- 本机完整 Maven reactor：`bug-sentinel-starter` 4 tests、`backend` 345 tests，均为 0 failures、0 errors；backend 9 skipped，JaCoCo 行 76.51%（5598/7317）、分支 62.83%（1667/2653），门禁通过（2026-08-30，未提交工作树）。
+- `CodeToolServiceTest` 包含 `rg` 无法启动时 Java 回退的新增覆盖；Spotless、`/bin/bash ./scripts/check-consistency.sh`、`./scripts/check-release-version.sh` 与 `git diff --check` 均通过（2026-08-30，未提交工作树）。
+- Beta.3 CI 中 `desktop-test`、`python-service-test`、`deployment-config` 通过；这不替代整条主 CI。
 
-### Java 编译 ✅
-- `mvn -q -DskipTests compile` 通过
-
-### TypeScript 编译 ✅
-- `cd ts-cli && npm run typecheck && npm run build`
-- `cd local-service && npx tsc -p tsconfig.json --noEmit`
-- `cd desktop && npx tsc -p tsconfig.main.json --noEmit`
-- `cd desktop/src/renderer && npx tsc -p tsconfig.app.json --noEmit && npx tsc -p tsconfig.node.json --noEmit && npm run build`
-
-### 待验证（需要手动环境）
-- `mvn test`：需要本机 Docker/Testcontainers，当前跳过，非代码逻辑问题。
-- Smoke 测试：启动 renderer + Electron，确认本地 UI 加载 → 创建 thread → chat → `client_tool_call → approval/tool execution → tool_result` 闭环。
+### 当前失败 / 待收口 ⚠️
+- GitHub CI/CD Pipeline #47：历史失败仍为 344 tests、2 failures、0 errors、9 skipped；本地修复尚未提交/推送，不能将本地验证写为 Beta.3 主 CI 已绿。
+- 发布资产下载回验、真实 GUI、原生退出清理和重启持久化仍需在新候选上执行。
 - Computer Use：验证权限拒绝提示 → 截图成功 → 受控窗口操作 → 禁止未知窗口自动点击。
 
 ## Assumptions

@@ -2,7 +2,7 @@
 
 ## 一、 核心特性与架构模式
 
-本系统专为 macOS（Apple Silicon M 系列及 Intel 架构）设计，提供了 **100% 零外部大模型依赖的 Local-First 纯本地闭环**：
+本系统支持在 macOS（Apple Silicon M 系列及 Intel 架构）上运行，并提供 **零外部大模型依赖的 Local-First 纯本地闭环**；构建脚本会按当前机器架构生成对应的本地包：
 
 ```mermaid
 flowchart LR
@@ -36,4 +36,4 @@ flowchart LR
 ```bash
 ./scripts/package-macos-local.sh
 ```
-- **执行效果**：使用 `jlink` 自动裁剪内嵌 Java 21 JRE（无需用户电脑安装 Java），并使用 Electron Builder 输出原生 macOS arm64 `.dmg` 安装包，输出位于 `desktop/release/`。
+- **执行效果**：使用 `jlink` 自动裁剪内嵌 Java 21 JRE（无需用户电脑安装 Java），并使用 Electron Builder 输出当前机器架构的 macOS `.dmg` 安装包，输出位于 `desktop/release/`。这是本机构建脚本，不替代 `release-check-macos.sh` 的签名、公证、Gatekeeper 和 GitHub Release 下载回验。

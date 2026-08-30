@@ -6,6 +6,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -14,6 +15,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -22,17 +26,28 @@ import org.springframework.stereotype.Service;
 public class CodeToolService {
 
     private static final int MAX_READ_LINES = 400;
+    private static final int MAX_SEARCH_OUTPUT_LINES = 200;
 
     private final Path workspaceRoot;
     private final Path workspaceRealRoot;
     private final ObjectMapper objectMapper;
+    private final ProcessStarter processStarter;
 
+    @Autowired
     public CodeToolService(
             com.agent.mvp.config.AppProperties appProperties, ObjectMapper objectMapper) {
+        this(appProperties, objectMapper, ProcessBuilder::start);
+    }
+
+    CodeToolService(
+            com.agent.mvp.config.AppProperties appProperties,
+            ObjectMapper objectMapper,
+            ProcessStarter processStarter) {
         this.workspaceRoot =
                 Paths.get(appProperties.getWorkspaceRoot()).toAbsolutePath().normalize();
         this.workspaceRealRoot = resolveRealWorkspaceRoot(this.workspaceRoot);
         this.objectMapper = objectMapper;
+        this.processStarter = processStarter;
     }
 
     public ToolCallOutput listRepoTree(String relativePath, int depth) {
@@ -77,9 +92,22 @@ public class CodeToolService {
     public ToolCallOutput searchCode(String query, String glob, int maxResults) {
         long start = System.currentTimeMillis();
         String safeQuery = query == null ? "" : query.trim();
+        int safeMaxResults = Math.max(1, Math.min(maxResults, 100));
         if (safeQuery.isBlank()) {
             return new ToolCallOutput(
                     "searchCode", toJson(args("query", query)), "ERROR", 0, "Query is empty");
+        }
+
+        Pattern queryPattern;
+        try {
+            queryPattern = Pattern.compile(safeQuery);
+        } catch (PatternSyntaxException ex) {
+            return new ToolCallOutput(
+                    "searchCode",
+                    toJson(args("query", query, "glob", glob, "maxResults", maxResults)),
+                    "ERROR",
+                    System.currentTimeMillis() - start,
+                    "Invalid search pattern: " + ex.getDescription());
         }
 
         List<String> command =
@@ -90,7 +118,7 @@ public class CodeToolService {
                                 "--no-heading",
                                 "--hidden",
                                 "--max-count",
-                                String.valueOf(Math.max(1, Math.min(maxResults, 100))),
+                                String.valueOf(safeMaxResults),
                                 "--regexp",
                                 safeQuery,
                                 "--",
@@ -103,8 +131,15 @@ public class CodeToolService {
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
 
+        Process process;
         try {
-            Process process = pb.start();
+            process = processStarter.start(pb);
+        } catch (IOException ex) {
+            return searchCodeWithJavaFallback(
+                    query, glob, maxResults, safeMaxResults, queryPattern, start);
+        }
+
+        try {
             boolean finished = process.waitFor(8, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
@@ -144,6 +179,89 @@ public class CodeToolService {
                     "ERROR",
                     System.currentTimeMillis() - start,
                     "searchCode failed: " + ex.getMessage());
+        }
+    }
+
+    private ToolCallOutput searchCodeWithJavaFallback(
+            String query,
+            String glob,
+            int maxResults,
+            int safeMaxResults,
+            Pattern queryPattern,
+            long start) {
+        try {
+            java.nio.file.PathMatcher globMatcher = createGlobMatcher(glob);
+            List<String> matches = new ArrayList<>();
+            try (var paths = Files.walk(workspaceRealRoot)) {
+                java.util.Iterator<Path> iterator = paths.iterator();
+                while (iterator.hasNext() && matches.size() < MAX_SEARCH_OUTPUT_LINES) {
+                    Path file = iterator.next();
+                    if (!Files.isRegularFile(file)) {
+                        continue;
+                    }
+
+                    Path relativePath = workspaceRealRoot.relativize(file);
+                    if (!matchesGlob(globMatcher, glob, relativePath)) {
+                        continue;
+                    }
+                    appendMatchingLines(file, relativePath, queryPattern, safeMaxResults, matches);
+                }
+            }
+
+            String output = matches.isEmpty() ? "No matches found." : String.join("\n", matches);
+            return new ToolCallOutput(
+                    "searchCode",
+                    toJson(args("query", query, "glob", glob, "maxResults", maxResults)),
+                    "SUCCESS",
+                    System.currentTimeMillis() - start,
+                    output);
+        } catch (Exception ex) {
+            return new ToolCallOutput(
+                    "searchCode",
+                    toJson(args("query", query, "glob", glob, "maxResults", maxResults)),
+                    "ERROR",
+                    System.currentTimeMillis() - start,
+                    "searchCode failed: " + ex.getMessage());
+        }
+    }
+
+    private java.nio.file.PathMatcher createGlobMatcher(String glob) {
+        if (glob == null || glob.isBlank()) {
+            return null;
+        }
+        return FileSystems.getDefault().getPathMatcher("glob:" + glob);
+    }
+
+    private boolean matchesGlob(
+            java.nio.file.PathMatcher globMatcher, String glob, Path relativePath) {
+        if (globMatcher == null || globMatcher.matches(relativePath)) {
+            return true;
+        }
+        return !glob.contains("/") && globMatcher.matches(relativePath.getFileName());
+    }
+
+    private void appendMatchingLines(
+            Path file,
+            Path relativePath,
+            Pattern queryPattern,
+            int maxResults,
+            List<String> matches) {
+        try (java.util.stream.Stream<String> lines = Files.lines(file, StandardCharsets.UTF_8)) {
+            java.util.Iterator<String> iterator = lines.iterator();
+            int lineNumber = 1;
+            int matchesInFile = 0;
+            while (iterator.hasNext()
+                    && matches.size() < MAX_SEARCH_OUTPUT_LINES
+                    && matchesInFile < maxResults) {
+                String line = iterator.next();
+                if (queryPattern.matcher(line).find()) {
+                    matches.add(relativePath + ":" + lineNumber + ":" + line);
+                    matchesInFile++;
+                }
+                lineNumber++;
+            }
+        } catch (IOException ignored) {
+            // Skip unreadable or non-UTF-8 files, matching ripgrep's text-oriented behavior.
         }
     }
 
@@ -279,6 +397,12 @@ public class CodeToolService {
         } catch (IOException ex) {
             throw new IllegalStateException("Workspace root does not exist: " + root, ex);
         }
+    }
+
+    @FunctionalInterface
+    interface ProcessStarter {
+
+        Process start(ProcessBuilder processBuilder) throws IOException;
     }
 
     private Map<String, Object> args(Object... pairs) {

@@ -1,12 +1,12 @@
 # macOS Beta 发行清单
 
-当前候选版本由 `desktop/package.json` 作为单一版本源，所有可发行组件必须与它一致。当前计划版本为 `0.1.0-beta.2`，对应 Git tag 为 `v0.1.0-beta.2`。
+当前候选版本由 `desktop/package.json` 作为单一版本源，所有可发行组件必须与它一致。`v0.1.0-beta.3` 已发布并指向 `66a1a67`，但该发布的版本一致性检查和主 CI 未收口：Desktop 为 Beta.3，而其他发行组件仍为 Beta.2，backend-quality 另有两个搜索测试失败。后续候选版本应在 P0 修复完成后确定；不得移动 Beta.3 tag 或替换其已有资产。
 
-macOS bundle 的 Apple 版本字段单独受数值格式约束：本候选把 npm 版本 `0.1.0-beta.2` 映射为 `CFBundleShortVersionString=0.1.0` 和仓库控制的 `CFBundleVersion=2`。后续每个候选必须保留前者与 npm 版本的三段数字核心一致，并在 `desktop/electron-builder.yml` 中单调递增后者；不要使用可重跑的 GitHub run number。
+macOS bundle 的 Apple 版本字段单独受数值格式约束：npm 预发布版本应映射为同一三段数字核心的 `CFBundleShortVersionString`，并使用仓库控制、单调递增的 `CFBundleVersion`。后续每个候选必须保持这一映射；不要使用可重跑的 GitHub run number。
 
 ## 发布模式
 
-- 带 `-beta.` 的个人 Beta 使用本机生成、明确未签名/未公证的 DMG 和 ZIP，并手工创建 GitHub prerelease。它适合个人演示和作品集下载，但首次打开可能需要用户在 macOS 中确认信任。
+- 带 `-beta.` 的个人 Beta 使用本机生成、ad-hoc 签名但未 Developer ID 签名/未公证的 DMG 和 ZIP，并手工创建 GitHub prerelease。它适合个人演示和作品集下载，但首次打开可能需要用户在 macOS 中确认信任。
 - 不带 `-beta.` 的正式版本才进入 `macOS Release Candidate` GitHub Actions job，严格执行 Developer ID 签名、公证、staple、Gatekeeper 和下载回验。
 - 个人 Beta 只放宽 Apple 信任链，不放宽版本一致性、源码 tag、依赖审计、测试、构建、校验和及真实启动 smoke。
 
@@ -54,9 +54,11 @@ APPLE_TEAM_ID=<team-id> \
 
 ## 个人 Beta 触发与审核
 
+> `v0.1.0-beta.3` 是已发布但工程门禁未收口的历史例外，不代表以下清单已满足。下一候选必须按本节完整执行并重新获得 CI 证据。
+
 1. 确认 `./scripts/check-release-version.sh` 和 `./scripts/release-check.sh dev` 通过，且 `main` 的 GitHub CI 全绿。
 2. 在干净源码提交上用 Node.js 22 运行 `RELEASE_CHECK_DESKTOP_DISTRIBUTABLE=true RELEASE_CHECK_PREPARE_DESKTOP_BACKEND=true ./scripts/release-check.sh dev`，生成本次 DMG、ZIP、`release-manifest.json` 和 `SHA256SUMS`。
-3. 创建与 `desktop/package.json` 匹配、且指向该提交的精确 tag，例如 `v0.1.0-beta.2`；禁止移动或覆盖旧 tag。
+3. 创建与 `desktop/package.json` 匹配、且指向该提交的精确 tag，例如 `v<version>`；禁止移动或覆盖旧 tag。
 4. 创建 GitHub prerelease，上传本次四个资产，并从 GitHub 重新下载核对 SHA-256、manifest commit、资产名和嵌入式 JRE。
 5. 在 Apple Silicon macOS 上挂载 DMG，复制并启动应用，确认嵌入式后端就绪、登录/知识库主流程可用。未签名个人 Beta 的信任提示属于已知分发限制，不得写成已签名或已公证。
 

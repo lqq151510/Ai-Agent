@@ -6,9 +6,8 @@ AI Agent Knowledge Desk is a local-first desktop knowledge application and a ful
 
 - The macOS installer bundles the backend JAR and a Java runtime, and starts a local H2 database automatically. Normal desktop use does not require a separate Java, PostgreSQL, or Docker installation.
 - Knowledge capture, import, search, tagging, review, backup, and restore work without a model provider.
-- AI organization and assistant features require a user-configured local OpenAI-compatible endpoint on `localhost`, `127.0.0.1`, or `::1`.
-- The backend contains OpenAI, DeepSeek, OpenRouter, Anthropic, and generic OpenAI-compatible provider integrations, but the current Knowledge Desk desktop flow deliberately exposes only local providers. Third-party cloud API configuration is not part of this personal Beta.
-- API keys stored by the backend use encrypted model-source persistence and are excluded from Knowledge Desk backups.
+- AI 知识整理可使用用户主动配置并通过连接测试的 DeepSeek 官方 API、OpenAI 官方 API 或 OpenAI-compatible 端点；未配置或模型不可用时，基础知识管理保持可用并降级到本地整理能力。
+- API Key 使用加密的模型来源持久化；演示、日志和备份均不得暴露真实密钥。当前桌面设置页聚焦知识整理，不把尚未完成的检索问答或完整多云路由包装为已交付能力。
 
 Repository components:
 
@@ -95,7 +94,7 @@ This also writes release evidence under `desktop/release/`:
 - `release-manifest.json`: version, git commit, artifact sizes/checksums, and macOS app trust status
 - `SHA256SUMS`: publishable SHA-256 checksums for generated installers
 
-This diagnostic must not be published. A real macOS release requires an exact version tag, a clean source tree, GitHub Packages access, and the signing/notarization environment variables. Use the canonical gate (or `desktop/scripts/build-all.sh --release`, which delegates to it):
+该诊断产物不能作为正式签名候选发布。个人 Beta 的 ad-hoc 发布必须走单独的 Beta checklist，并如实声明未公证边界；Developer ID 签名和公证的正式 macOS 发行仍要求精确版本 tag、干净源码、GitHub Packages access 与以下环境变量。使用规范门禁（或委托给它的 `desktop/scripts/build-all.sh --release`）：
 
 ```bash
 GITHUB_ACTOR=<github-user> GITHUB_TOKEN=<packages-read-token> \
@@ -107,7 +106,9 @@ APPLE_TEAM_ID=<team-id> \
 
 ### macOS Beta candidate workflow
 
-Personal `-beta.` tags use a locally built, explicitly unsigned DMG/ZIP and a manually reviewed GitHub prerelease. The tag must still match `desktop/package.json`, point to a commit reachable from `origin/main`, and be created only after the local release gate and main-branch CI pass.
+Personal `-beta.` tags use a locally built, ad-hoc-signed (not Developer-ID-signed or notarized) DMG/ZIP and a manually reviewed GitHub prerelease. The tag must still match `desktop/package.json`, point to a commit reachable from `origin/main`, and be created only after the local release gate and main-branch CI pass.
+
+`v0.1.0-beta.3` 是已经发布的历史 personal prerelease，但其主 CI 未收口：发布组件版本不一致，且 backend-quality 有两个搜索测试失败。不要移动该 tag 或替换资产；后续候选必须重新满足上述版本一致性和 CI 门禁。
 
 Non-beta tags enter the `macOS Release Candidate` GitHub Actions job. That formal path requires the GitHub `release` Environment, Developer ID signing credentials, notarization, Gatekeeper validation, checksums, and release-manifest verification before it creates a draft release. Personal Beta convenience does not weaken the formal release gate.
 
