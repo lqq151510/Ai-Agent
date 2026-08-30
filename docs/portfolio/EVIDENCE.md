@@ -34,9 +34,9 @@ Release 页面公开列出了 DMG 与 ZIP 的 SHA-256；本页更新时未重新
 
 当前 Beta.3 Release 的存在不等于主 CI 通过，也不等于工作流已构建、签名或公证该 Release 的资产。
 
-### 2.2 当前 P0 本地工作树验证（2026-08-30，未提交，非 CI/发布证据）
+### 2.2 当前 P0 提交与 CI 验证（2026-08-30，`main@9686f46`，非发布资产证据）
 
-源代码边界：`main@66a1a67` 之上的本地工作树改动，包括全部发布组件的 Beta.3 版本对齐和 `CodeToolService` 的 `rg` 启动失败 Java 回退。该边界不是不可变提交，不能用作 Beta.3 tag、Release 或主 CI 的质量表述。
+源代码边界：已推送的 `main@9686f4683f9b404902ff185ac29db2aa5fcc42a2`，包括全部发布组件的 Beta.3 版本对齐和 `CodeToolService` 的 `rg` 启动失败 Java 回退。CI/CD Pipeline #33293965797 绑定该提交并全绿；这仍不能用作 Beta.3 既有 tag、Release 资产或 GUI 验收的质量表述。
 
 命令：
 
@@ -49,7 +49,7 @@ mvn --settings .mvn/settings.xml -pl backend -am clean verify
 git diff --check
 ```
 
-结果：所有命令通过。发布版本门禁确认 Desktop、CLI、local-service、根 Maven、backend 与 bug-sentinel-starter 均为 `0.1.0-beta.3`。Maven reactor 中 `bug-sentinel-starter` 4 tests、0 failures、0 errors；`backend` 345 tests、0 failures、0 errors、9 skipped。JaCoCo bundle 门禁通过，行 5598/7317（76.51%），分支 1667/2653（62.83%）。新增的 `CodeToolServiceTest` 覆盖 `rg` 无法启动时的 Java 回退。
+结果：所有命令通过。发布版本门禁确认 Desktop、CLI、local-service、根 Maven、backend 与 bug-sentinel-starter 均为 `0.1.0-beta.3`。Maven reactor 中 `bug-sentinel-starter` 4 tests、0 failures、0 errors；`backend` 345 tests、0 failures、0 errors、9 skipped。JaCoCo bundle 门禁通过，行 5598/7317（76.51%），分支 1667/2653（62.83%）。新增的 `CodeToolServiceTest` 覆盖 `rg` 无法启动时的 Java 回退。CI/CD Pipeline #33293965797 的 release-preflight、backend-quality、desktop-test、python-service-test 和 deployment-config 均通过。
 
 ### 2.3 历史开发基线（2026-08-27，main@344b740，非 Beta.3 发布证据）
 
@@ -174,14 +174,14 @@ JaCoCo 在 Maven `verify` 阶段对 `backend` bundle 执行以下门禁：
 - Lines covered ratio：至少 65%
 - Branches covered ratio：至少 60%
 
-### 3.1 当前 P0 本地工作树（2026-08-30，未提交）
+### 3.1 当前 P0 提交（2026-08-30，`main@9686f46`）
 
-`main@66a1a67` 之上的本地工作树执行 `clean verify` 后，`backend/target/site/jacoco/jacoco.xml` 汇总为：
+`main@9686f46` 执行 `clean verify` 后，`backend/target/site/jacoco/jacoco.xml` 汇总为：
 
 - Lines：5598 covered / 7317 total，76.51%
 - Branches：1667 covered / 2653 total，62.83%
 
-这些数字仅描述此次未提交的后端工作树验证；它们不证明 Beta.3 tag、已发布安装包或主 CI。
+这些数字描述该提交的后端验证，且其 CI backend-quality 已通过；它们仍不证明 Beta.3 tag 或已发布安装包。
 
 ### 3.2 历史开发基线（2026-08-27，main@344b740）
 
@@ -241,7 +241,7 @@ gh release download v0.1.0-beta.3 \
 - 数字必须带范围、日期和来源边界，例如“2026-08-27 `main@344b740` 的 backend 344 个测试”，不说“项目共有 344 个测试”。
 - 不把历史 `main@344b740` 测试或覆盖率归因给 Beta.3、Release 或已发布安装包；创建新候选后仍要在该提交上复跑。
 - 历史 225 个测试是 2026-08-20 的验证快照，不能与 2026-08-27 的 344 个后端测试相加，也不能默认归因给 Beta.3。
-- 发布必须带版本和平台，例如“macOS arm64 Beta.3”。当前不能说“Beta.3 主 CI 全绿”或“Beta.3 发布物全量后端测试通过”；可精确表述为“2026-08-30 未提交工作树的 backend 345 个测试通过”。
+- 发布必须带版本和平台，例如“macOS arm64 Beta.3”。当前不能说“Beta.3 发布物全量后端测试通过”；可精确表述为“2026-08-30 `main@9686f46` 的 backend 345 个测试通过，且该提交主 CI 全绿”。
 - 签名必须带边界，例如“ad-hoc signed personal Beta”。
 - “独立启动”指不要求另装 Java/PostgreSQL/Docker，不代表所有 AI 能力都不需要模型配置、网络或外部服务。AI 整理可使用用户配置的 DeepSeek、OpenAI 或 OpenAI-compatible 端点；未配置或不可连接时，普通知识管理走本地降级能力。
 - 任何性能百分比都要有脚本、数据集、环境和原始结果，否则不写入简历。

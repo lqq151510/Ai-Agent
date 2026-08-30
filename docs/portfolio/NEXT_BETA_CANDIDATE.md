@@ -19,19 +19,19 @@ Beta.3 相对上一候选新增了云端模型提供方配置与知识整理调�
 | Git/tag | `main`、`origin/main`、`v0.1.0-beta.3` 均指向 `66a1a67` | 证明源码/tag 对齐，不替代构建验证 |
 | Release | GitHub Pre-release 已发布，资产为 DMG、ZIP、SHA256SUMS | 未在本页更新时下载并复算校验和 |
 | macOS RC | workflow 成功；签名构建 job 为 skipped | 不证明 CI 产出了签名或公证的候选安装包 |
-| 主 CI | CI/CD Pipeline #47 为 failure | 不可对外宣称“主 CI 全绿” |
-| release preflight | #47 失败时组件版本不一致；本地 P0 工作树已对齐为 Beta.3 | 仍须提交并让新的 CI run 通过 |
-| backend-quality | #47 为 344 tests、2 failures、0 errors、9 skipped；本地 P0 工作树完整验证为 345 tests、0 failures、0 errors、9 skipped | 本地结果尚未绑定不可变提交，不能表述为 Beta.3 CI 质量结论 |
+| 主 CI | CI/CD Pipeline #33293965797 绑定 `9686f46` 并全绿 | 证明该修复提交通过主 CI；不替代发布资产或 GUI 验收 |
+| release preflight | #47 失败时组件版本不一致；`9686f46` 的新版预检通过 | 发布组件版本门禁已恢复 |
+| backend-quality | #47 为 344 tests、2 failures、0 errors、9 skipped；`9686f46` 的 Ubuntu backend-quality 通过 | 质量结论绑定修复提交，不回写到 Beta.3 tag/资产 |
 | GUI 回归 | 尚无当前 Beta.3 的真实人工 GUI 回归证据 | 不写为完整 macOS 发布验收 |
 
-CI 的已知失败包括：
+CI 的历史失败与修复结果：
 
-1. #47 中 `desktop/package.json` 是 `0.1.0-beta.3`，但 `ts-cli`、`local-service`、根 Maven POM、backend 与 bug-sentinel-starter 仍是 `0.1.0-beta.2`。
-2. #47 中 `CodeToolServiceTest` 的两个搜索用例在 Ubuntu CI 失败；服务当时直接调用宿主机 `rg`。该前置条件已在本地 P0 工作树修复为“优先 `rg`、无法启动时 Java 回退”，仍须由新的 Linux CI run 验证。
+1. #47 中 `desktop/package.json` 是 `0.1.0-beta.3`，但 `ts-cli`、`local-service`、根 Maven POM、backend 与 bug-sentinel-starter 仍是 `0.1.0-beta.2`；`9686f46` 已完成对齐，新的 release preflight 通过。
+2. #47 中 `CodeToolServiceTest` 的两个搜索用例在 Ubuntu CI 失败；服务当时直接调用宿主机 `rg`。`9686f46` 改为“优先 `rg`、无法启动时 Java 回退”，新的 Ubuntu backend-quality 已通过。
 
-## 当前源码的 P0 本地验证（2026-08-30，未提交工作树）
+## 当前源码的 P0 验证（2026-08-30，`9686f46`）
 
-以下验证针对 `main@66a1a67` 之上的本机工作树改动，不代表 Beta.3 发布物、不可变提交或主 CI 的完整验收：
+以下本机验证针对已推送的 `main@9686f46`，且同一提交的 CI/CD Pipeline #33293965797 已通过；它们仍不代表 Beta.3 已发布安装包的完整验收：
 
 ```bash
 /bin/bash ./scripts/check-consistency.sh
@@ -42,7 +42,7 @@ mvn --settings .mvn/settings.xml -pl backend -am clean verify
 git diff --check
 ```
 
-结果：所有命令通过。版本门禁确认 Desktop、CLI、local-service、根 Maven、backend 和 bug-sentinel-starter 均为 `0.1.0-beta.3`；完整 Maven reactor 中 starter 4 tests、backend 345 tests，均为 0 failures、0 errors，backend 9 skipped。JaCoCo 行 76.51%（5598/7317）、分支 62.83%（1667/2653），门禁通过。`CodeToolServiceTest` 22 项包含 `rg` 无法启动时 Java 回退的覆盖。
+结果：所有命令通过。版本门禁确认 Desktop、CLI、local-service、根 Maven、backend 和 bug-sentinel-starter 均为 `0.1.0-beta.3`；完整 Maven reactor 中 starter 4 tests、backend 345 tests，均为 0 failures、0 errors，backend 9 skipped。JaCoCo 行 76.51%（5598/7317）、分支 62.83%（1667/2653），门禁通过。`CodeToolServiceTest` 22 项包含 `rg` 无法启动时 Java 回退的覆盖。CI/CD Pipeline #33293965797 的 release-preflight、backend-quality、desktop-test、python-service-test 与 deployment-config 也全部通过。
 
 ## 历史开发基线（2026-08-27，main@344b740）
 
@@ -54,11 +54,9 @@ git diff --check
 
 ## Beta.3 发布后仍需收口的验证
 
-1. 提交本地 Beta.3 版本对齐与 `CodeToolService` 回退修复，并确认新的 CI/CD Pipeline 全绿；单独保存 run URL 与日志摘要。
-2. 在新的、不可变提交上重新记录版本门禁、完整 backend `clean verify` 与 JaCoCo 数据；本页的本地工作树数字不得替代该记录。
-3. 下载新候选的 DMG、ZIP 和 SHA256SUMS，重新计算校验值并确认 tag/commit/资产一致。
-4. 从下载后的 `.app` 做隔离 `--user-data-dir` GUI 回归：启动、基础导入、浏览、搜索、标签、归档、复习、退出后后端清理、重启后数据恢复。
-5. 分别验证无模型降级和一个真实但脱敏的 DeepSeek/OpenAI/兼容 API 配置；不得记录或展示真实 API Key。
+1. 下载新候选的 DMG、ZIP 和 SHA256SUMS，重新计算校验值并确认 tag/commit/资产一致。
+2. 从下载后的 `.app` 做隔离 `--user-data-dir` GUI 回归：启动、基础导入、浏览、搜索、标签、归档、复习、退出后后端清理、重启后数据恢复。
+3. 分别验证无模型降级和一个真实但脱敏的 DeepSeek/OpenAI/兼容 API 配置；不得记录或展示真实 API Key。
 
 Beta.3 的 tag 和 Release 已创建，不能通过修改 tag 或替换资产来“补绿”。修复版本门禁和 CI 后，应创建新的版本候选，并把新的质量数字绑定到重新验证后的不可变提交。
 

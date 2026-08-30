@@ -41,8 +41,8 @@
 
 ### P0 — 发布工程收口（当前最高优先级）
 
-- [x] 本地工作树已统一 Desktop、CLI、local-service、根 Maven、backend 与 bug-sentinel-starter 为 `0.1.0-beta.3`；`./scripts/check-release-version.sh` 通过（2026-08-30）。
-- [x] 本地工作树已为 `CodeToolService` 增加 `rg` 无法启动时的 Java 回退，并通过完整 backend `clean verify`；GitHub CI 仍待提交后重新触发并确认全绿。
+- [x] `9686f46` 已统一 Desktop、CLI、local-service、根 Maven、backend 与 bug-sentinel-starter 为 `0.1.0-beta.3`；`./scripts/check-release-version.sh` 通过（2026-08-30）。
+- [x] `9686f46` 已为 `CodeToolService` 增加 `rg` 无法启动时的 Java 回退；GitHub CI/CD Pipeline #33293965797 已全绿。
 - [ ] 对新候选重新下载 DMG/ZIP/SHA256SUMS，复算校验和，并验证 tag、commit 与资产绑定。
 - [ ] 在隔离用户目录中完成真实 `.app` GUI 回归：启动、导入、浏览、搜索、无模型降级、退出清理和重启持久化。
 
@@ -68,12 +68,13 @@
 
 ### 当前已通过 ✅
 - `/bin/bash ./scripts/check-consistency.sh`（2026-08-30）。
-- 本机完整 Maven reactor：`bug-sentinel-starter` 4 tests、`backend` 345 tests，均为 0 failures、0 errors；backend 9 skipped，JaCoCo 行 76.51%（5598/7317）、分支 62.83%（1667/2653），门禁通过（2026-08-30，未提交工作树）。
-- `CodeToolServiceTest` 包含 `rg` 无法启动时 Java 回退的新增覆盖；Spotless、`/bin/bash ./scripts/check-consistency.sh`、`./scripts/check-release-version.sh` 与 `git diff --check` 均通过（2026-08-30，未提交工作树）。
+- `9686f46` 本机完整 Maven reactor：`bug-sentinel-starter` 4 tests、`backend` 345 tests，均为 0 failures、0 errors；backend 9 skipped，JaCoCo 行 76.51%（5598/7317）、分支 62.83%（1667/2653），门禁通过（2026-08-30）。
+- `CodeToolServiceTest` 包含 `rg` 无法启动时 Java 回退的新增覆盖；Spotless、`/bin/bash ./scripts/check-consistency.sh`、`./scripts/check-release-version.sh` 与 `git diff --check` 均通过（2026-08-30）。
+- GitHub CI/CD Pipeline #33293965797：`release-preflight`、`backend-quality`、`desktop-test`、`python-service-test` 与 `deployment-config` 全部通过（2026-08-30）。
 - Beta.3 CI 中 `desktop-test`、`python-service-test`、`deployment-config` 通过；这不替代整条主 CI。
 
 ### 当前失败 / 待收口 ⚠️
-- GitHub CI/CD Pipeline #47：历史失败仍为 344 tests、2 failures、0 errors、9 skipped；本地修复尚未提交/推送，不能将本地验证写为 Beta.3 主 CI 已绿。
+- GitHub CI/CD Pipeline #47：历史失败为 344 tests、2 failures、0 errors、9 skipped；该历史 run 已被 `9686f46` 的 CI/CD Pipeline #33293965797 全绿结果替代。
 - 发布资产下载回验、真实 GUI、原生退出清理和重启持久化仍需在新候选上执行。
 - Computer Use：验证权限拒绝提示 → 截图成功 → 受控窗口操作 → 禁止未知窗口自动点击。
 
