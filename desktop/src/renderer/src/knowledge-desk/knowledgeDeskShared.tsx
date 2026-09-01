@@ -40,9 +40,22 @@ export const ContextBlock = ({
   </section>
 );
 
-export const MetricCard = ({ label, value, detail }: { label: string; value: string; detail: string }) => (
+export const MetricCard = ({
+  label,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon?: ElementType;
+}) => (
   <article className="kd-metric">
-    <span>{label}</span>
+    <div className="kd-metric-head">
+      <span>{label}</span>
+      {Icon ? <Icon className="kd-metric-icon" size={16} /> : null}
+    </div>
     <strong>{value}</strong>
     <p>{detail}</p>
   </article>

@@ -113,6 +113,10 @@ export class BackendManager {
     ];
 
     this.process = spawn(this.jrePath, args, {
+      // Finder and `open` do not guarantee a writable process working directory.
+      // The backend still has a relative Logback file appender, so anchor it in
+      // the Desktop runtime directory instead of inheriting `/` from the launcher.
+      cwd: this.dataDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,

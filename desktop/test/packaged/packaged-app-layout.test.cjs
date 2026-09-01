@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const asar = require('@electron/asar');
 
 const packageDir = process.env.DESKTOP_PACKAGE_DIR;
 
@@ -34,5 +35,17 @@ test('development package keeps the local runtime outside app.asar', () => {
   assert.ok(
     (fs.statSync(packagedJava).mode & 0o111) !== 0,
     'the bundled JRE java binary must remain executable',
+  );
+
+  const rendererIndex = asar.extractFile(appAsar, 'dist/renderer/index.html').toString('utf8');
+  assert.match(
+    rendererIndex,
+    /(?:src|href)="\.\/assets\//,
+    'the file:// renderer must reference Vite assets relative to index.html',
+  );
+  assert.doesNotMatch(
+    rendererIndex,
+    /(?:src|href)="\/assets\//,
+    'the file:// renderer must not reference Vite assets from the filesystem root',
   );
 });

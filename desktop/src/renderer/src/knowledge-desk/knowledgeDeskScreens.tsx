@@ -279,10 +279,10 @@ export const DashboardPage = ({
       </section>
 
       <div className="kd-stat-grid">
-        <MetricCard label="今日新增" value={String(inboxItems.length)} detail={isLoading ? '正在同步本地知识库' : '来自收集箱最新条目'} />
-        <MetricCard label="整理完成" value={formatCount(dashboard.readyItems)} detail="已进入可检索知识库" />
-        <MetricCard label="待处理收集箱" value={formatCount(dashboard.inboxItems)} detail={`${dashboard.failedItems} 条需要重试`} />
-        <MetricCard label="知识总量" value={formatCount(dashboard.totalItems)} detail="网页 / 本机文档 / 摘录统一索引" />
+        <MetricCard icon={Plus} label="今日新增" value={String(inboxItems.length)} detail={isLoading ? '正在同步本地知识库' : '来自收集箱最新条目'} />
+        <MetricCard icon={CheckCircle2} label="整理完成" value={formatCount(dashboard.readyItems)} detail="已进入可检索知识库" />
+        <MetricCard icon={Inbox} label="待处理收集箱" value={formatCount(dashboard.inboxItems)} detail={`${dashboard.failedItems} 条需要重试`} />
+        <MetricCard icon={BookOpen} label="知识总量" value={formatCount(dashboard.totalItems)} detail="网页 / 本机文档 / 摘录统一索引" />
       </div>
 
       <button className="kd-review-dashboard-card" onClick={onOpenReview} type="button">

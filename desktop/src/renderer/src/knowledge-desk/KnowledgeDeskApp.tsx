@@ -179,9 +179,45 @@ const KnowledgeDeskApp = () => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isCommandSearchShortcut(event)) return;
-      event.preventDefault();
-      setActivePage('search');
+      // ⌘K or Ctrl+K for search
+      if (isCommandSearchShortcut(event)) {
+        event.preventDefault();
+        setActivePage('search');
+        return;
+      }
+
+      // ⌘, for Settings
+      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
+        event.preventDefault();
+        setActivePage('settings');
+        return;
+      }
+
+      // ⌘N for New Note / Snippet
+      if ((event.metaKey || event.ctrlKey) && (event.key === 'n' || event.key === 'N') && !event.shiftKey) {
+        event.preventDefault();
+        setImportMode('snippet');
+        return;
+      }
+
+      // ⌘1 ~ ⌘7 for Quick Navigation
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
+        const pageMap: Record<string, MainPage> = {
+          '1': 'dashboard',
+          '2': 'assistant',
+          '3': 'inbox',
+          '4': 'library',
+          '5': 'review',
+          '6': 'archive',
+          '7': 'search',
+        };
+        const targetPage = pageMap[event.key];
+        if (targetPage) {
+          event.preventDefault();
+          setActivePage(targetPage);
+          return;
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);

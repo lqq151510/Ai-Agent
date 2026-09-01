@@ -69,14 +69,20 @@ release_port "${BACKEND_PORT}"
 # 4. 初始化本地数据目录
 mkdir -p "${DATA_DIR}/db" "${DATA_DIR}/logs" "${DATA_DIR}/workspace"
 
-# 5. 配置环境变量 (纯本地桌面 Profile)
+# 5. 配置环境变量 (纯本地桌面 Profile，优先从 .env 读取配置)
+if [[ -f "${ROOT_DIR}/.env" ]]; then
+    set -a
+    source "${ROOT_DIR}/.env"
+    set +a
+fi
+
 export SPRING_PROFILES_ACTIVE="desktop"
 export SERVER_PORT="${BACKEND_PORT}"
-export OPENAI_BASE_URL="http://127.0.0.1:18080/mock-disabled"
-export OPENAI_MODEL="heuristic-local"
-export OPENAI_API_KEY="sk-local-mac-desktop"
-export JWT_SECRET="local-desktop-jwt-secret-key-32chars-min-auto"
-export SECURITY_DB_ENCRYPTION_KEY="local-desktop-db-encryption-key-32chars"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.agnes-ai.cn/v1}"
+export OPENAI_MODEL="${OPENAI_MODEL:-agnes-2.5-flash}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-sk-local-mac-desktop}"
+export JWT_SECRET="${JWT_SECRET:-local-desktop-jwt-secret-key-32chars-min-auto}"
+export SECURITY_DB_ENCRYPTION_KEY="${SECURITY_DB_ENCRYPTION_KEY:-local-desktop-db-encryption-key-32chars}"
 
 BACKEND_PID=""
 FRONTEND_PID=""
@@ -97,9 +103,10 @@ cleanup() {
 trap cleanup EXIT
 trap 'cleanup; exit 0' SIGINT SIGTERM
 
-# 6. 启动 Spring Boot 后端
+# 6. 确保本地 Starter 模块就绪并启动 Spring Boot 后端
 log_info "正在启动 Spring Boot Desktop 后端 (嵌入式 H2 + 本地向量索引)..."
 cd "${ROOT_DIR}"
+mvn -pl bug-sentinel-starter install -DskipTests -q
 mvn -pl backend spring-boot:run -Dspring-boot.run.profiles=desktop > "${DATA_DIR}/logs/backend-console.log" 2>&1 &
 BACKEND_PID=$!
 

@@ -10,21 +10,24 @@
   --layout-sidebar-w: 240px;
   --layout-context-w: 290px;
 
-  /* Fonts */
-  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+  /* Fonts - Apple Human Interface Design System */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Plus Jakarta Sans", "Inter", "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
 
   /* Surfaces (backgrounds) */
-  --surface-page: #f6f8fa;
+  --surface-page: #f8fafc;
   --surface-card: #ffffff;
-  --surface-page-alpha-40: rgba(246, 248, 250, 0.4);
-  --surface-page-alpha-78: rgba(246, 248, 250, 0.78);
-  --surface-page-alpha-85: rgba(246, 248, 250, 0.85);
+  --surface-page-alpha-40: rgba(248, 250, 252, 0.4);
+  --surface-page-alpha-78: rgba(248, 250, 252, 0.78);
+  --surface-page-alpha-85: rgba(248, 250, 252, 0.85);
   --surface-card-alpha-8: rgba(255, 255, 255, 0.08);
   --surface-card-alpha-90: rgba(255, 255, 255, 0.9);
-  --surface-secondary: #f6f8fa;
-  --surface-tertiary: #eff1f3;
-  --surface-accent-subtle: #f8fafd;
+  --surface-sidebar-glass: rgba(246, 248, 250, 0.75);
+  --surface-topbar-glass: rgba(255, 255, 255, 0.82);
+  --surface-modal-glass: rgba(255, 255, 255, 0.88);
+  --surface-secondary: #f4f6f8;
+  --surface-tertiary: #edf0f3;
+  --surface-accent-subtle: #f0f7ff;
   --surface-hover: rgba(0, 0, 0, 0.035);
   --surface-active: rgba(0, 0, 0, 0.055);
   --surface-disabled: #e1e4e6;
@@ -214,6 +217,9 @@ body {
     --surface-page-alpha-85: rgba(13, 17, 23, 0.85);
     --surface-card-alpha-8: rgba(22, 27, 34, 0.08);
     --surface-card-alpha-90: rgba(22, 27, 34, 0.9);
+    --surface-sidebar-glass: rgba(13, 17, 23, 0.78);
+    --surface-topbar-glass: rgba(22, 27, 34, 0.84);
+    --surface-modal-glass: rgba(22, 27, 34, 0.92);
     --surface-secondary: #0d1117;
     --surface-tertiary: #21262d;
     --surface-accent-subtle: rgba(56, 139, 253, 0.1);
@@ -332,6 +338,9 @@ body.dark {
   --surface-page-alpha-85: rgba(13, 17, 23, 0.85);
   --surface-card-alpha-8: rgba(22, 27, 34, 0.08);
   --surface-card-alpha-90: rgba(22, 27, 34, 0.9);
+  --surface-sidebar-glass: rgba(13, 17, 23, 0.78);
+  --surface-topbar-glass: rgba(22, 27, 34, 0.84);
+  --surface-modal-glass: rgba(22, 27, 34, 0.92);
   --surface-secondary: #0d1117;
   --surface-tertiary: #21262d;
   --surface-accent-subtle: rgba(56, 139, 253, 0.1);
