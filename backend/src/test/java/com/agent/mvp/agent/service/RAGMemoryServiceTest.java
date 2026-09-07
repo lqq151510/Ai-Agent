@@ -319,36 +319,46 @@ class RAGMemoryServiceTest {
                         "Thread-C");
 
         // 1. Thread A starts and reaches the store critical section
-        threadA.start();
-        assertTrue(aInsideStore.await(2, java.util.concurrent.TimeUnit.SECONDS));
+        try {
+            threadA.start();
+            assertTrue(aInsideStore.await(2, java.util.concurrent.TimeUnit.SECONDS));
 
-        // 2. Thread B starts while A is inside and blocks waiting on the stripe lock
-        threadB.start();
-        Thread.sleep(80);
+            // 2. Thread B starts while A is inside, deterministic barrier: wait until B transitions
+            // to BLOCKED on stripe lock
+            threadB.start();
+            awaitThreadState(threadB, Thread.State.BLOCKED, 2000);
 
-        // 3. Let Thread A fail and terminate
-        letAFail.countDown();
-        threadA.join(2000);
-        org.junit.jupiter.api.Assertions.assertNotNull(threadAException.get());
-        assertTrue(
-                threadAException.get().getCause() != null
-                        && threadAException
-                                .get()
-                                .getCause()
-                                .getMessage()
-                                .contains("Simulated failure for thread A"));
+            // 3. Let Thread A fail and terminate
+            letAFail.countDown();
+            threadA.join(2000);
+            assertFalse(threadA.isAlive(), "Thread A must have terminated cleanly");
+            org.junit.jupiter.api.Assertions.assertNotNull(threadAException.get());
+            assertTrue(
+                    threadAException.get().getCause() != null
+                            && threadAException
+                                    .get()
+                                    .getCause()
+                                    .getMessage()
+                                    .contains("Simulated failure for thread A"));
 
-        // 4. Thread B now unblocks, acquires the lock, and enters the store critical section
-        assertTrue(bInsideStore.await(2, java.util.concurrent.TimeUnit.SECONDS));
+            // 4. Thread B now unblocks, acquires the lock, and enters the store critical section
+            assertTrue(bInsideStore.await(2, java.util.concurrent.TimeUnit.SECONDS));
 
-        // 5. While Thread B is INSIDE the store critical section, Thread C arrives!
-        threadC.start();
-        Thread.sleep(80); // C attempts to acquire the lock and must block
+            // 5. While Thread B is INSIDE the store critical section, Thread C arrives!
+            // Deterministic barrier: wait until C transitions to BLOCKED on the same stripe lock
+            threadC.start();
+            awaitThreadState(threadC, Thread.State.BLOCKED, 2000);
 
-        // 6. Release Thread B to complete successfully
-        letBFinish.countDown();
-        threadB.join(2000);
-        threadC.join(2000);
+            // 6. Release Thread B to complete successfully
+            letBFinish.countDown();
+            threadB.join(2000);
+            threadC.join(2000);
+            assertFalse(threadB.isAlive(), "Thread B must have terminated cleanly");
+            assertFalse(threadC.isAlive(), "Thread C must have terminated cleanly");
+        } finally {
+            letAFail.countDown();
+            letBFinish.countDown();
+        }
 
         // Assertions
         assertTrue(
@@ -364,6 +374,25 @@ class RAGMemoryServiceTest {
                 "Store should be invoked twice: once for failed A, once for successful B; C must"
                         + " skip");
         assertTrue(service.isAlreadyIngested(itemId, content));
+    }
+
+    private static void awaitThreadState(Thread thread, Thread.State expectedState, long timeoutMs)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (thread.getState() != expectedState) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError(
+                        "Thread "
+                                + thread.getName()
+                                + " did not reach "
+                                + expectedState
+                                + " within "
+                                + timeoutMs
+                                + "ms, current state: "
+                                + thread.getState());
+            }
+            Thread.sleep(5);
+        }
     }
 
     private static RAGMemoryService service(EmbeddingStoreProvider provider) {

@@ -31,7 +31,7 @@
   2. **端到端可靠性设计**：
      - **Producer 端**：`KnowledgeIngestionProducer` 投递消息后执行 `future.get(2, TimeUnit.SECONDS)` 同步等待 Broker ACK 确认；若未配置 Kafka 或投递超时/异常，自动退避提交至后端独立的 `taskExecutor` 线程池异步执行向量切片入库，兼顾非阻塞响应与消息不丢。
      - **Consumer 端**：`KnowledgeIngestionConsumer` 消费消息前先调用 `ragMemoryService.isAlreadyIngested(...)` 进行基于 `itemId` 与内容哈希的幂等校验，若已处理直接跳过；消费失败时**显式重新抛出 `RuntimeException`**，交由 Spring Kafka 容器的 `DefaultErrorHandler` 执行重试与死信投递。
-  3. **防重复（幂等消费）**：在 `RAGMemoryService` 中维护 Caffeine 幂等去重缓存（24h TTL），基于 SHA-256 内容摘要与进程内基于 `itemId` 的并发互斥锁（Double-checked in-flight lock），有效抑制本地异步降级与 Consumer 重试时的重复切片写入。
+  3. **防重复（幂等消费）与单实例并发边界**：在 `RAGMemoryService` 中维护 Caffeine 幂等去重缓存（24h TTL），基于 SHA-256 内容摘要与基于 `itemId` 的 128 固定槽位条带锁（Striped Lock）实现进程内互斥（Double-checked locking），有效抑制本地异步降级与 Consumer 重试时的单实例并发写入。**明确说明边界**：条带锁仅保证**单服务实例进程内**的多线程互斥；若在多节点分布式集群部署，需进一步依赖 Redis 分布式锁（如 Redisson）或数据库唯一约束（`itemId` + `content_sha256`），这是独立的分布式架构扩展项。
 
 ### Q4：Kafka 消费失败如何处理？死信队列（DLT）怎么设计的？
 - **回答要点**：
@@ -39,7 +39,7 @@
   - 配置 `ExponentialBackOff`（初始 1s，乘数 2.0，最大 2 次重试），对临时网络抖动或向量库短暂超时执行重试。
   - 将 `IllegalArgumentException` 等不可重试异常标记为非重试直接进入死信队列；
   - 超过重试次数后，消息被路由至 `retrieval-task-topic.DLT` 死信队列，保障主消费链路不被毒丸消息（Poison Pill）阻塞，并支持后续报警排查与重放。
-  - **实事求是说明边界**：当前已完成 Spring Kafka DLT 路由规则配置与单元测试验证（精准断言目标 Partition、Key、Value 与 Topic.DLT 匹配），尚未接入生产级物理 Kafka Broker 进行真机注入与集群演练。
+  - **实事求是说明边界与独立验收项**：当前已完成 Spring Kafka DLT 路由规则配置与单元测试验证（精准断言目标 Topic.DLT、Partition、Key 与 Value 匹配）；**真实物理 Broker 重试与 DLT 投递演练（包括真实集群故障注入、网络抖动、毒丸消息真实落盘与补偿重放）属于独立的后续集成验收项**，单元测试不代表物理环境演练已闭环。
 
 ---
 
@@ -73,7 +73,8 @@
      RRF(d) = \sum_{m \in M} \frac{1}{k + r_m(d)}
      \]
      其中 \(k=60\) 是平滑常数，用于抑制头部极小排名的过度主导。
-  3. **基准验证与工程权衡**：在自建评测套件（8 篇典型技术文档、13 组测试查询）中，RRF 混合检索的 Top-3 召回率达 **92.3%**（优于纯关键词的 84.6%），MRR 为 0.8718（优于关键词 0.8327）。虽然因为 \(k=60\) 平滑常数的存在，MRR 略低于纯密集向量的 0.8942，但它有效改善了纯向量在面对生僻英文专有名词（如 `efConstruction`、`HMAC-SHA256`）时的语义漂移问题，工程鲁棒性更优。
+  3. **规则模拟评测与口径边界**：在包含 8 篇典型技术文档、13 组测试查询的固定规则模拟评测集（`RAGEvaluationBenchmarkTest`）中，使用人工生成的关键词与模拟语义排名，验证 RRF 的融合计算逻辑；该固定测试集上，RRF 的 Hit@3 为 **92.3%**，MRR 为 **0.8718**（模拟关键词 Hit@3 为 84.6%，MRR 为 0.8327；模拟语义 Hit@3 为 92.3%，MRR 为 0.8942）。
+  4. **求真务实原则（避免主观过度归因）**：明确向面试官说明，该评测是针对多源输入冲突时 RRF 倒数累加算术逻辑的基准验证，**不代表真实分词/FTS、物理 Embedding 模型或生产向量数据库的检索质量**；在没有海量真实检索与严格参数对照实验前，不轻易下“改善了语义漂移”或“MRR 下降由平滑常数导致”的主观结论。
 
 ### Q8：RAG 检索中为什么必须做 Pre-filtering（预过滤），而不是 Post-filtering（后过滤）？
 - **回答要点**：
