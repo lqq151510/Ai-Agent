@@ -136,4 +136,55 @@ class KnowledgeIngestionMqTest {
         org.junit.jupiter.api.Assertions.assertThrows(
                 RuntimeException.class, () -> consumer.consumeIngestionTask(event));
     }
+
+    @Test
+    @DisplayName(
+            "When kafkaEnabled is false, producer is disabled even if KafkaTemplate is present")
+    @SuppressWarnings("unchecked")
+    void testProducerDisabledWhenKafkaEnabledIsFalse() {
+        KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        KnowledgeIngestionProducer producer = new KnowledgeIngestionProducer(kafkaTemplate, false);
+        assertFalse(producer.isKafkaEnabled());
+    }
+
+    @Test
+    @DisplayName("Consumer skips ingestion when message has already been processed (idempotency)")
+    void testConsumerSkipsWhenAlreadyIngested() {
+        RAGMemoryService ragMemoryService = mock(RAGMemoryService.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        UUID itemId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        String content = "Unique content to be deduplicated";
+
+        org.mockito.Mockito.when(ragMemoryService.isAlreadyIngested(itemId, content))
+                .thenReturn(true);
+
+        KnowledgeIngestionConsumer consumer =
+                new KnowledgeIngestionConsumer(ragMemoryService, ingestionJobService);
+
+        KnowledgeIngestionEvent event =
+                KnowledgeIngestionEvent.builder()
+                        .userId(userId)
+                        .knowledgeItemId(itemId)
+                        .title("Title")
+                        .content(content)
+                        .build();
+
+        consumer.consumeIngestionTask(event);
+
+        verify(ragMemoryService, times(0)).ingestText(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("KafkaErrorHandlingConfig creates CommonErrorHandler with DLT recoverer")
+    @SuppressWarnings("unchecked")
+    void testKafkaErrorHandlingConfig() {
+        KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        com.agent.mvp.core.agent.config.KafkaErrorHandlingConfig config =
+                new com.agent.mvp.core.agent.config.KafkaErrorHandlingConfig();
+        org.springframework.kafka.listener.CommonErrorHandler errorHandler =
+                config.kafkaCommonErrorHandler(kafkaTemplate);
+        org.junit.jupiter.api.Assertions.assertNotNull(errorHandler);
+        assertTrue(errorHandler instanceof org.springframework.kafka.listener.DefaultErrorHandler);
+    }
 }

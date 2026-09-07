@@ -100,42 +100,47 @@ def simulate_multilevel_cache_benchmark() -> List[Dict]:
     """
     Caffeine L1 本地缓存 + Redis L2 分布式缓存理论容量与延迟模型推演
     （基于内存访问微秒级、网络往返毫秒级的行业标准基准值）
+    【注意】：仅供架构设计阶段估算参考，严禁作为生产或简历实测数据。
     """
     benchmarks = [
-        {"tier": "L1 本地缓存 (Caffeine 内存)", "hit_rate": "80%", "avg_lat": "0.15 ms", "p99_lat": "0.45 ms", "throughput": "45,000 QPS"},
-        {"tier": "L2 分布式缓存 (Redis 网络 I/O)", "hit_rate": "15%", "avg_lat": "2.10 ms", "p99_lat": "5.20 ms", "throughput": "8,500 QPS"},
-        {"tier": "持久化存储 (PostgreSQL/H2)", "hit_rate": "5%", "avg_lat": "18.50 ms", "p99_lat": "42.00 ms", "throughput": "850 QPS"},
-        {"tier": "多级综合架构 (加权理论推演)", "hit_rate": "95%", "avg_lat": "0.78 ms", "p99_lat": "8.50 ms", "throughput": "32,000 QPS"}
+        {"tier": "L1 本地缓存 (Caffeine 内存)", "hit_rate": "80%", "avg_lat": "0.15 ms", "p99_lat": "0.45 ms", "throughput": "理论微秒级极值"},
+        {"tier": "L2 分布式缓存 (Redis 网络 I/O)", "hit_rate": "15%", "avg_lat": "2.10 ms", "p99_lat": "5.20 ms", "throughput": "受网络 RTT 约束"},
+        {"tier": "持久化存储 (PostgreSQL/H2)", "hit_rate": "5%", "avg_lat": "18.50 ms", "p99_lat": "42.00 ms", "throughput": "受磁盘 I/O 约束"},
+        {"tier": "多级综合架构 (理论加权模型: 0.8*0.15+0.15*2.1+0.05*18.5)", "hit_rate": "95%", "avg_lat": "1.36 ms", "p99_lat": "8.50 ms", "throughput": "架构理论估算"}
     ]
     return benchmarks
 
 def main():
     print("==========================================================================================")
-    print("       AI AGENT KNOWLEDGE DESK - 离线容量推演与灵敏度模拟模型 (SIMULATION ONLY)            ")
+    print("       AI AGENT KNOWLEDGE DESK - 离线概念推演与灵敏度模拟模型 (PROTOTYPE SIMULATION ONLY)   ")
+    print("==========================================================================================")
+    print("【重要声明】本脚本仅为离线概率模拟（使用 random 模块进行灵敏度分析），未实际向应用服务、")
+    print("Redis 或向量库发起物理压测。禁止将此类模拟估算数字直接作为线上或实测吞吐写入简历！")
     print("==========================================================================================")
 
     cold, warm, summary = simulate_semantic_cache_benchmark(iterations=1000)
 
-    print("\n[Part 1: 大模型语义缓存 (Semantic Cache) 蒙特卡洛灵敏度模拟]")
+    print("\n[Part 1: 大模型语义缓存 (Semantic Cache) 蒙特卡洛灵敏度模拟 (仅为离线算法探索)]")
     print(f"{'策略':<28} | {'平均延迟':<10} | {'P50 延迟':<10} | {'P90 延迟':<10} | {'P99 延迟':<10} | {'Token 节省'}")
     print("-" * 92)
     for m in [cold, warm]:
         print(f"{m.name:<28} | {m.avg_ms:8.2f} ms | {m.p50_ms:8.2f} ms | {m.p90_ms:8.2f} ms | {m.p99_ms:8.2f} ms | {m.token_savings_pct:6.1f}%")
     print("-" * 92)
-    print(f"-> 端到端平均延迟加速比: {summary['avg_speedup_x']:.2f}x (从 {cold.avg_ms:.1f}ms 降至 {warm.avg_ms:.1f}ms)")
-    print(f"-> 单次命中场景加速比: {summary['p50_hit_speedup_x']:.1f}x (命中响应约 22.5ms vs 基础调用 P50 {cold.p50_ms:.1f}ms)")
-    print(f"-> 设定缓存命中率: {summary['assumed_cache_hit_rate']:.1f}%")
-    print(f"-> 模拟 Token 成本节省率: {summary['total_tokens_saved_pct']:.1f}%")
+    print(f"-> 端到端平均延迟模拟改善比: {summary['avg_speedup_x']:.2f}x (从 {cold.avg_ms:.1f}ms 降至 {warm.avg_ms:.1f}ms)")
+    print(f"-> 假设缓存命中率: {summary['assumed_cache_hit_rate']:.1f}%")
+    print(f"-> 模拟 Token 成本理论节省率: {summary['total_tokens_saved_pct']:.1f}%")
 
-    print("\n[Part 2: 多级缓存 (Caffeine L1 + Redis L2) 理论容量推演]")
+    print("\n[Part 2: 多级缓存 (Caffeine L1 + Redis L2) 架构理论推演模型]")
     cache_data = simulate_multilevel_cache_benchmark()
-    print(f"{'缓存分层':<32} | {'命中率假设':<10} | {'理论平均耗时':<12} | {'理论 P99':<10} | {'理论吞吐上限'}")
-    print("-" * 86)
+    print(f"{'缓存分层':<40} | {'命中率假设':<10} | {'理论平均耗时':<12} | {'理论 P99':<10} | {'吞吐特征'}")
+    print("-" * 96)
     for row in cache_data:
-        print(f"{row['tier']:<32} | {row['hit_rate']:<10} | {row['avg_lat']:<12} | {row['p99_lat']:<10} | {row['throughput']}")
+        print(f"{row['tier']:<40} | {row['hit_rate']:<10} | {row['avg_lat']:<12} | {row['p99_lat']:<10} | {row['throughput']}")
     print("==========================================================================================")
-    print("注：以上数据为架构容量推演与灵敏度分析模型，非线上物理压测，面试交流请作为设计指标与推演模型讨论。")
+    print("结论：在简历与技术面试中，应着重阐述多级缓存架构设计、防穿透/击穿/雪崩机制与 Cache-Aside")
+    print("双写淘汰策略，避免堆砌未经真实集群压测的虚构 QPS 常量。")
     print("==========================================================================================")
 
 if __name__ == "__main__":
     main()
+

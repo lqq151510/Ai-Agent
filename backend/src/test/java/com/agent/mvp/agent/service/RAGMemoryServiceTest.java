@@ -1,9 +1,13 @@
 package com.agent.mvp.agent.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.agent.mvp.agent.search.EmbeddingStoreProvider;
@@ -76,6 +80,37 @@ class RAGMemoryServiceTest {
         assertEquals(1, memories.size());
         assertEquals("owned", memories.getFirst().get("text"));
         assertEquals("{\"userId\":\"" + userId + "\"}", memories.getFirst().get("metadata"));
+    }
+
+    @Test
+    void ingestTextShouldBeIdempotentForSameItemIdAndContent() {
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        String content = "Test content for deduplication";
+        String title = "Doc Title";
+
+        EmbeddingStoreProvider provider = mock(EmbeddingStoreProvider.class);
+        @SuppressWarnings("unchecked")
+        EmbeddingStore<TextSegment> store = mock(EmbeddingStore.class);
+        dev.langchain4j.model.embedding.EmbeddingModel model =
+                mock(dev.langchain4j.model.embedding.EmbeddingModel.class);
+        Embedding embedding = Embedding.from(new float[] {1.0f});
+        when(provider.getEmbeddingStore()).thenReturn(store);
+        when(provider.getEmbeddingModel()).thenReturn(model);
+        when(model.embedAll(any()))
+                .thenReturn(dev.langchain4j.model.output.Response.from(List.of(embedding)));
+
+        RAGMemoryService service = service(provider);
+
+        assertFalse(service.isAlreadyIngested(itemId, content));
+
+        // First ingestion
+        service.ingestText(userId, itemId, content, title);
+        assertTrue(service.isAlreadyIngested(itemId, content));
+
+        // Second ingestion should skip and not invoke store again
+        service.ingestText(userId, itemId, content, title);
+        verify(store, org.mockito.Mockito.times(1)).addAll(any(), any());
     }
 
     private static RAGMemoryService service(EmbeddingStoreProvider provider) {

@@ -13,6 +13,7 @@ public class KafkaTopicConfig {
     public static final String TOPIC_TASK_INPUT = "task-input-topic";
     public static final String TOPIC_SSE_EVENT = "sse-event-topic";
     public static final String TOPIC_RETRIEVAL = "retrieval-task-topic";
+    public static final String TOPIC_RETRIEVAL_DLT = "retrieval-task-topic.DLT";
     public static final String TOPIC_GENERATION = "generation-task-topic";
     public static final String TOPIC_REFLECTION = "reflection-task-topic";
 
@@ -29,6 +30,11 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic retrievalTopic() {
         return TopicBuilder.name(TOPIC_RETRIEVAL).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic retrievalDltTopic() {
+        return TopicBuilder.name(TOPIC_RETRIEVAL_DLT).partitions(3).replicas(1).build();
     }
 
     @Bean

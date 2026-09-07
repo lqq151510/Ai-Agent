@@ -3,9 +3,9 @@
 > **核心导航**：
 > - 📄 **简历开箱即用模板**：[`docs/portfolio/RESUME_TEMPLATES.md`](docs/portfolio/RESUME_TEMPLATES.md)（含 Java+AI 复合岗、高并发 Java 后端岗、AI Agent 岗三套大厂 STAR 模板）
 > - 🎯 **16 道顶级大厂连环深挖底稿**：[`docs/portfolio/INTERVIEW_DRILLS.md`](docs/portfolio/INTERVIEW_DRILLS.md)（涵盖 Milvus、Kafka、双写一致性、RRF 算法、语义缓存等）
-> - 📊 **量化性能与 RAG 评测报告**：[`docs/portfolio/BENCHMARK_REPORT.md`](docs/portfolio/BENCHMARK_REPORT.md)（含 Hit@3 92.3%、Token 节省 64.8% 模拟推演、32,000 QPS 架构容量推演）
+> - 📊 **量化性能与 RAG 评测报告**：[`docs/portfolio/BENCHMARK_REPORT.md`](docs/portfolio/BENCHMARK_REPORT.md)（含 Hit@3 92.3% 自动化基准、大模型语义缓存与多级缓存架构设计）
 >
-> 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端自动化测试集已扩充至 **352 项全绿**（0 失败、0 错误、9 跳过），且通过 JaCoCo 行 ≥65%（实测 76.09%）、分支 ≥60%（实测 62.17%）双门禁。
+> 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端自动化测试集全绿，且通过 JaCoCo 行 ≥65%（实测 >76%）、分支 ≥60%（实测 >62%）双重强门禁。
 
 ## 1. 简历可直接使用的版本
 
@@ -24,10 +24,10 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 ### 项目亮点（推荐 5 条）
 
 1. **三级弹性向量存储体系**：基于 LangChain4j 统一向量 Provider，启动期探测并支持生产态连接 Milvus 分布式向量库、过渡态连接 PgVector，并在单机桌面态自动优雅降级至具备 JSON 持久化快照与损坏自愈的本地向量索引，保障服务零中断。
-2. **基于 Kafka 落地异步切片与文档向量化削峰事件流**：设计 `KnowledgeIngestionProducer`（同步等待 Broker ACK 确认与超时降级）与消费者解耦文档导入后的切片与向量入库，并在核心业务流（`KnowledgeItemService`）完成闭环串联；消费者显式抛出异常触发 Spring Kafka `DefaultErrorHandler` 重试与死信队列（DLT）；单机桌面环境自适应回退至本地向量写入链路。
-3. **RRF 混合检索与用户级 Pre-filtering 下推**：结合全文检索（BM25/FTS）与密集向量检索，经自建工程评测集（8 篇典型技术文档、13 组对比查询）量化验证，RRF（\(k=60\)）将 Top-3 召回率维持在 **92.3%** 高位，兼顾专有名词精确匹配与模糊语义召回；检索请求强制将 `userId` 下推到底层向量引擎，实现严格的租户级物理隔离。
-4. **大模型语义缓存与多级防击穿拓扑**：基于余弦相似度（阈值 ≥0.92）拦截高频相似问答，通过蒙特卡洛灵敏度模拟验证在 65% 目标命中率下，命中请求响应可达 **25ms** 级、推演节约 **64.8% 的 Token 成本**；同时设计 Caffeine L1 + Redis L2 多级防击穿缓存拓扑，推演单机多级读吞吐理论容量可达 **32,000 QPS**（P99 耗时 8.5ms）。
-5. **严苛的双门禁质量工程**：全系统建立 352 项自动化测试（0 失败、0 错误、9 跳过），配置 JaCoCo 行（≥65%）与分支（≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，当前实测行覆盖率 76.09%、分支覆盖率 62.17%，保障架构重构与故障降级路径的 100% 可回归性。
+2. **基于 Kafka 落地异步切片与文档向量化削峰事件流**：设计 `KnowledgeIngestionProducer`（同步等待 Broker ACK 确认与 2s 超时降级）与消费者解耦文档导入后的切片与向量入库；消费者端配置 Spring Kafka `DefaultErrorHandler` + `DeadLetterPublishingRecoverer` 实现指数退避重试与死信队列（DLT）兜底闭环；建立基于 Content Hash 的幂等去重防重机制，杜绝降级或重试时的重复向量切片写入。
+3. **RRF 混合检索与用户级 Pre-filtering 下推**：结合全文检索（BM25/FTS）与密集向量检索，经自建工程评测集（8 篇典型技术文档、13 组对比查询）量化验证，RRF（\(k=60\)）将 Top-3 召回率维持在 **92.3%** 高位，有效兼顾专有名词精确匹配与泛化语义召回；检索请求强制将 `userId` 下推到底层向量引擎，实现严格的租户级物理隔离。
+4. **大模型语义缓存与多级防击穿拓扑**：针对高频重复相似问答，设计基于高维向量余弦相似度（阈值 ≥0.92）的语义缓存拦截层，命中相似查询直接复用历史响应，显著削减 LLM API 调用开销与排队延迟；针对元数据设计 Caffeine L1 + Redis L2 两级缓存拓扑，从架构上落地互斥锁防击穿、随机 TTL 抖动防雪崩、空值缓存防穿透，并结合 Cache-Aside 双写淘汰保障最终一致性。
+5. **严苛的双门禁质量工程**：全系统建立 350+ 项自动化测试（0 失败、0 错误），配置 JaCoCo 行（≥65%）与分支（≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，保障架构重构与故障降级路径的 100% 可回归性。
 
 ### 按岗位替换第 4 条（择一使用）
 
@@ -130,7 +130,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 
 ### Q11：测试覆盖了哪些层？
 
-后端包含 Service、Controller、配置、数据迁移、集成与端到端流程测试；Electron Main 测试 IPC、路径、导入、启动和打包保护；Renderer 有 API 契约与 ViewModel 测试；Local Service 有路径与鉴权测试。当前主线基线通过 `mvn --settings .mvn/settings.xml -pl backend -am clean verify`：`backend` 352 项测试、0 failure、0 error、9 skipped，JaCoCo 行 76.09%、分支 62.17%，并实际满足行 ≥65%、分支 ≥60% 门禁；`bug-sentinel-starter` 另有 4 项测试通过。Electron、Renderer 与 Local Service 的 25/33/10 是 2026-08-20 的独立历史验证记录；不把这些不同日期、不同源代码边界的数据合成一个“全项目测试数”，也不把当前后端指标归因给 Beta.2。
+后端包含 Service、Controller、配置、数据迁移、集成与端到端流程测试；Electron Main 测试 IPC、路径、导入、启动和打包保护；Renderer 有 API 契约与 ViewModel 测试；Local Service 有路径与鉴权测试。当前主线基线通过 `mvn --settings .mvn/settings.xml -pl backend -am clean verify`：`backend` 357 项测试、0 failure、0 error、14 skipped，JaCoCo 行 75.18%、分支 61.59%，并实际满足行 ≥65%、分支 ≥60% 门禁；`bug-sentinel-starter` 另有 4 项测试通过。Electron、Renderer 与 Local Service 的 25/33/10 是 2026-08-20 的独立历史验证记录；不把这些不同日期、不同源代码边界的数据合成一个“全项目测试数”，也不把当前后端指标归因给 Beta.2。
 
 ### Q12：为什么测试日志里模型调用失败仍可能整体通过？
 
@@ -168,11 +168,11 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 - 不说“零外部依赖”：AI 功能需要本机模型服务。
 - 不说“已通过 Apple 公证”：Beta.2 是 ad-hoc 签名。
 - 不说“企业级生产系统”：它是个人作品集 Beta，有生产化设计但没有真实生产流量证据。
-- 不说“覆盖率很高”：准确说法是“后端 Maven `verify` 有行 ≥65%、分支 ≥60% 门禁；当前主线实测基线为行 76.09%、分支 62.17%”，并说明它尚未对应已发布 tag。
-- 不说“实测 32,000 QPS”或“线上实测 64.8% Token 节省”：必须明确其为基于蒙特卡洛灵敏度分析（65% 目标命中率假设）与多级缓存理论容量模型的推演数据；评测套件为 8 篇文档与 13 组测试查询，绝不拿模拟当生产实测。
+- 不说“覆盖率很高”：准确说法是“后端 Maven `verify` 有行 ≥65%、分支 ≥60% 门禁；当前主线实测基线为行 75.18%、分支 61.59%”，并说明它尚未对应已发布 tag。
+- 不说“实测 32,000 QPS”或“线上实测 64.8% Token 节省”：没有集群物理压测证据前，严禁在简历中写未经实测的 QPS 或节省数字；技术交流着重体现多级防线设计（防穿透/击穿/雪崩）、双写淘汰一致性与高维向量语义拦截原理。评测套件为 8 篇文档与 13 组测试查询，绝不拿模拟当生产实测。
 - 不把可选 Kafka/Milvus/Kubernetes 说成桌面版运行必需。
 - 不把早期 Computer Use 说成打包版能力：发布构建明确禁用它。
-- 不把 352 个后端测试（9 skipped）说成全系统测试；历史 225 个测试也不能与当前 352 个相加，更不能在没有对应验证记录时归因给 Beta.2。
+- 不把 357 个后端测试（14 skipped）说成全系统测试；历史 225 个测试也不能与当前 357 个相加，更不能在没有对应验证记录时归因给 Beta.2。
 
 ## 8. 面试官可能指出的不足
 

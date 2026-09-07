@@ -29,7 +29,7 @@ public class KnowledgeIngestionConsumer {
     @KafkaListener(
             topics = KafkaTopicConfig.TOPIC_RETRIEVAL,
             groupId = "knowledge-ingest-group",
-            autoStartup = "${spring.kafka.consumer.auto-startup:false}")
+            autoStartup = "${app.kafka.enabled:${spring.kafka.consumer.auto-startup:false}}")
     public void consumeIngestionTask(KnowledgeIngestionEvent event) {
         if (event == null || event.getUserId() == null) {
             log.warn("Discarding invalid KnowledgeIngestionEvent: null or missing userId");
@@ -42,6 +42,15 @@ public class KnowledgeIngestionConsumer {
                 event.getUserId());
         try {
             if (event.getContent() != null && !event.getContent().isBlank()) {
+                if (event.getKnowledgeItemId() != null
+                        && ragMemoryService.isAlreadyIngested(
+                                event.getKnowledgeItemId(), event.getContent())) {
+                    log.info(
+                            "Kafka ingestion event for item {} already processed, skipping"
+                                    + " duplicate message.",
+                            event.getKnowledgeItemId());
+                    return;
+                }
                 ragMemoryService.ingestText(
                         event.getUserId(),
                         event.getKnowledgeItemId(),

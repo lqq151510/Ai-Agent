@@ -34,6 +34,11 @@ public class RAGMemoryService {
     private final EmbeddingStoreProvider storeProvider;
     private final SearchOrchestrator searchOrchestrator;
     private final MarkItDownService markItDownService;
+    private final com.github.benmanes.caffeine.cache.Cache<UUID, String> ingestedItemContentHashes =
+            com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+                    .maximumSize(10_000)
+                    .expireAfterWrite(java.time.Duration.ofHours(24))
+                    .build();
 
     public RAGMemoryService(
             EmbeddingStoreProvider storeProvider,
@@ -42,6 +47,18 @@ public class RAGMemoryService {
         this.storeProvider = storeProvider;
         this.searchOrchestrator = searchOrchestrator;
         this.markItDownService = markItDownService;
+    }
+
+    public boolean isAlreadyIngested(UUID itemId, String text) {
+        if (itemId == null || text == null) {
+            return false;
+        }
+        String existingHash = ingestedItemContentHashes.getIfPresent(itemId);
+        if (existingHash == null) {
+            return false;
+        }
+        String currentHash = Integer.toHexString(text.hashCode());
+        return existingHash.equals(currentHash);
     }
 
     /** 将诊断记录添加到向量数据库中 */
@@ -168,9 +185,17 @@ public class RAGMemoryService {
         }
     }
 
-    /** 针对单段文本（来自异步消息或知识项）执行切片、向量嵌入并存储至向量数据库。 */
+    /** 针对单段文本（来自异步消息或知识项）执行切片、向量嵌入并存储至向量数据库。具备幂等防重保障。 */
     public void ingestText(UUID userId, UUID itemId, String text, String title) {
         if (text == null || text.isBlank()) {
+            return;
+        }
+        String textHash = Integer.toHexString(text.hashCode());
+        if (itemId != null && textHash.equals(ingestedItemContentHashes.getIfPresent(itemId))) {
+            log.info(
+                    "Item {} with identical content already ingested into vector store, skipping"
+                            + " duplicate ingestion.",
+                    itemId);
             return;
         }
         try {
@@ -192,6 +217,9 @@ public class RAGMemoryService {
                 EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
                 Response<List<Embedding>> embeddingResponse = embeddingModel.embedAll(segments);
                 embeddingStore.addAll(embeddingResponse.content(), segments);
+            }
+            if (itemId != null) {
+                ingestedItemContentHashes.put(itemId, textHash);
             }
             log.info(
                     "Successfully ingested text for item {} with {} segments",

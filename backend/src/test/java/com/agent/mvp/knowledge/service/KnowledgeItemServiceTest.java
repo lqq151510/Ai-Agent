@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 
 import com.agent.mvp.agent.dto.ParsedDocument;
 import com.agent.mvp.agent.service.MarkItDownService;
+import com.agent.mvp.agent.service.RAGMemoryService;
 import com.agent.mvp.auth.entity.User;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.common.exception.ConflictException;
@@ -1490,5 +1491,46 @@ class KnowledgeItemServiceTest {
         view.setColor(color);
         view.setUsageCount(usageCount);
         return view;
+    }
+
+    @Test
+    void importSnippetShouldTriggerAsyncIngestionThroughTaskExecutorWhenKafkaDisabled() {
+        KnowledgeItemRepository itemRepository = mock(KnowledgeItemRepository.class);
+        KnowledgeTagRepository tagRepository = mock(KnowledgeTagRepository.class);
+        KnowledgeItemTagRepository itemTagRepository = mock(KnowledgeItemTagRepository.class);
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        KnowledgeOrganizerService organizerService = new KnowledgeOrganizerService();
+        MarkItDownService markItDownService = mock(MarkItDownService.class);
+        UserProfileService userProfileService = mock(UserProfileService.class);
+        ObjectMapper objectMapper = new ObjectMapper();
+        RAGMemoryService ragMemoryService = mock(RAGMemoryService.class);
+        java.util.concurrent.Executor directExecutor = Runnable::run;
+
+        KnowledgeItemService service =
+                new KnowledgeItemService(
+                        itemRepository,
+                        tagRepository,
+                        itemTagRepository,
+                        ingestionJobService,
+                        organizerService,
+                        markItDownService,
+                        userProfileService,
+                        objectMapper);
+
+        service.setRagMemoryService(ragMemoryService);
+        service.setTaskExecutor(directExecutor);
+
+        UUID userId = UUID.randomUUID();
+        ImportSnippetKnowledgeItemRequest request =
+                new ImportSnippetKnowledgeItemRequest("Snippet Title", "Async Fallback Snippet");
+
+        when(userProfileService.getOrCreate(userId))
+                .thenReturn(UserProfile.builder().userId(userId).organizeMode("manual").build());
+
+        var response = service.importSnippet(userId, request);
+
+        assertEquals("snippet", response.sourceType());
+        verify(ragMemoryService)
+                .ingestText(eq(userId), any(), eq("Async Fallback Snippet"), eq("Snippet Title"));
     }
 }

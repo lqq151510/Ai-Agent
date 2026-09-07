@@ -16,14 +16,29 @@ public class KnowledgeIngestionProducer {
     private static final Logger log = LoggerFactory.getLogger(KnowledgeIngestionProducer.class);
 
     private final Optional<KafkaTemplate<String, Object>> kafkaTemplate;
+    private final boolean kafkaEnabled;
+
+    @Autowired
+    public KnowledgeIngestionProducer(
+            Optional<KafkaTemplate<String, Object>> kafkaTemplate,
+            @org.springframework.beans.factory.annotation.Value(
+                            "${app.kafka.enabled:${spring.kafka.consumer.auto-startup:false}}")
+                    boolean kafkaEnabled) {
+        this.kafkaTemplate = kafkaTemplate != null ? kafkaTemplate : Optional.empty();
+        this.kafkaEnabled = kafkaEnabled;
+    }
+
+    public KnowledgeIngestionProducer(KafkaTemplate<String, Object> kafkaTemplate) {
+        this(Optional.ofNullable(kafkaTemplate), true);
+    }
 
     public KnowledgeIngestionProducer(
-            @Autowired(required = false) KafkaTemplate<String, Object> kafkaTemplate) {
-        this.kafkaTemplate = Optional.ofNullable(kafkaTemplate);
+            KafkaTemplate<String, Object> kafkaTemplate, boolean kafkaEnabled) {
+        this(Optional.ofNullable(kafkaTemplate), kafkaEnabled);
     }
 
     public boolean isKafkaEnabled() {
-        return kafkaTemplate.isPresent();
+        return kafkaTemplate.isPresent() && kafkaEnabled;
     }
 
     /**

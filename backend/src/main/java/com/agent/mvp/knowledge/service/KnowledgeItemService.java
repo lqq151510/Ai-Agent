@@ -156,6 +156,22 @@ public class KnowledgeItemService {
     @Autowired(required = false)
     private RAGMemoryService ragMemoryService;
 
+    @Autowired(required = false)
+    @org.springframework.beans.factory.annotation.Qualifier("agentStreamExecutor")
+    private java.util.concurrent.Executor taskExecutor;
+
+    void setKnowledgeIngestionProducer(KnowledgeIngestionProducer knowledgeIngestionProducer) {
+        this.knowledgeIngestionProducer = knowledgeIngestionProducer;
+    }
+
+    void setRagMemoryService(RAGMemoryService ragMemoryService) {
+        this.ragMemoryService = ragMemoryService;
+    }
+
+    void setTaskExecutor(java.util.concurrent.Executor taskExecutor) {
+        this.taskExecutor = taskExecutor;
+    }
+
     @Autowired
     public KnowledgeItemService(
             KnowledgeItemRepository knowledgeItemRepository,
@@ -960,15 +976,24 @@ public class KnowledgeItemService {
                 return;
             }
         }
-        // 本地降级：若未配置 Kafka 或投递失败，调用本地异步向量切片入库
+        // 本地降级：若未配置 Kafka 或投递失败，提交到线程池异步执行向量切片入库
         if (ragMemoryService != null) {
-            try {
-                ragMemoryService.ingestText(userId, item.getId(), content, item.getTitle());
-            } catch (Exception ex) {
-                log.warn(
-                        "Local fallback vector ingestion failed for item {}: {}",
-                        item.getId(),
-                        ex.getMessage());
+            Runnable fallbackTask =
+                    () -> {
+                        try {
+                            ragMemoryService.ingestText(
+                                    userId, item.getId(), content, item.getTitle());
+                        } catch (Exception ex) {
+                            log.warn(
+                                    "Local fallback vector ingestion failed for item {}: {}",
+                                    item.getId(),
+                                    ex.getMessage());
+                        }
+                    };
+            if (taskExecutor != null) {
+                taskExecutor.execute(fallbackTask);
+            } else {
+                CompletableFuture.runAsync(fallbackTask);
             }
         }
     }
