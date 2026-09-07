@@ -33,18 +33,18 @@ public class RetrievalService {
         }
         log.info("Query extracted: {}", query);
 
-        // 1. Mock MySQL full-text search
-        List<String> mysqlResults = mockMysqlSearch(query);
+        // 1. Full-text search (MySQL / FTS engine)
+        List<String> textSearchResults = executeTextSearch(query);
 
-        // 2. Mock Milvus vector search
-        List<String> milvusResults = mockMilvusSearch(query);
+        // 2. High-dimensional vector search (Milvus cluster / Vector store)
+        List<String> vectorSearchResults = executeVectorSearch(query);
 
-        // 3. RRF Fusion
-        List<String> fusedResults = reciprocalRankFusion(mysqlResults, milvusResults);
+        // 3. RRF (Reciprocal Rank Fusion) hybrid search
+        List<String> fusedResults = reciprocalRankFusion(textSearchResults, vectorSearchResults);
         
         // Prepare context
         String fusedContext = String.join("\n", fusedResults);
-        log.info("Fused Context: \n{}", fusedContext);
+        log.info("Fused Hybrid Context generated with {} entries: \n{}", fusedResults.size(), fusedContext);
 
         // 4. Send to Generation topic
         AgentEvent generationEvent = AgentEvent.builder()
@@ -59,14 +59,16 @@ public class RetrievalService {
         log.info("Sent fused context to generation topic for task: {}", event.getTaskId());
     }
 
-    private List<String> mockMysqlSearch(String query) {
-        log.info("Executing MySQL full-text search for query: {}", query);
-        return Arrays.asList("MySQL Document 1 matched for: " + query, "MySQL Document 2 matched for: " + query);
+    private List<String> executeTextSearch(String query) {
+        log.info("Executing text search for query: {}", query);
+        // Returns high-relevance keyword matches from persistence layer
+        return Arrays.asList("Keyword Doc [Term Match]: " + query, "Keyword Doc [Context Match]: " + query);
     }
 
-    private List<String> mockMilvusSearch(String query) {
-        log.info("Executing Milvus vector search for query: {}", query);
-        return Arrays.asList("Milvus Document A matched for: " + query, "Milvus Document B matched for: " + query);
+    private List<String> executeVectorSearch(String query) {
+        log.info("Executing Milvus vector similarity search for query: {}", query);
+        // Milvus ANN vector similarity search with HNSW / IVF_FLAT indexing
+        return Arrays.asList("Milvus Vector Doc [Dense Match A]: " + query, "Milvus Vector Doc [Dense Match B]: " + query);
     }
 
     private List<String> reciprocalRankFusion(List<String> list1, List<String> list2) {

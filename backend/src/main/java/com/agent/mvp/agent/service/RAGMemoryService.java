@@ -168,6 +168,41 @@ public class RAGMemoryService {
         }
     }
 
+    /** 针对单段文本（来自异步消息或知识项）执行切片、向量嵌入并存储至向量数据库。 */
+    public void ingestText(UUID userId, UUID itemId, String text, String title) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        try {
+            java.util.Map<String, String> metadataMap = new java.util.HashMap<>();
+            if (userId != null) {
+                metadataMap.put("userId", userId.toString());
+            }
+            if (itemId != null) {
+                metadataMap.put("itemId", itemId.toString());
+            }
+            if (title != null) {
+                metadataMap.put("title", title);
+            }
+            Document document = Document.from(text, Metadata.from(metadataMap));
+            DocumentSplitter splitter = DocumentSplitters.recursive(1000, 100);
+            List<TextSegment> segments = splitter.split(document);
+            if (!segments.isEmpty()) {
+                EmbeddingModel embeddingModel = storeProvider.getEmbeddingModel();
+                EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
+                Response<List<Embedding>> embeddingResponse = embeddingModel.embedAll(segments);
+                embeddingStore.addAll(embeddingResponse.content(), segments);
+            }
+            log.info(
+                    "Successfully ingested text for item {} with {} segments",
+                    itemId,
+                    segments.size());
+        } catch (Exception ex) {
+            log.error("Failed to ingest text for item {}. Error: {}", itemId, ex.getMessage(), ex);
+            throw new RuntimeException("Text ingestion failed", ex);
+        }
+    }
+
     /** 列出用户的记忆片段（如果是 pgvector 存储） */
     public List<Map<String, Object>> listAllMemories(UUID userId) {
         List<Map<String, Object>> list = new ArrayList<>();

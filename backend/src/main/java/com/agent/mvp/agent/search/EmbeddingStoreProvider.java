@@ -8,6 +8,7 @@ import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
+import dev.langchain4j.store.embedding.milvus.MilvusEmbeddingStore;
 import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
 import jakarta.annotation.PostConstruct;
 import java.nio.file.InvalidPathException;
@@ -36,6 +37,7 @@ public class EmbeddingStoreProvider {
 
     private EmbeddingModel embeddingModel;
     private EmbeddingStore<TextSegment> embeddingStore;
+    private volatile boolean milvusAvailable;
     private volatile boolean pgVectorAvailable;
     private volatile boolean ftsAvailable;
     private volatile Instant embeddingDisabledUntil = Instant.EPOCH;
@@ -74,15 +76,16 @@ public class EmbeddingStoreProvider {
     @PostConstruct
     public void init() {
         this.embeddingStore = createEmbeddingStore("engineering_memory", 384, true);
+        this.milvusAvailable = embeddingStore instanceof MilvusEmbeddingStore;
         this.pgVectorAvailable = embeddingStore instanceof PgVectorEmbeddingStore;
         this.ftsAvailable = initializeFtsIndex();
     }
 
     /**
-     * 创建一个新的 EmbeddingStore（独立的 PgVector 表 + InMemory 回退）。
+     * 创建一个新的 EmbeddingStore（支持 Milvus -> PgVector 表 -> InMemory / 本地持久化回退）。
      *
-     * <p>复用本 Provider 的 PG 连接配置，按 {@code tableName} 和 {@code dimension} 建立独立的向量存储； 创建失败时回退到 {@link
-     * InMemoryEmbeddingStore}。
+     * <p>优先使用 Milvus 向量数据库；未启用或连接失败时回退至 PgVector；再次失败时回退至 {@link InMemoryEmbeddingStore} 或本地 JSON
+     * 快照。
      */
     public EmbeddingStore<TextSegment> createEmbeddingStore(String tableName, int dimension) {
         return createEmbeddingStore(tableName, dimension, false);
@@ -90,6 +93,47 @@ public class EmbeddingStoreProvider {
 
     EmbeddingStore<TextSegment> createEmbeddingStore(
             String tableName, int dimension, boolean persistLocalFallback) {
+        AppProperties.Milvus milvus = appProperties.getMilvus();
+        if (milvus != null && milvus.isEnabled()) {
+            try {
+                log.info(
+                        "Initializing MilvusEmbeddingStore for collection '{}' with host: {}, port:"
+                                + " {}",
+                        tableName,
+                        milvus.getHost(),
+                        milvus.getPort());
+                MilvusEmbeddingStore.Builder builder =
+                        MilvusEmbeddingStore.builder()
+                                .host(milvus.getHost())
+                                .port(milvus.getPort())
+                                .collectionName(tableName)
+                                .dimension(dimension);
+                if (milvus.getDatabaseName() != null && !milvus.getDatabaseName().isBlank()) {
+                    builder.databaseName(milvus.getDatabaseName());
+                }
+                if (milvus.getToken() != null && !milvus.getToken().isBlank()) {
+                    builder.token(milvus.getToken());
+                }
+                if (milvus.getUsername() != null && !milvus.getUsername().isBlank()) {
+                    builder.username(milvus.getUsername());
+                }
+                if (milvus.getPassword() != null && !milvus.getPassword().isBlank()) {
+                    builder.password(milvus.getPassword());
+                }
+                MilvusEmbeddingStore store = builder.build();
+                log.info(
+                        "MilvusEmbeddingStore for collection '{}' initialized successfully.",
+                        tableName);
+                return store;
+            } catch (Exception ex) {
+                log.warn(
+                        "Failed to initialize MilvusEmbeddingStore for collection '{}'. Falling"
+                                + " back to PgVector / InMemory. Error: {}",
+                        tableName,
+                        ex.getMessage());
+            }
+        }
+
         AppProperties.PgVector pgVector = appProperties.getPgVector();
         if (!pgVector.isEnabled()) {
             log.info(
@@ -191,6 +235,10 @@ public class EmbeddingStoreProvider {
 
     public JdbcTemplate getJdbcTemplate() {
         return jdbcTemplate;
+    }
+
+    public boolean isMilvusAvailable() {
+        return milvusAvailable;
     }
 
     public boolean isPgVectorAvailable() {

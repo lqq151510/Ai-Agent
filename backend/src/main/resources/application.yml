@@ -90,6 +90,15 @@ app:
     database: ${PG_DATABASE:ai_agent}
     username: ${PG_USERNAME:postgres}
     password: ${PG_PASSWORD:change-me}
+  milvus:
+    enabled: ${MILVUS_ENABLED:false}
+    host: ${MILVUS_HOST:localhost}
+    port: ${MILVUS_PORT:19530}
+    collection-name: ${MILVUS_COLLECTION_NAME:engineering_memory}
+    database-name: ${MILVUS_DATABASE_NAME:default}
+    token: ${MILVUS_TOKEN:}
+    username: ${MILVUS_USERNAME:}
+    password: ${MILVUS_PASSWORD:}
   search:
     default-mode: ${SEARCH_DEFAULT_MODE:ADAPTIVE}
     confidence-threshold: ${SEARCH_CONFIDENCE_THRESHOLD:0.5}

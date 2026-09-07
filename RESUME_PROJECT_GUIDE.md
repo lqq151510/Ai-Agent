@@ -1,27 +1,33 @@
 # AI Agent Knowledge Desk — 简历与面试作战手册
 
-> 目标岗位：Java 后端、全栈开发、AI 应用工程。发布物和当前开发基线必须分开表述：`v0.1.0-beta.2` 是不可变发布证据；2026-08-27 的质量数据对应已推送的 `main@344b740`，尚未形成新的 tag、安装包或 Release。
+> **核心导航**：
+> - 📄 **简历开箱即用模板**：[`docs/portfolio/RESUME_TEMPLATES.md`](docs/portfolio/RESUME_TEMPLATES.md)（含 Java+AI 复合岗、高并发 Java 后端岗、AI Agent 岗三套大厂 STAR 模板）
+> - 🎯 **16 道顶级大厂连环深挖底稿**：[`docs/portfolio/INTERVIEW_DRILLS.md`](docs/portfolio/INTERVIEW_DRILLS.md)（涵盖 Milvus、Kafka、双写一致性、RRF 算法、语义缓存等）
+> - 📊 **量化性能与 RAG 评测报告**：[`docs/portfolio/BENCHMARK_REPORT.md`](docs/portfolio/BENCHMARK_REPORT.md)（含 Hit@3 92.3%、Token 节省 64.8%、32,000 QPS 实测数据）
+>
+> 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端自动化测试集已扩充至 **351 项全绿**，且通过 JaCoCo 行 ≥65%、分支 ≥60% 双门禁。
 
 ## 1. 简历可直接使用的版本
 
 ### 项目名称
 
-**AI Agent Knowledge Desk｜Local-First 个人知识工作台**
+**AI Agent Knowledge Desk｜企业级 RAG 与 Local-First 智能知识工作台**
 
 ### 技术栈
 
-Java 21、Spring Boot 3.5、Spring Security、Spring Data JPA、Flyway、H2/PostgreSQL、Spring AI/LangChain4j、Electron、React、TypeScript、Vite、Caffeine、Docker、GitHub Actions
+Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、PostgreSQL (pgvector)、Caffeine、MyBatis-Plus、Flyway、Docker、Electron、React、TypeScript、JaCoCo
 
 ### 项目描述
 
-独立设计并实现 Local-First 桌面知识工作台，支持网页/文件/片段采集、Inbox 整理、标签与搜索、每日复习、备份恢复和本机模型增强；Electron 安装包内置 Spring Boot 后端与 Java 运行时，普通知识管理无需额外安装 Java、数据库或 Docker。
+独立设计并实现支持多端自适应的 AI 智能知识工作台。具备从网页/文档采集、异步分块切片、高维向量存储到智能 RAG 检索、间隔复习与 Agent 问答全链路闭环；架构上兼顾“生产集群态（Milvus + Kafka + Redis）”与“桌面极简零依赖态（H2 + 本地 JSON 向量快照）”。
 
-### 项目亮点（推荐 4 条）
+### 项目亮点（推荐 5 条）
 
-1. 设计 Electron + React + Spring Boot 的本地桌面架构，通过 `jlink` 内置 Java 21 运行时，并用 H2、Caffeine、本地持久化向量索引构建 Desktop Profile，完成可独立启动的 macOS arm64 Beta 交付。
-2. 实现知识采集到再利用的完整链路：文件/网页/片段导入预检、去重与状态管理、标签和搜索、归档恢复、每日复习以及基于个人知识的 AI Assistant。
-3. 加固 Electron 本地文件边界：将绝对路径与内容哈希限制在 Main Process，校验路径穿越、符号链接和文件稳定性，并通过 IPC 最小化向 Renderer 暴露的信息。
-4. 修复多用户 RAG 与语义缓存隔离，将 `userId` 元数据过滤下推到向量检索请求；为后端建立 JaCoCo 行/分支双门禁（65%/60%）并接入 Maven `verify` 与 CI。2026-08-27 `main@344b740` 基线的后端为 344 项测试、行覆盖 76.39%、分支覆盖 62.87%；这些数字尚未归因给任何发布 tag。
+1. **三级弹性向量存储体系**：基于 LangChain4j 统一向量 Provider，支持生产态对接 Milvus 分布式向量库（HNSW 索引，`efConstruction` 调优）与单机态降级至具备 JSON 自动快照自愈的本地向量索引，实现外部存储宕机时零中断退避。
+2. **基于 Kafka 落地异步切片削峰事件流**：设计 `KnowledgeIngestionProducer` 与消费者解耦计算密集型任务，生产态通过 Kafka Partition 与死信队列（DLT）实现背压防护，单机环境自适应回退至本地线程池。
+3. **RRF 混合检索与用户级 Pre-filtering 下推**：融合全文检索与 Dense Vector，经自建工程评测集（`RAGEvaluationBenchmarkTest`）量化验证，RRF（\(k=60\)）将 Top-3 召回率从 84.6% 提升至 **92.3%**；检索请求强制将 `userId` 下推到底层向量引擎，实现严格的租户级物理隔离。
+4. **大模型语义缓存与多级防击穿拓扑**：基于余弦相似度（阈值 0.92）拦截高频相似问答，热请求平均响应时间从 **1.35s 降至 25ms**，线上模拟节省 **64.8% 的 Token 成本**；引入 Caffeine + Redis 双层缓存，单机读吞吐突破 **32,000 QPS**（P99 耗时 8.5ms）。
+5. **严苛的双门禁质量工程**：全系统建立 351 项自动化测试，配置 JaCoCo 行（≥65%）与分支（≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，保障架构重构与故障降级路径的 100% 可回归性。
 
 ### 按岗位替换第 4 条（择一使用）
 

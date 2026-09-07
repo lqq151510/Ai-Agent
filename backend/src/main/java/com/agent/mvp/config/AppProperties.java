@@ -21,6 +21,7 @@ public class AppProperties {
     private final VertexAi vertexAi = new VertexAi();
     private final PgVector pgVector = new PgVector();
     private final LocalVectorStore localVectorStore = new LocalVectorStore();
+    private final Milvus milvus = new Milvus();
 
     public ModelProviderType getDefaultProvider() {
         return defaultProvider;
@@ -84,6 +85,10 @@ public class AppProperties {
 
     public LocalVectorStore getLocalVectorStore() {
         return localVectorStore;
+    }
+
+    public Milvus getMilvus() {
+        return milvus;
     }
 
     public String getDefaultModel(ModelProviderType provider) {
@@ -495,6 +500,82 @@ public class AppProperties {
 
         public void setDirectory(String directory) {
             this.directory = directory;
+        }
+    }
+
+    /** Milvus 向量数据库连接配置。 */
+    public static class Milvus {
+        private boolean enabled = false;
+        private String host = "localhost";
+        private int port = 19530;
+        private String collectionName = "engineering_memory";
+        private String databaseName = "default";
+        private String token = "";
+        private String username = "";
+        private String password = "";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getHost() {
+            return host;
+        }
+
+        public void setHost(String host) {
+            this.host = host;
+        }
+
+        public int getPort() {
+            return port;
+        }
+
+        public void setPort(int port) {
+            this.port = port;
+        }
+
+        public String getCollectionName() {
+            return collectionName;
+        }
+
+        public void setCollectionName(String collectionName) {
+            this.collectionName = collectionName;
+        }
+
+        public String getDatabaseName() {
+            return databaseName;
+        }
+
+        public void setDatabaseName(String databaseName) {
+            this.databaseName = databaseName;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public void setToken(String token) {
+            this.token = token;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
         }
     }
 }

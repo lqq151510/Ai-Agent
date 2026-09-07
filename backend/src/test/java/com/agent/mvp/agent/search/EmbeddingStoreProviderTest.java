@@ -41,4 +41,20 @@ class EmbeddingStoreProviderTest {
         assertInstanceOf(
                 InMemoryEmbeddingStore.class, provider.createEmbeddingStore("semantic_cache", 384));
     }
+
+    @Test
+    void milvusEnabledWithUnreachableHostFallsBackToInMemory() {
+        AppProperties appProperties = new AppProperties();
+        appProperties.getPgVector().setEnabled(false);
+        appProperties.getMilvus().setEnabled(true);
+        appProperties.getMilvus().setHost("127.0.0.1");
+        appProperties.getMilvus().setPort(59999); // unreachable port
+        EmbeddingStoreProvider provider =
+                new EmbeddingStoreProvider(appProperties, mock(JdbcTemplate.class));
+
+        // When Milvus is unreachable, createEmbeddingStore should safely fallback to InMemory
+        assertInstanceOf(
+                InMemoryEmbeddingStore.class,
+                provider.createEmbeddingStore("engineering_memory", 384));
+    }
 }
