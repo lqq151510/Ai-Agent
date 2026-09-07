@@ -178,6 +178,8 @@ class RAGMemoryServiceTest {
         java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
         java.util.concurrent.CountDownLatch doneLatch =
                 new java.util.concurrent.CountDownLatch(threadCount);
+        java.util.List<Throwable> unexpectedExceptions =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
         for (int i = 0; i < threadCount; i++) {
             executor.submit(
@@ -186,7 +188,8 @@ class RAGMemoryServiceTest {
                         try {
                             startLatch.await();
                             service.ingestText(userId, itemId, content, title);
-                        } catch (Exception ignored) {
+                        } catch (Throwable t) {
+                            unexpectedExceptions.add(t);
                         } finally {
                             doneLatch.countDown();
                         }
@@ -199,9 +202,168 @@ class RAGMemoryServiceTest {
         executor.shutdown();
 
         assertTrue(finished);
+        assertTrue(
+                unexpectedExceptions.isEmpty(),
+                "Unexpected exceptions in threads: " + unexpectedExceptions);
         assertTrue(service.isAlreadyIngested(itemId, content));
         // Exactly one ingestion should have written to the embedding store
         verify(store, org.mockito.Mockito.times(1)).addAll(any(), any());
+    }
+
+    @Test
+    void testConcurrentIngestionWithFailureAndContentionGuaranteesMutualExclusion()
+            throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        String content = "Contention payload with failure";
+        String title = "Doc Title";
+
+        EmbeddingStoreProvider provider = mock(EmbeddingStoreProvider.class);
+        @SuppressWarnings("unchecked")
+        EmbeddingStore<TextSegment> store = mock(EmbeddingStore.class);
+        dev.langchain4j.model.embedding.EmbeddingModel model =
+                mock(dev.langchain4j.model.embedding.EmbeddingModel.class);
+        Embedding embedding = Embedding.from(new float[] {1.0f});
+        when(provider.getEmbeddingStore()).thenReturn(store);
+        when(provider.getEmbeddingModel()).thenReturn(model);
+        when(model.embedAll(any()))
+                .thenReturn(dev.langchain4j.model.output.Response.from(List.of(embedding)));
+
+        java.util.concurrent.atomic.AtomicInteger activeConcurrentInStore =
+                new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger maxConcurrentInStore =
+                new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger invocationCount =
+                new java.util.concurrent.atomic.AtomicInteger(0);
+
+        java.util.concurrent.CountDownLatch aInsideStore =
+                new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch letAFail = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch bInsideStore =
+                new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch letBFinish = new java.util.concurrent.CountDownLatch(1);
+
+        org.mockito.Mockito.doAnswer(
+                        invocation -> {
+                            int count = invocationCount.incrementAndGet();
+                            int current = activeConcurrentInStore.incrementAndGet();
+                            maxConcurrentInStore.accumulateAndGet(current, Math::max);
+                            try {
+                                if (count == 1) {
+                                    aInsideStore.countDown();
+                                    boolean awaited =
+                                            letAFail.await(
+                                                    2, java.util.concurrent.TimeUnit.SECONDS);
+                                    if (!awaited) {
+                                        throw new RuntimeException("Timeout waiting for letAFail");
+                                    }
+                                    throw new RuntimeException("Simulated failure for thread A");
+                                } else if (count == 2) {
+                                    bInsideStore.countDown();
+                                    boolean awaited =
+                                            letBFinish.await(
+                                                    2, java.util.concurrent.TimeUnit.SECONDS);
+                                    if (!awaited) {
+                                        throw new RuntimeException(
+                                                "Timeout waiting for letBFinish");
+                                    }
+                                    return null;
+                                } else {
+                                    return null;
+                                }
+                            } finally {
+                                activeConcurrentInStore.decrementAndGet();
+                            }
+                        })
+                .when(store)
+                .addAll(any(), any());
+
+        RAGMemoryService service = service(provider);
+
+        java.util.List<Throwable> unexpectedExceptions =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        java.util.concurrent.atomic.AtomicReference<Throwable> threadAException =
+                new java.util.concurrent.atomic.AtomicReference<>();
+
+        Thread threadA =
+                new Thread(
+                        () -> {
+                            try {
+                                service.ingestText(userId, itemId, content, title);
+                            } catch (Throwable t) {
+                                threadAException.set(t);
+                            }
+                        },
+                        "Thread-A");
+
+        Thread threadB =
+                new Thread(
+                        () -> {
+                            try {
+                                service.ingestText(userId, itemId, content, title);
+                            } catch (Throwable t) {
+                                unexpectedExceptions.add(t);
+                            }
+                        },
+                        "Thread-B");
+
+        Thread threadC =
+                new Thread(
+                        () -> {
+                            try {
+                                service.ingestText(userId, itemId, content, title);
+                            } catch (Throwable t) {
+                                unexpectedExceptions.add(t);
+                            }
+                        },
+                        "Thread-C");
+
+        // 1. Thread A starts and reaches the store critical section
+        threadA.start();
+        assertTrue(aInsideStore.await(2, java.util.concurrent.TimeUnit.SECONDS));
+
+        // 2. Thread B starts while A is inside and blocks waiting on the stripe lock
+        threadB.start();
+        Thread.sleep(80);
+
+        // 3. Let Thread A fail and terminate
+        letAFail.countDown();
+        threadA.join(2000);
+        org.junit.jupiter.api.Assertions.assertNotNull(threadAException.get());
+        assertTrue(
+                threadAException.get().getCause() != null
+                        && threadAException
+                                .get()
+                                .getCause()
+                                .getMessage()
+                                .contains("Simulated failure for thread A"));
+
+        // 4. Thread B now unblocks, acquires the lock, and enters the store critical section
+        assertTrue(bInsideStore.await(2, java.util.concurrent.TimeUnit.SECONDS));
+
+        // 5. While Thread B is INSIDE the store critical section, Thread C arrives!
+        threadC.start();
+        Thread.sleep(80); // C attempts to acquire the lock and must block
+
+        // 6. Release Thread B to complete successfully
+        letBFinish.countDown();
+        threadB.join(2000);
+        threadC.join(2000);
+
+        // Assertions
+        assertTrue(
+                unexpectedExceptions.isEmpty(),
+                "No unexpected exceptions should be thrown: " + unexpectedExceptions);
+        assertEquals(
+                1,
+                maxConcurrentInStore.get(),
+                "Maximum concurrent critical sections for same item must strictly be 1");
+        assertEquals(
+                2,
+                invocationCount.get(),
+                "Store should be invoked twice: once for failed A, once for successful B; C must"
+                        + " skip");
+        assertTrue(service.isAlreadyIngested(itemId, content));
     }
 
     private static RAGMemoryService service(EmbeddingStoreProvider provider) {

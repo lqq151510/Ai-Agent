@@ -25,7 +25,6 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -44,7 +43,8 @@ public class RAGMemoryService {
                     .maximumSize(10_000)
                     .expireAfterWrite(java.time.Duration.ofHours(24))
                     .build();
-    private final ConcurrentHashMap<UUID, Object> inFlightLocks = new ConcurrentHashMap<>();
+    private static final int STRIPE_COUNT = 128;
+    private final Object[] stripeLocks;
 
     private static String sha256(String text) {
         if (text == null) {
@@ -66,6 +66,19 @@ public class RAGMemoryService {
         this.storeProvider = storeProvider;
         this.searchOrchestrator = searchOrchestrator;
         this.markItDownService = markItDownService;
+        this.stripeLocks = new Object[STRIPE_COUNT];
+        for (int i = 0; i < STRIPE_COUNT; i++) {
+            this.stripeLocks[i] = new Object();
+        }
+    }
+
+    private Object getStripeLock(UUID itemId) {
+        if (itemId == null) {
+            return this;
+        }
+        int hash = itemId.hashCode();
+        hash = hash ^ (hash >>> 16);
+        return stripeLocks[Math.abs(hash % STRIPE_COUNT)];
     }
 
     public boolean isAlreadyIngested(UUID itemId, String text) {
@@ -224,23 +237,19 @@ public class RAGMemoryService {
             return;
         }
 
-        // 2. 进程内基于 itemId 的分段互斥锁，协调本地异步回退任务与 Kafka Consumer 的并发竞态
-        Object lock = inFlightLocks.computeIfAbsent(itemId, k -> new Object());
+        // 2. 进程内生命周期稳定的条带互斥锁（Striped Lock），规避动态锁生命周期过早释放引起的锁分裂竞态
+        Object lock = getStripeLock(itemId);
         synchronized (lock) {
-            try {
-                // 3. 双重检查锁定（Double-Checked Locking）：获取锁后再次校验是否已由并发前序线程完成摄取
-                if (textHash.equals(ingestedItemContentHashes.getIfPresent(itemId))) {
-                    log.info(
-                            "Item {} with identical content was just ingested by concurrent thread,"
-                                    + " skipping duplicate ingestion.",
-                            itemId);
-                    return;
-                }
-                doIngest(userId, itemId, text, title);
-                ingestedItemContentHashes.put(itemId, textHash);
-            } finally {
-                inFlightLocks.remove(itemId, lock);
+            // 3. 双重检查锁定（Double-Checked Locking）：获取锁后再次校验是否已由并发前序线程完成摄取
+            if (textHash.equals(ingestedItemContentHashes.getIfPresent(itemId))) {
+                log.info(
+                        "Item {} with identical content was just ingested by concurrent thread,"
+                                + " skipping duplicate ingestion.",
+                        itemId);
+                return;
             }
+            doIngest(userId, itemId, text, title);
+            ingestedItemContentHashes.put(itemId, textHash);
         }
     }
 

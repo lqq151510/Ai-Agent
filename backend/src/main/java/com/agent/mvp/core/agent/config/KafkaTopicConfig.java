@@ -1,13 +1,13 @@
 package com.agent.mvp.core.agent.config;
 
 import org.apache.kafka.clients.admin.NewTopic;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
 
 @Configuration
-@ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true")
+@ConditionalOnExpression("${app.kafka.enabled:${spring.kafka.consumer.auto-startup:false}}")
 public class KafkaTopicConfig {
 
     public static final String TOPIC_TASK_INPUT = "task-input-topic";

@@ -4,7 +4,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -21,7 +21,7 @@ import org.springframework.util.backoff.ExponentialBackOff;
  * retrieval-task-topic.DLT），避免毒丸消息阻塞消费分区。
  */
 @Configuration
-@ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true")
+@ConditionalOnExpression("${app.kafka.enabled:${spring.kafka.consumer.auto-startup:false}}")
 @ConditionalOnClass(name = "org.springframework.kafka.listener.DefaultErrorHandler")
 public class KafkaErrorHandlingConfig {
 

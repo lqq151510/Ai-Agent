@@ -230,4 +230,68 @@ class KnowledgeIngestionMqTest {
         org.junit.jupiter.api.Assertions.assertNotNull(errorHandler);
         assertTrue(errorHandler instanceof org.springframework.kafka.listener.DefaultErrorHandler);
     }
+
+    @Test
+    @DisplayName("When app.kafka.enabled=true, Kafka topics and error handling beans are loaded")
+    @SuppressWarnings("unchecked")
+    void testKafkaConfigurationLoadedWhenAppKafkaEnabled() {
+        new org.springframework.boot.test.context.runner.ApplicationContextRunner()
+                .withUserConfiguration(
+                        KafkaTopicConfig.class,
+                        com.agent.mvp.core.agent.config.KafkaErrorHandlingConfig.class)
+                .withBean(KafkaTemplate.class, () -> mock(KafkaTemplate.class))
+                .withPropertyValues("app.kafka.enabled=true")
+                .run(
+                        context -> {
+                            org.junit.jupiter.api.Assertions.assertTrue(
+                                    context.containsBean("retrievalTopic"));
+                            org.junit.jupiter.api.Assertions.assertTrue(
+                                    context.containsBean("deadLetterPublishingRecoverer"));
+                            org.junit.jupiter.api.Assertions.assertTrue(
+                                    context.containsBean("kafkaCommonErrorHandler"));
+                        });
+    }
+
+    @Test
+    @DisplayName(
+            "When spring.kafka.consumer.auto-startup=true (app.kafka.enabled absent), Kafka beans"
+                    + " are also loaded")
+    @SuppressWarnings("unchecked")
+    void testKafkaConfigurationLoadedWhenConsumerAutoStartupTrue() {
+        new org.springframework.boot.test.context.runner.ApplicationContextRunner()
+                .withUserConfiguration(
+                        KafkaTopicConfig.class,
+                        com.agent.mvp.core.agent.config.KafkaErrorHandlingConfig.class)
+                .withBean(KafkaTemplate.class, () -> mock(KafkaTemplate.class))
+                .withPropertyValues("spring.kafka.consumer.auto-startup=true")
+                .run(
+                        context -> {
+                            org.junit.jupiter.api.Assertions.assertTrue(
+                                    context.containsBean("retrievalTopic"));
+                            org.junit.jupiter.api.Assertions.assertTrue(
+                                    context.containsBean("deadLetterPublishingRecoverer"));
+                            org.junit.jupiter.api.Assertions.assertTrue(
+                                    context.containsBean("kafkaCommonErrorHandler"));
+                        });
+    }
+
+    @Test
+    @DisplayName("When neither property is set, Kafka beans are NOT loaded")
+    @SuppressWarnings("unchecked")
+    void testKafkaConfigurationNotLoadedWhenDisabled() {
+        new org.springframework.boot.test.context.runner.ApplicationContextRunner()
+                .withUserConfiguration(
+                        KafkaTopicConfig.class,
+                        com.agent.mvp.core.agent.config.KafkaErrorHandlingConfig.class)
+                .withBean(KafkaTemplate.class, () -> mock(KafkaTemplate.class))
+                .run(
+                        context -> {
+                            org.junit.jupiter.api.Assertions.assertFalse(
+                                    context.containsBean("retrievalTopic"));
+                            org.junit.jupiter.api.Assertions.assertFalse(
+                                    context.containsBean("deadLetterPublishingRecoverer"));
+                            org.junit.jupiter.api.Assertions.assertFalse(
+                                    context.containsBean("kafkaCommonErrorHandler"));
+                        });
+    }
 }
