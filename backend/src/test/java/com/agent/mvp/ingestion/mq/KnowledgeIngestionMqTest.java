@@ -43,6 +43,12 @@ class KnowledgeIngestionMqTest {
     @SuppressWarnings("unchecked")
     void testProducerPublishesSuccessfully() {
         KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        java.util.concurrent.CompletableFuture<
+                        org.springframework.kafka.support.SendResult<String, Object>>
+                future =
+                        java.util.concurrent.CompletableFuture.completedFuture(
+                                mock(org.springframework.kafka.support.SendResult.class));
+        org.mockito.Mockito.when(kafkaTemplate.send(any(), any(), any())).thenReturn(future);
         KnowledgeIngestionProducer producer = new KnowledgeIngestionProducer(kafkaTemplate);
         assertTrue(producer.isKafkaEnabled());
 
@@ -104,5 +110,30 @@ class KnowledgeIngestionMqTest {
         consumer.consumeIngestionTask(KnowledgeIngestionEvent.builder().build());
 
         verify(ragMemoryService, times(0)).ingestText(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName(
+            "Consumer rethrows RuntimeException when ingestion fails so Spring Kafka DLT can"
+                    + " trigger")
+    void testConsumerRethrowsExceptionOnError() {
+        RAGMemoryService ragMemoryService = mock(RAGMemoryService.class);
+        org.mockito.Mockito.doThrow(new RuntimeException("Milvus connection timeout"))
+                .when(ragMemoryService)
+                .ingestText(any(), any(), any(), any());
+        IngestionJobService ingestionJobService = mock(IngestionJobService.class);
+        KnowledgeIngestionConsumer consumer =
+                new KnowledgeIngestionConsumer(ragMemoryService, ingestionJobService);
+
+        KnowledgeIngestionEvent event =
+                KnowledgeIngestionEvent.builder()
+                        .userId(UUID.randomUUID())
+                        .knowledgeItemId(UUID.randomUUID())
+                        .title("Title")
+                        .content("Content")
+                        .build();
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                RuntimeException.class, () -> consumer.consumeIngestionTask(event));
     }
 }

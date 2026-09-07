@@ -13,12 +13,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * RAG 检索质量自动化基准评测套件 (RAG Evaluation Benchmark).
+ * RAG 检索融合行为基准评测套件 (RAG Retrieval Strategy Evaluation).
  *
- * <p>量化对比三种策略在工程文档与代码专有名词场景下的检索质量： 1. 纯关键词检索 (Keyword / BM25 / FTS) 2. 纯密集语义向量检索 (Dense Vector) 3.
- * RRF 倒数排序混合融合检索 (Reciprocal Rank Fusion Hybrid)
+ * <p>基于 8 篇工程文档与 13 组对比查询（涵盖专有名词精确查询与模糊语义查询）， 验证并量化对比三种检索策略的行为表现： 1. 纯关键词检索 (Keyword / BM25 / FTS)
+ * 2. 纯密集语义向量打分 (Dense Vector Simulation) 3. RRF 倒数排序混合融合检索 (Reciprocal Rank Fusion Hybrid, k=60)
  *
- * <p>评测指标： - Hit Rate @ 1 (Hit@1) - Hit Rate @ 3 (Hit@3) - MRR (Mean Reciprocal Rank，平均倒数排名)
+ * <p>核心发现与工程权衡： - RRF 混合检索在 Hit@3 达到 92.3%（相比纯关键词 84.6% 提升明显，与向量持平）； - RRF 的 MRR (0.8718) 高于关键词
+ * (0.8327)，但略低于纯密集向量 (0.8942)， 这源于 RRF 的平滑衰减特性（k=60）分散了单一高置信度头名权重， 但换来了针对专业术语/缩写（如 efConstruction,
+ * HMAC-SHA256）不遗漏的强鲁棒性。
+ *
+ * <p>注：本测试为启发式行为评测套件，用于验证多路召回与融合算法的数学正确性与排序表现。
  */
 public class RAGEvaluationBenchmarkTest {
 
@@ -32,7 +36,7 @@ public class RAGEvaluationBenchmarkTest {
             String strategyName, double hitAt1, double hitAt3, double mrr, long durationMs) {}
 
     @Test
-    @DisplayName("运行 RAG 质量基准评测：量化验证 RRF 混合检索相比单一策略的准确率与 MRR 显著提升")
+    @DisplayName("运行 RAG 检索评测：验证 RRF 混合检索在专有名词与语义多路召回下的 Top-3 命中稳定性与排序权衡")
     void runRAGEvaluationBenchmark() {
         // 1. 构建标准评测语料库（涵盖分布式事务、Kafka、Milvus、JWT、缓存一致性等真实场景）
         List<BenchmarkDoc> corpus =

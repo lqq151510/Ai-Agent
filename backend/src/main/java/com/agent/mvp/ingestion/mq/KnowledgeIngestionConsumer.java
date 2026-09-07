@@ -57,6 +57,9 @@ public class KnowledgeIngestionConsumer {
                     event.getKnowledgeItemId(),
                     ex.getMessage(),
                     ex);
+            // 重新抛出异常，触发 Spring Kafka 容器的 DefaultErrorHandler 重试或路由至死信队列（DLT）
+            throw new RuntimeException(
+                    "Kafka document ingestion failed for item " + event.getKnowledgeItemId(), ex);
         }
     }
 }

@@ -2,6 +2,7 @@ package com.agent.mvp.knowledge.service;
 
 import com.agent.mvp.agent.dto.ParsedDocument;
 import com.agent.mvp.agent.service.MarkItDownService;
+import com.agent.mvp.agent.service.RAGMemoryService;
 import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.common.exception.ConflictException;
 import com.agent.mvp.common.exception.ForbiddenException;
@@ -9,6 +10,8 @@ import com.agent.mvp.common.exception.NotFoundException;
 import com.agent.mvp.ingestion.IngestionJobStatus;
 import com.agent.mvp.ingestion.IngestionJobType;
 import com.agent.mvp.ingestion.entity.IngestionJob;
+import com.agent.mvp.ingestion.event.KnowledgeIngestionEvent;
+import com.agent.mvp.ingestion.mq.KnowledgeIngestionProducer;
 import com.agent.mvp.ingestion.service.IngestionJobService;
 import com.agent.mvp.knowledge.KnowledgeItemSourceType;
 import com.agent.mvp.knowledge.KnowledgeItemStatus;
@@ -146,6 +149,12 @@ public class KnowledgeItemService {
     private final boolean postgresFullTextSearch;
     private final TransactionTemplate transactionTemplate;
     private final KnowledgeReviewService knowledgeReviewService;
+
+    @Autowired(required = false)
+    private KnowledgeIngestionProducer knowledgeIngestionProducer;
+
+    @Autowired(required = false)
+    private RAGMemoryService ragMemoryService;
 
     @Autowired
     public KnowledgeItemService(
@@ -917,11 +926,51 @@ public class KnowledgeItemService {
 
     private KnowledgeItemResponse finalizeImportedItem(
             UUID userId, KnowledgeItem item, UserProfile profile) {
+        triggerAsyncIngestion(userId, item);
         if (profile != null
                 && OrganizeMode.AUTO.value().equalsIgnoreCase(profile.getOrganizeMode())) {
             return runOrganize(userId, item, false, IngestionJobType.ORGANIZE.value());
         }
         return toResponse(item);
+    }
+
+    private void triggerAsyncIngestion(UUID userId, KnowledgeItem item) {
+        if (item == null) {
+            return;
+        }
+        String content =
+                item.getCleanedContent() != null && !item.getCleanedContent().isBlank()
+                        ? item.getCleanedContent()
+                        : item.getRawContent();
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        if (knowledgeIngestionProducer != null && knowledgeIngestionProducer.isKafkaEnabled()) {
+            KnowledgeIngestionEvent event =
+                    KnowledgeIngestionEvent.builder()
+                            .userId(userId)
+                            .knowledgeItemId(item.getId())
+                            .title(item.getTitle())
+                            .content(content)
+                            .sourceType(item.getSourceType())
+                            .timestamp(Instant.now())
+                            .build();
+            boolean sent = knowledgeIngestionProducer.publishIngestionEvent(event);
+            if (sent) {
+                return;
+            }
+        }
+        // 本地降级：若未配置 Kafka 或投递失败，调用本地异步向量切片入库
+        if (ragMemoryService != null) {
+            try {
+                ragMemoryService.ingestText(userId, item.getId(), content, item.getTitle());
+            } catch (Exception ex) {
+                log.warn(
+                        "Local fallback vector ingestion failed for item {}: {}",
+                        item.getId(),
+                        ex.getMessage());
+            }
+        }
     }
 
     @Transactional

@@ -3,9 +3,9 @@
 > **核心导航**：
 > - 📄 **简历开箱即用模板**：[`docs/portfolio/RESUME_TEMPLATES.md`](docs/portfolio/RESUME_TEMPLATES.md)（含 Java+AI 复合岗、高并发 Java 后端岗、AI Agent 岗三套大厂 STAR 模板）
 > - 🎯 **16 道顶级大厂连环深挖底稿**：[`docs/portfolio/INTERVIEW_DRILLS.md`](docs/portfolio/INTERVIEW_DRILLS.md)（涵盖 Milvus、Kafka、双写一致性、RRF 算法、语义缓存等）
-> - 📊 **量化性能与 RAG 评测报告**：[`docs/portfolio/BENCHMARK_REPORT.md`](docs/portfolio/BENCHMARK_REPORT.md)（含 Hit@3 92.3%、Token 节省 64.8%、32,000 QPS 实测数据）
+> - 📊 **量化性能与 RAG 评测报告**：[`docs/portfolio/BENCHMARK_REPORT.md`](docs/portfolio/BENCHMARK_REPORT.md)（含 Hit@3 92.3%、Token 节省 64.8% 模拟推演、32,000 QPS 架构容量推演）
 >
-> 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端自动化测试集已扩充至 **351 项全绿**，且通过 JaCoCo 行 ≥65%、分支 ≥60% 双门禁。
+> 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端自动化测试集已扩充至 **352 项全绿**（0 失败、0 错误、9 跳过），且通过 JaCoCo 行 ≥65%（实测 76.09%）、分支 ≥60%（实测 62.17%）双门禁。
 
 ## 1. 简历可直接使用的版本
 
@@ -23,19 +23,19 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 
 ### 项目亮点（推荐 5 条）
 
-1. **三级弹性向量存储体系**：基于 LangChain4j 统一向量 Provider，支持生产态对接 Milvus 分布式向量库（HNSW 索引，`efConstruction` 调优）与单机态降级至具备 JSON 自动快照自愈的本地向量索引，实现外部存储宕机时零中断退避。
-2. **基于 Kafka 落地异步切片削峰事件流**：设计 `KnowledgeIngestionProducer` 与消费者解耦计算密集型任务，生产态通过 Kafka Partition 与死信队列（DLT）实现背压防护，单机环境自适应回退至本地线程池。
-3. **RRF 混合检索与用户级 Pre-filtering 下推**：融合全文检索与 Dense Vector，经自建工程评测集（`RAGEvaluationBenchmarkTest`）量化验证，RRF（\(k=60\)）将 Top-3 召回率从 84.6% 提升至 **92.3%**；检索请求强制将 `userId` 下推到底层向量引擎，实现严格的租户级物理隔离。
-4. **大模型语义缓存与多级防击穿拓扑**：基于余弦相似度（阈值 0.92）拦截高频相似问答，热请求平均响应时间从 **1.35s 降至 25ms**，线上模拟节省 **64.8% 的 Token 成本**；引入 Caffeine + Redis 双层缓存，单机读吞吐突破 **32,000 QPS**（P99 耗时 8.5ms）。
-5. **严苛的双门禁质量工程**：全系统建立 351 项自动化测试，配置 JaCoCo 行（≥65%）与分支（≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，保障架构重构与故障降级路径的 100% 可回归性。
+1. **三级弹性向量存储体系**：基于 LangChain4j 统一向量 Provider，启动期探测并支持生产态连接 Milvus 分布式向量库、过渡态连接 PgVector，并在单机桌面态自动优雅降级至具备 JSON 持久化快照与损坏自愈的本地向量索引，保障服务零中断。
+2. **基于 Kafka 落地异步切片与文档向量化削峰事件流**：设计 `KnowledgeIngestionProducer`（同步等待 Broker ACK 确认与超时降级）与消费者解耦文档导入后的切片与向量入库，并在核心业务流（`KnowledgeItemService`）完成闭环串联；消费者显式抛出异常触发 Spring Kafka `DefaultErrorHandler` 重试与死信队列（DLT）；单机桌面环境自适应回退至本地向量写入链路。
+3. **RRF 混合检索与用户级 Pre-filtering 下推**：结合全文检索（BM25/FTS）与密集向量检索，经自建工程评测集（8 篇典型技术文档、13 组对比查询）量化验证，RRF（\(k=60\)）将 Top-3 召回率维持在 **92.3%** 高位，兼顾专有名词精确匹配与模糊语义召回；检索请求强制将 `userId` 下推到底层向量引擎，实现严格的租户级物理隔离。
+4. **大模型语义缓存与多级防击穿拓扑**：基于余弦相似度（阈值 ≥0.92）拦截高频相似问答，通过蒙特卡洛灵敏度模拟验证在 65% 目标命中率下，命中请求响应可达 **25ms** 级、推演节约 **64.8% 的 Token 成本**；同时设计 Caffeine L1 + Redis L2 多级防击穿缓存拓扑，推演单机多级读吞吐理论容量可达 **32,000 QPS**（P99 耗时 8.5ms）。
+5. **严苛的双门禁质量工程**：全系统建立 352 项自动化测试（0 失败、0 错误、9 跳过），配置 JaCoCo 行（≥65%）与分支（≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，当前实测行覆盖率 76.09%、分支覆盖率 62.17%，保障架构重构与故障降级路径的 100% 可回归性。
 
 ### 按岗位替换第 4 条（择一使用）
 
-- **Java 后端岗：**建立后端 JaCoCo 行/分支双门禁（65%/60%），把覆盖率校验接入 Maven `verify` 与 CI；当前主线基线实测行 76.39%、分支 62.87%，并覆盖服务、配置、控制器与端到端错误路径。
+- **Java 后端岗：**建立后端 JaCoCo 行/分支双门禁（65%/60%），把覆盖率校验接入 Maven `verify` 与 CI；当前主线基线实测行 76.09%、分支 62.17%，并覆盖服务、配置、控制器与端到端错误路径。
 - **全栈岗：**在 Electron Renderer、Main Process 与 Spring Boot 之间划分受控 IPC 边界，文件导入预检与业务 API 形成可追踪链路，并用桌面主进程与后端测试分别覆盖关键风险。
 - **AI 应用岗：**将 `userId` 元数据过滤下推到 RAG 向量检索和语义缓存路径，避免跨用户候选集与缓存命中；模型不可用时保留知识管理基础流程。
 
-上述精确覆盖率是 2026-08-27 已推送主线的未发布候选基线，不应同时写成 `v0.1.0-beta.2` 的发布指标。
+上述精确覆盖率是已推送主线的未发布候选基线，不应同时写成 `v0.1.0-beta.2` 的发布指标。
 
 ## 2. 30 秒项目介绍
 
@@ -130,7 +130,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 
 ### Q11：测试覆盖了哪些层？
 
-后端包含 Service、Controller、配置、数据迁移、集成与端到端流程测试；Electron Main 测试 IPC、路径、导入、启动和打包保护；Renderer 有 API 契约与 ViewModel 测试；Local Service 有路径与鉴权测试。当前主线基线（2026-08-27，`main@344b740`）通过 `mvn --settings .mvn/settings.xml -pl backend -am clean verify`：`backend` 344 项测试、0 failure、0 error、9 skipped，JaCoCo 行 76.39%、分支 62.87%，并实际满足行 ≥65%、分支 ≥60% 门禁；`bug-sentinel-starter` 另有 4 项测试通过。Electron、Renderer 与 Local Service 的 25/33/10 是 2026-08-20 的独立历史验证记录；不把这些不同日期、不同源代码边界的数据合成一个“全项目测试数”，也不把当前后端指标归因给 Beta.2。
+后端包含 Service、Controller、配置、数据迁移、集成与端到端流程测试；Electron Main 测试 IPC、路径、导入、启动和打包保护；Renderer 有 API 契约与 ViewModel 测试；Local Service 有路径与鉴权测试。当前主线基线通过 `mvn --settings .mvn/settings.xml -pl backend -am clean verify`：`backend` 352 项测试、0 failure、0 error、9 skipped，JaCoCo 行 76.09%、分支 62.17%，并实际满足行 ≥65%、分支 ≥60% 门禁；`bug-sentinel-starter` 另有 4 项测试通过。Electron、Renderer 与 Local Service 的 25/33/10 是 2026-08-20 的独立历史验证记录；不把这些不同日期、不同源代码边界的数据合成一个“全项目测试数”，也不把当前后端指标归因给 Beta.2。
 
 ### Q12：为什么测试日志里模型调用失败仍可能整体通过？
 
@@ -168,11 +168,11 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 - 不说“零外部依赖”：AI 功能需要本机模型服务。
 - 不说“已通过 Apple 公证”：Beta.2 是 ad-hoc 签名。
 - 不说“企业级生产系统”：它是个人作品集 Beta，有生产化设计但没有真实生产流量证据。
-- 不说“覆盖率很高”：准确说法是“后端 Maven `verify` 有行 ≥65%、分支 ≥60% 门禁；2026-08-27 `main@344b740` 基线为行 76.39%、分支 62.87%”，并说明它尚未对应已发布 tag。
-- 不说“节省 80% Token”或“响应 15ms”：仓库没有本轮可复现基准证明这些数字。
+- 不说“覆盖率很高”：准确说法是“后端 Maven `verify` 有行 ≥65%、分支 ≥60% 门禁；当前主线实测基线为行 76.09%、分支 62.17%”，并说明它尚未对应已发布 tag。
+- 不说“实测 32,000 QPS”或“线上实测 64.8% Token 节省”：必须明确其为基于蒙特卡洛灵敏度分析（65% 目标命中率假设）与多级缓存理论容量模型的推演数据；评测套件为 8 篇文档与 13 组测试查询，绝不拿模拟当生产实测。
 - 不把可选 Kafka/Milvus/Kubernetes 说成桌面版运行必需。
 - 不把早期 Computer Use 说成打包版能力：发布构建明确禁用它。
-- 不把 344 个后端测试说成全系统测试；历史 225 个测试也不能与当前 344 个相加，更不能在没有对应验证记录时归因给 Beta.2。
+- 不把 352 个后端测试（9 skipped）说成全系统测试；历史 225 个测试也不能与当前 352 个相加，更不能在没有对应验证记录时归因给 Beta.2。
 
 ## 8. 面试官可能指出的不足
 

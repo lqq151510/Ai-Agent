@@ -45,7 +45,11 @@ public class KnowledgeIngestionProducer {
                             : (event.getUserId() != null
                                     ? event.getUserId().toString()
                                     : "unknown");
-            kafkaTemplate.get().send(KafkaTopicConfig.TOPIC_RETRIEVAL, key, event);
+            var future = kafkaTemplate.get().send(KafkaTopicConfig.TOPIC_RETRIEVAL, key, event);
+            if (future != null) {
+                // 同步等待 Broker ACK 确认（超时 2 秒），避免异步投递静默失败
+                future.get(2, java.util.concurrent.TimeUnit.SECONDS);
+            }
             log.info(
                     "Successfully published KnowledgeIngestionEvent to topic {} for item {}",
                     KafkaTopicConfig.TOPIC_RETRIEVAL,
@@ -53,8 +57,8 @@ public class KnowledgeIngestionProducer {
             return true;
         } catch (Exception ex) {
             log.warn(
-                    "Failed to publish KnowledgeIngestionEvent to Kafka, falling back to local"
-                            + " processing. Error: {}",
+                    "Failed to deliver KnowledgeIngestionEvent to Kafka broker. Falling back to"
+                            + " local processing. Error: {}",
                     ex.getMessage());
             return false;
         }
