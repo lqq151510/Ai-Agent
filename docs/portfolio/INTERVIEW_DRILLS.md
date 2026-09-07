@@ -29,13 +29,13 @@
 - **回答要点**：
   1. **痛点与削峰**：批量导入或上传大文件时，文本解析、分块切片（Chunking）与调用 Embedding 模型是 CPU 和 I/O 密集型操作。若走 HTTP 同步阻塞，会瞬间耗尽工作线程池导致雪崩。我们在 `KnowledgeItemService.finalizeImportedItem` 中引入 `triggerAsyncIngestion` 异步事件流解耦核心业务。
   2. **端到端可靠性设计**：
-     - **Producer 端**：`KnowledgeIngestionProducer` 投递消息后执行 `future.get(2, TimeUnit.SECONDS)` 同步等待 Broker ACK 确认；若未配置 Kafka 或投递超时/异常，自动退避提交至后端独立的 `taskExecutor` 线程池异步执行向量切片入库，兼顾非阻塞响应与消息不丢。
+     - **Producer 端**：`KnowledgeIngestionProducer` 投递消息后执行 `future.get(2, TimeUnit.SECONDS)` 同步等待 Broker ACK 确认；若未配置 Kafka 或投递超时/异常，自动退避将向量摄取提交到本地独立的 `taskExecutor` 线程池异步执行，避免继续在请求线程中执行向量计算；该回退属于进程内尽力执行，不提供持久化任务恢复保证。
      - **Consumer 端**：`KnowledgeIngestionConsumer` 消费消息前先调用 `ragMemoryService.isAlreadyIngested(...)` 进行基于 `itemId` 与内容哈希的幂等校验，若已处理直接跳过；消费失败时**显式重新抛出 `RuntimeException`**，交由 Spring Kafka 容器的 `DefaultErrorHandler` 执行重试与死信投递。
   3. **防重复（幂等消费）与单实例并发边界**：在 `RAGMemoryService` 中维护 Caffeine 幂等去重缓存（24h TTL），基于 SHA-256 内容摘要与基于 `itemId` 的 128 固定槽位条带锁（Striped Lock）实现进程内互斥（Double-checked locking），有效抑制本地异步降级与 Consumer 重试时的单实例并发写入。**明确说明边界**：条带锁仅保证**单服务实例进程内**的多线程互斥；若在多节点分布式集群部署，需进一步依赖 Redis 分布式锁（如 Redisson）或数据库唯一约束（`itemId` + `content_sha256`），这是独立的分布式架构扩展项。
 
 ### Q4：Kafka 消费失败如何处理？死信队列（DLT）怎么设计的？
 - **回答要点**：
-  - 在 `@ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true")` 统一条件下配置 `KafkaErrorHandlingConfig`，注册 Spring Kafka `DefaultErrorHandler`，搭配 `DeadLetterPublishingRecoverer`。
+  - 沿用 Producer 与 Consumer 的统一启用表达式（`@ConditionalOnExpression("${app.kafka.enabled:${spring.kafka.consumer.auto-startup:false}}")`）配置 `KafkaErrorHandlingConfig`，注册 Spring Kafka `DefaultErrorHandler`，搭配 `DeadLetterPublishingRecoverer`。
   - 配置 `ExponentialBackOff`（初始 1s，乘数 2.0，最大 2 次重试），对临时网络抖动或向量库短暂超时执行重试。
   - 将 `IllegalArgumentException` 等不可重试异常标记为非重试直接进入死信队列；
   - 超过重试次数后，消息被路由至 `retrieval-task-topic.DLT` 死信队列，保障主消费链路不被毒丸消息（Poison Pill）阻塞，并支持后续报警排查与重放。
