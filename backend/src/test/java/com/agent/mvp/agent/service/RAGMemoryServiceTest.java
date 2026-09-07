@@ -113,6 +113,97 @@ class RAGMemoryServiceTest {
         verify(store, org.mockito.Mockito.times(1)).addAll(any(), any());
     }
 
+    @Test
+    void testHashCodeCollisionResistance() {
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        // "Aa" and "BB" have identical String.hashCode() == 2112 in standard Java
+        String content1 = "Aa";
+        String content2 = "BB";
+        assertEquals(content1.hashCode(), content2.hashCode());
+
+        EmbeddingStoreProvider provider = mock(EmbeddingStoreProvider.class);
+        @SuppressWarnings("unchecked")
+        EmbeddingStore<TextSegment> store = mock(EmbeddingStore.class);
+        dev.langchain4j.model.embedding.EmbeddingModel model =
+                mock(dev.langchain4j.model.embedding.EmbeddingModel.class);
+        Embedding embedding = Embedding.from(new float[] {1.0f});
+        when(provider.getEmbeddingStore()).thenReturn(store);
+        when(provider.getEmbeddingModel()).thenReturn(model);
+        when(model.embedAll(any()))
+                .thenReturn(dev.langchain4j.model.output.Response.from(List.of(embedding)));
+
+        RAGMemoryService service = service(provider);
+
+        // 1. Ingest content1 ("Aa")
+        service.ingestText(userId, itemId, content1, "Title 1");
+        assertTrue(service.isAlreadyIngested(itemId, content1));
+        // Because SHA-256 is used, content2 ("BB") must NOT be considered already ingested
+        assertFalse(service.isAlreadyIngested(itemId, content2));
+
+        // 2. Ingest content2 ("BB") for the same itemId (e.g. updated item content)
+        service.ingestText(userId, itemId, content2, "Title 2");
+        assertTrue(service.isAlreadyIngested(itemId, content2));
+        assertFalse(service.isAlreadyIngested(itemId, content1));
+
+        // Verify store.addAll was called twice (once for each distinct content)
+        verify(store, org.mockito.Mockito.times(2)).addAll(any(), any());
+    }
+
+    @Test
+    void testConcurrentIngestionDeduplication() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        String content = "Concurrent shared content payload";
+        String title = "Doc Title";
+
+        EmbeddingStoreProvider provider = mock(EmbeddingStoreProvider.class);
+        @SuppressWarnings("unchecked")
+        EmbeddingStore<TextSegment> store = mock(EmbeddingStore.class);
+        dev.langchain4j.model.embedding.EmbeddingModel model =
+                mock(dev.langchain4j.model.embedding.EmbeddingModel.class);
+        Embedding embedding = Embedding.from(new float[] {1.0f});
+        when(provider.getEmbeddingStore()).thenReturn(store);
+        when(provider.getEmbeddingModel()).thenReturn(model);
+        when(model.embedAll(any()))
+                .thenReturn(dev.langchain4j.model.output.Response.from(List.of(embedding)));
+
+        RAGMemoryService service = service(provider);
+
+        int threadCount = 10;
+        java.util.concurrent.ExecutorService executor =
+                java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+        java.util.concurrent.CountDownLatch readyLatch =
+                new java.util.concurrent.CountDownLatch(threadCount);
+        java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch doneLatch =
+                new java.util.concurrent.CountDownLatch(threadCount);
+
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(
+                    () -> {
+                        readyLatch.countDown();
+                        try {
+                            startLatch.await();
+                            service.ingestText(userId, itemId, content, title);
+                        } catch (Exception ignored) {
+                        } finally {
+                            doneLatch.countDown();
+                        }
+                    });
+        }
+
+        readyLatch.await();
+        startLatch.countDown(); // Simultaneous release of all 10 threads
+        boolean finished = doneLatch.await(5, java.util.concurrent.TimeUnit.SECONDS);
+        executor.shutdown();
+
+        assertTrue(finished);
+        assertTrue(service.isAlreadyIngested(itemId, content));
+        // Exactly one ingestion should have written to the embedding store
+        verify(store, org.mockito.Mockito.times(1)).addAll(any(), any());
+    }
+
     private static RAGMemoryService service(EmbeddingStoreProvider provider) {
         return new RAGMemoryService(
                 provider, mock(SearchOrchestrator.class), mock(MarkItDownService.class));

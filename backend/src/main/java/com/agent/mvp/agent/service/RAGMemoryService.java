@@ -17,10 +17,15 @@ import dev.langchain4j.store.embedding.EmbeddingMatch;
 import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,6 +44,20 @@ public class RAGMemoryService {
                     .maximumSize(10_000)
                     .expireAfterWrite(java.time.Duration.ofHours(24))
                     .build();
+    private final ConcurrentHashMap<UUID, Object> inFlightLocks = new ConcurrentHashMap<>();
+
+    private static String sha256(String text) {
+        if (text == null) {
+            return "";
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(text.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(bytes);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 algorithm unavailable", ex);
+        }
+    }
 
     public RAGMemoryService(
             EmbeddingStoreProvider storeProvider,
@@ -57,7 +76,7 @@ public class RAGMemoryService {
         if (existingHash == null) {
             return false;
         }
-        String currentHash = Integer.toHexString(text.hashCode());
+        String currentHash = sha256(text);
         return existingHash.equals(currentHash);
     }
 
@@ -185,19 +204,47 @@ public class RAGMemoryService {
         }
     }
 
-    /** 针对单段文本（来自异步消息或知识项）执行切片、向量嵌入并存储至向量数据库。具备幂等防重保障。 */
+    /** 针对单段文本（来自异步消息或知识项）执行切片、向量嵌入并存储至向量数据库。具备幂等防重与并发协调保障。 */
     public void ingestText(UUID userId, UUID itemId, String text, String title) {
         if (text == null || text.isBlank()) {
             return;
         }
-        String textHash = Integer.toHexString(text.hashCode());
-        if (itemId != null && textHash.equals(ingestedItemContentHashes.getIfPresent(itemId))) {
+        String textHash = sha256(text);
+        if (itemId == null) {
+            doIngest(userId, null, text, title);
+            return;
+        }
+
+        // 1. 快速检查（Fast path）：若缓存中已存在该 itemId 且内容摘要一致，直接返回
+        if (textHash.equals(ingestedItemContentHashes.getIfPresent(itemId))) {
             log.info(
                     "Item {} with identical content already ingested into vector store, skipping"
                             + " duplicate ingestion.",
                     itemId);
             return;
         }
+
+        // 2. 进程内基于 itemId 的分段互斥锁，协调本地异步回退任务与 Kafka Consumer 的并发竞态
+        Object lock = inFlightLocks.computeIfAbsent(itemId, k -> new Object());
+        synchronized (lock) {
+            try {
+                // 3. 双重检查锁定（Double-Checked Locking）：获取锁后再次校验是否已由并发前序线程完成摄取
+                if (textHash.equals(ingestedItemContentHashes.getIfPresent(itemId))) {
+                    log.info(
+                            "Item {} with identical content was just ingested by concurrent thread,"
+                                    + " skipping duplicate ingestion.",
+                            itemId);
+                    return;
+                }
+                doIngest(userId, itemId, text, title);
+                ingestedItemContentHashes.put(itemId, textHash);
+            } finally {
+                inFlightLocks.remove(itemId, lock);
+            }
+        }
+    }
+
+    private void doIngest(UUID userId, UUID itemId, String text, String title) {
         try {
             java.util.Map<String, String> metadataMap = new java.util.HashMap<>();
             if (userId != null) {
@@ -217,9 +264,6 @@ public class RAGMemoryService {
                 EmbeddingStore<TextSegment> embeddingStore = storeProvider.getEmbeddingStore();
                 Response<List<Embedding>> embeddingResponse = embeddingModel.embedAll(segments);
                 embeddingStore.addAll(embeddingResponse.content(), segments);
-            }
-            if (itemId != null) {
-                ingestedItemContentHashes.put(itemId, textHash);
             }
             log.info(
                     "Successfully ingested text for item {} with {} segments",

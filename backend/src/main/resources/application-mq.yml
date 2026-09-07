@@ -1,4 +1,11 @@
+app:
+  kafka:
+    enabled: true
+
 spring:
+  kafka:
+    consumer:
+      auto-startup: true
   ai:
     vectorstore:
       milvus:
@@ -10,3 +17,4 @@ spring:
 milvus:
   host: ${MILVUS_HOST:localhost}
   port: ${MILVUS_PORT:19530}
+

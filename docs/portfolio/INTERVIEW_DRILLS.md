@@ -31,14 +31,15 @@
   2. **端到端可靠性设计**：
      - **Producer 端**：`KnowledgeIngestionProducer` 投递消息后执行 `future.get(2, TimeUnit.SECONDS)` 同步等待 Broker ACK 确认；若未配置 Kafka 或投递超时/异常，自动退避提交至后端独立的 `taskExecutor` 线程池异步执行向量切片入库，兼顾非阻塞响应与消息不丢。
      - **Consumer 端**：`KnowledgeIngestionConsumer` 消费消息前先调用 `ragMemoryService.isAlreadyIngested(...)` 进行基于 `itemId` 与内容哈希的幂等校验，若已处理直接跳过；消费失败时**显式重新抛出 `RuntimeException`**，交由 Spring Kafka 容器的 `DefaultErrorHandler` 执行重试与死信投递。
-  3. **防重复（幂等消费）**：在 `RAGMemoryService` 中维护 Caffeine 幂等去重缓存（24h TTL），以 `itemId -> contentHash` 作为幂等键，有效防止 Kafka 网络超时重试或本地降级竞态导致的向量重复插入。
+  3. **防重复（幂等消费）**：在 `RAGMemoryService` 中维护 Caffeine 幂等去重缓存（24h TTL），基于 SHA-256 内容摘要与进程内基于 `itemId` 的并发互斥锁（Double-checked in-flight lock），有效抑制本地异步降级与 Consumer 重试时的重复切片写入。
 
 ### Q4：Kafka 消费失败如何处理？死信队列（DLT）怎么设计的？
 - **回答要点**：
-  - 在 `@Profile("mq")` 下配置 `KafkaErrorHandlingConfig`，注册 Spring Kafka `DefaultErrorHandler`，搭配 `DeadLetterPublishingRecoverer`。
+  - 在 `@ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true")` 统一条件下配置 `KafkaErrorHandlingConfig`，注册 Spring Kafka `DefaultErrorHandler`，搭配 `DeadLetterPublishingRecoverer`。
   - 配置 `ExponentialBackOff`（初始 1s，乘数 2.0，最大 2 次重试），对临时网络抖动或向量库短暂超时执行重试。
   - 将 `IllegalArgumentException` 等不可重试异常标记为非重试直接进入死信队列；
   - 超过重试次数后，消息被路由至 `retrieval-task-topic.DLT` 死信队列，保障主消费链路不被毒丸消息（Poison Pill）阻塞，并支持后续报警排查与重放。
+  - **实事求是说明边界**：当前已完成 Spring Kafka DLT 路由规则配置与单元测试验证（精准断言目标 Partition、Key、Value 与 Topic.DLT 匹配），尚未接入生产级物理 Kafka Broker 进行真机注入与集群演练。
 
 ---
 
@@ -78,7 +79,7 @@
 - **回答要点**：
   1. **后过滤的致命漏洞**：如果检索时不传 `userId`，向量引擎先基于全局数据召回 Top-K（如 Top-5）。若系统内有多个用户，Top-5 可能会被其他用户的相似内容占满；之后在 Java 业务层过滤当前用户的 `userId`，结果很可能被直接滤成 0 个，造成严重的“假性未召回”。
   2. **更严重的是跨租户语义缓存击穿**：如果后过滤，语义缓存可能会把用户 A 问的私密数据命中并输出给用户 B。
-  3. **我们的实现**：在构造 LangChain4j 的 `EmbeddingSearchRequest` 时，通过 `MetadataFilterBuilder.metadataKey("userId").isEqualTo(...)` 将过滤条件**直接下推到底层向量引擎的检索请求内**，在索引扫描阶段完成物理级租户隔离。
+  3. **我们的实现**：在构造 LangChain4j 的 `EmbeddingSearchRequest` 时，通过 `MetadataFilterBuilder.metadataKey("userId").isEqualTo(...)` 将过滤条件**直接下推到底层向量引擎的检索请求内**，在索引扫描阶段完成租户级逻辑预隔离，杜绝内存后过滤的候选集污染。
 
 ### Q9：语义缓存的余弦阈值为什么选 0.92？怎么防止误命中？
 - **回答要点**：
@@ -121,7 +122,7 @@
         </limits>
     </rule>
     ```
-  - 当前后端全量运行 **357 项自动化测试**（0 失败、0 错误、14 跳过），实测行覆盖率 **75.18%**（\(\ge 65\%\)），分支覆盖率 **61.59%**（\(\ge 60\%\)），均稳定越过强门禁标准。任何提交若破坏分支覆盖率或测试通过率，本地构建与 GitHub Actions 均会直接失败阻断。
+  - 当前后端全量运行 **360 项自动化测试**（346 项通过、0 失败、0 错误、14 跳过），实测行覆盖率 **75.25%**（\(\ge 65\%\)），分支覆盖率 **61.61%**（\(\ge 60\%\)），均稳定越过强门禁标准。任何提交若破坏分支覆盖率或测试通过率，本地构建与 GitHub Actions 均会直接失败阻断。
 
 ### Q12：为什么项目中坚持“零模型也可运行”，这是怎么做到的？
 - **回答要点**：

@@ -5,7 +5,7 @@
 > - 🎯 **16 道顶级大厂连环深挖底稿**：[`docs/portfolio/INTERVIEW_DRILLS.md`](docs/portfolio/INTERVIEW_DRILLS.md)（涵盖 Milvus、Kafka、双写一致性、RRF 算法、语义缓存等）
 > - 📊 **量化性能与 RAG 评测报告**：[`docs/portfolio/BENCHMARK_REPORT.md`](docs/portfolio/BENCHMARK_REPORT.md)（含 Hit@3 92.3% 自动化基准、大模型语义缓存与多级缓存架构设计）
 >
-> 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端自动化测试集全绿，且通过 JaCoCo 行 ≥65%（实测 >76%）、分支 ≥60%（实测 >62%）双重强门禁。
+> 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端 360 项自动化测试全绿（346 项通过、14 项跳过、0 失败、0 错误），且通过 JaCoCo 行 ≥65%（实测 75.25%）、分支 ≥60%（实测 61.61%）双重强门禁。
 
 ## 1. 简历可直接使用的版本
 
@@ -24,14 +24,14 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 ### 项目亮点（推荐 5 条）
 
 1. **三级弹性向量存储体系**：基于 LangChain4j 统一向量 Provider，启动期探测并支持生产态连接 Milvus 分布式向量库、过渡态连接 PgVector，并在单机桌面态自动优雅降级至具备 JSON 持久化快照与损坏自愈的本地向量索引，保障服务零中断。
-2. **基于 Kafka 落地异步切片与文档向量化削峰事件流**：设计 `KnowledgeIngestionProducer`（同步等待 Broker ACK 确认与 2s 超时降级）与消费者解耦文档导入后的切片与向量入库；消费者端配置 Spring Kafka `DefaultErrorHandler` + `DeadLetterPublishingRecoverer` 实现指数退避重试与死信队列（DLT）兜底闭环；建立基于 Content Hash 的幂等去重防重机制，杜绝降级或重试时的重复向量切片写入。
-3. **RRF 混合检索与用户级 Pre-filtering 下推**：结合全文检索（BM25/FTS）与密集向量检索，经自建工程评测集（8 篇典型技术文档、13 组对比查询）量化验证，RRF（\(k=60\)）将 Top-3 召回率维持在 **92.3%** 高位，有效兼顾专有名词精确匹配与泛化语义召回；检索请求强制将 `userId` 下推到底层向量引擎，实现严格的租户级物理隔离。
+2. **基于 Kafka 落地异步切片与文档向量化削峰事件流**：设计 `KnowledgeIngestionProducer`（同步等待 Broker ACK 确认与 2s 超时降级）与消费者解耦文档导入后的切片与向量入库；消费者端配置 Spring Kafka `DefaultErrorHandler` + `DeadLetterPublishingRecoverer` 实现指数退避重试与死信队列（DLT）路由闭环；建立基于 SHA-256 摘要与进程内并发互斥锁（Double-checked in-flight lock）的防重机制，抑制本地异步降级与 Consumer 重试时的重复切片写入。
+3. **RRF 混合检索与用户级 Pre-filtering 下推**：结合全文检索（BM25/FTS）与密集向量检索，经自建工程评测集（8 篇典型技术文档、13 组对比查询）量化验证，RRF（\(k=60\)）将 Top-3 召回率维持在 **92.3%** 高位，有效兼顾专有名词精确匹配与泛化语义召回；检索请求强制将 `userId` 下推到底层向量引擎，实现租户级数据逻辑隔离与跨租户防穿透。
 4. **大模型语义缓存与多级防击穿拓扑**：针对高频重复相似问答，设计基于高维向量余弦相似度（阈值 ≥0.92）的语义缓存拦截层，命中相似查询直接复用历史响应，显著削减 LLM API 调用开销与排队延迟；针对元数据设计 Caffeine L1 + Redis L2 两级缓存拓扑，从架构上落地互斥锁防击穿、随机 TTL 抖动防雪崩、空值缓存防穿透，并结合 Cache-Aside 双写淘汰保障最终一致性。
-5. **严苛的双门禁质量工程**：全系统建立 350+ 项自动化测试（0 失败、0 错误），配置 JaCoCo 行（≥65%）与分支（≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，保障架构重构与故障降级路径的 100% 可回归性。
+5. **严苛的双门禁质量工程**：全系统建立 360 项自动化测试（346 项通过、14 项跳过、0 失败、0 错误），配置 JaCoCo 行（实测 75.25% ≥65%）与分支（实测 61.61% ≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，保障架构重构与故障降级路径的 100% 可回归性。
 
 ### 按岗位替换第 4 条（择一使用）
 
-- **Java 后端岗：**建立后端 JaCoCo 行/分支双门禁（65%/60%），把覆盖率校验接入 Maven `verify` 与 CI；当前主线基线实测行 76.09%、分支 62.17%，并覆盖服务、配置、控制器与端到端错误路径。
+- **Java 后端岗：**建立后端 JaCoCo 行/分支双门禁（65%/60%），把覆盖率校验接入 Maven `verify` 与 CI；当前主线基线实测行 75.25%、分支 61.61%，并覆盖服务、配置、控制器与端到端错误路径。
 - **全栈岗：**在 Electron Renderer、Main Process 与 Spring Boot 之间划分受控 IPC 边界，文件导入预检与业务 API 形成可追踪链路，并用桌面主进程与后端测试分别覆盖关键风险。
 - **AI 应用岗：**将 `userId` 元数据过滤下推到 RAG 向量检索和语义缓存路径，避免跨用户候选集与缓存命中；模型不可用时保留知识管理基础流程。
 

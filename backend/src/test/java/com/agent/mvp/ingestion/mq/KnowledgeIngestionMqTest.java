@@ -176,14 +176,57 @@ class KnowledgeIngestionMqTest {
     }
 
     @Test
+    @DisplayName(
+            "DeadLetterPublishingRecoverer routes failed records to .DLT topic with same partition"
+                    + " and key")
+    @SuppressWarnings("unchecked")
+    void testDeadLetterPublishingRecovererRouting() {
+        KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
+        org.mockito.Mockito.when(
+                        kafkaTemplate.send(
+                                any(org.apache.kafka.clients.producer.ProducerRecord.class)))
+                .thenReturn(
+                        java.util.concurrent.CompletableFuture.completedFuture(
+                                mock(org.springframework.kafka.support.SendResult.class)));
+
+        com.agent.mvp.core.agent.config.KafkaErrorHandlingConfig config =
+                new com.agent.mvp.core.agent.config.KafkaErrorHandlingConfig();
+        org.springframework.kafka.listener.DeadLetterPublishingRecoverer recoverer =
+                config.deadLetterPublishingRecoverer(kafkaTemplate);
+
+        org.apache.kafka.clients.consumer.ConsumerRecord<String, Object> record =
+                new org.apache.kafka.clients.consumer.ConsumerRecord<>(
+                        KafkaTopicConfig.TOPIC_RETRIEVAL, 2, 42L, "key-42", "poison-pill-payload");
+        RuntimeException ex = new RuntimeException("Simulated vector embedding failure");
+
+        recoverer.accept(record, ex);
+
+        org.mockito.ArgumentCaptor<org.apache.kafka.clients.producer.ProducerRecord<String, Object>>
+                captor =
+                        org.mockito.ArgumentCaptor.forClass(
+                                org.apache.kafka.clients.producer.ProducerRecord.class);
+        verify(kafkaTemplate, times(1)).send(captor.capture());
+
+        org.apache.kafka.clients.producer.ProducerRecord<String, Object> sentRecord =
+                captor.getValue();
+        org.junit.jupiter.api.Assertions.assertEquals(
+                KafkaTopicConfig.TOPIC_RETRIEVAL + ".DLT", sentRecord.topic());
+        org.junit.jupiter.api.Assertions.assertEquals("key-42", sentRecord.key());
+        org.junit.jupiter.api.Assertions.assertEquals("poison-pill-payload", sentRecord.value());
+        org.junit.jupiter.api.Assertions.assertEquals(2, sentRecord.partition());
+    }
+
+    @Test
     @DisplayName("KafkaErrorHandlingConfig creates CommonErrorHandler with DLT recoverer")
     @SuppressWarnings("unchecked")
     void testKafkaErrorHandlingConfig() {
         KafkaTemplate<String, Object> kafkaTemplate = mock(KafkaTemplate.class);
         com.agent.mvp.core.agent.config.KafkaErrorHandlingConfig config =
                 new com.agent.mvp.core.agent.config.KafkaErrorHandlingConfig();
+        org.springframework.kafka.listener.DeadLetterPublishingRecoverer recoverer =
+                config.deadLetterPublishingRecoverer(kafkaTemplate);
         org.springframework.kafka.listener.CommonErrorHandler errorHandler =
-                config.kafkaCommonErrorHandler(kafkaTemplate);
+                config.kafkaCommonErrorHandler(recoverer);
         org.junit.jupiter.api.Assertions.assertNotNull(errorHandler);
         assertTrue(errorHandler instanceof org.springframework.kafka.listener.DefaultErrorHandler);
     }
