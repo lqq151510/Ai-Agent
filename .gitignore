@@ -24,6 +24,7 @@ env/*.env
 .playwright-mcp/
 .serena/
 .superpowers/
+.reasonix/
 
 # Python local runtime artifacts
 **/__pycache__/
@@ -40,8 +41,9 @@ login-brand-icon*.png
 # CLI local state
 .cli-state/
 
-# Agent team runtime state (DSH AgentTeams mailbox / task ledger)
+# Local agent/tool runtime state (DSH AgentTeams, Claude Code)
 .agent-teams/
+.claude/state/
 
 # Desktop build artifacts
 desktop/node_modules/
