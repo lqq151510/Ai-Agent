@@ -429,7 +429,7 @@ backend/src/main/java/com/agent/mvp/
 最低验收命令：
 
 ```bash
-cd /Users/liuyongze/Documents/AI-agent/backend
+cd <REPO>/backend
 mvn -q test
 ```
 

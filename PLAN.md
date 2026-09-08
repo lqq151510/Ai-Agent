@@ -1,11 +1,15 @@
 # AI-agent Desktop+CLI 后续改动计划
 
+> ⚠️ **状态：历史规划，已归档到「可选模块」演进线。**
+> 本文件的 Phase 2 / Phase 2b（Computer Use）与 Phase 3（Automations）属于**可选模块**演进线，**不属于 Knowledge Desk 主产品默认交付范围**；打包 Beta 默认不启用 Computer Use。
+> 主线口径见 [docs/arch/000-product-line.md](docs/arch/000-product-line.md)；下方内容保留用于追溯，**不再作为当前优先级来源**（当前交付面与优先级以 README、`docs/arch/000-product-line.md` 为准）。
+
 ## Summary
 - 主线按 **Desktop App + CLI** 收敛，Web 不恢复为一等入口。
 - 当前主线：`main@66a1a67`；`v0.1.0-beta.3` 已作为 macOS Apple Silicon personal prerelease 发布。
 - Beta.3 可下载，但它不是 CI 全绿的发布点：release-version 检出组件版本不一致，Ubuntu backend-quality 的两个 `CodeToolServiceTest` 搜索用例失败。既有 tag 与资产不回写、不移动；修复后以新的版本候选完成收口。
 - 已合并的近期能力包括云端 DeepSeek/OpenAI/兼容端点配置、无模型本地启发式整理，以及 macOS 本地运行/打包脚本。
-- 当前优先级：先完成发布工程收口与真实安装包回归，再继续 Computer Use Phase 2b 和 Automations Phase 3。
+- 当前优先级（**历史规划，已归档**）：先完成发布工程收口与真实安装包回归，再继续 Computer Use Phase 2b 和 Automations Phase 3（两者均属**可选模块**；当前交付优先级以 README 与 `docs/arch/000-product-line.md` 为准）。
 
 ## 已完成
 
@@ -30,7 +34,7 @@
 - [x] tool result 授权：bridge 使用 `ensureDesktopAccessToken()` 异步获取真实 token，不再用空 token。
 - [x] Desktop token 改为真实异步获取。
 
-### Phase 2 — Computer Use 第一版 ✅
+### Phase 2 — Computer Use 第一版 ✅（可选模块，历史记录）
 - [x] 新增 `ComputerUseManager`（macOS）：截图、点击、输入、快捷键、滚动、权限探测。
 - [x] IPC 通道：`computer:screenshot`、`computer:click`、`computer:type`、`computer:key`、`computer:scroll`、`computer:permissions`。
 - [x] Agent tool：`computer_use`，参数 `{ action, params }`，默认走审批。
@@ -46,7 +50,7 @@
 - [ ] 对新候选重新下载 DMG/ZIP/SHA256SUMS，复算校验和，并验证 tag、commit 与资产绑定。
 - [ ] 在隔离用户目录中完成真实 `.app` GUI 回归：启动、导入、浏览、搜索、无模型降级、退出清理和重启持久化。
 
-### Phase 2b — Computer Use 可控化（P0/P1 后）
+### Phase 2b — Computer Use 可控化（P0/P1 后）（可选模块）
 
 从"能用"做成"可控"：
 
@@ -58,7 +62,7 @@
 - [ ] **截图后确认流**：截图预览后用户确认再执行后续操作（点击/输入）。
 - [ ] **快捷键/坐标策略稳定化**：修复跨分辨率/多屏场景下坐标偏移问题。
 
-### Phase 3 — Automations（Computer Use 稳定后再做）
+### Phase 3 — Automations（Computer Use 稳定后再做）（可选模块）
 
 - [ ] cron 风格定时调度 + 临时 thread/worktree
 - [ ] review queue：自动任务产出可审查 diff，确认后才合并
@@ -76,10 +80,10 @@
 ### 当前失败 / 待收口 ⚠️
 - GitHub CI/CD Pipeline #47：历史失败为 344 tests、2 failures、0 errors、9 skipped；该历史 run 已被 `9686f46` 的 CI/CD Pipeline #33293965797 全绿结果替代。
 - 发布资产下载回验、真实 GUI、原生退出清理和重启持久化仍需在新候选上执行。
-- Computer Use：验证权限拒绝提示 → 截图成功 → 受控窗口操作 → 禁止未知窗口自动点击。
+- Computer Use（**可选模块**）：验证权限拒绝提示 → 截图成功 → 受控窗口操作 → 禁止未知窗口自动点击。
 
 ## Assumptions
 - `web/` 目录已删除，不恢复。
 - 脚本中 `--skip-web` 作为 `--skip-renderer` 别名保留，不引入破坏性变更。
-- Computer Use 仅 macOS 本机，Windows/Linux 暂不纳入。
-- Automations 在 Computer Use 可控化稳定后再规划。
+- Computer Use（**可选模块**）仅 macOS 本机，Windows/Linux 暂不纳入。
+- Automations（**可选模块**）在 Computer Use 可控化稳定后再规划。

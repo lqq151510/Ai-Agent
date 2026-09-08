@@ -11,7 +11,7 @@
 
     <groupId>com.agent</groupId>
     <artifactId>backend</artifactId>
-        <version>0.1.0-beta.3</version>
+        <version>0.1.0-beta.4</version>
     <name>ai-agent-backend</name>
 
     <properties>
@@ -308,9 +308,16 @@
 
 
         <!--
-            FlexAgent is consumed from GitHub Packages. The Spring starter is intentionally
-            omitted: AgentConfiguration creates the runtime explicitly, and the starter
+            FlexAgent is consumed from GitHub Packages, not from Maven Central. The Spring starter is
+            intentionally omitted: AgentConfiguration creates the runtime explicitly, and the starter
             would pull an older Spring Boot auto-configuration layer into this application.
+
+            Build prerequisites: a build machine needs either GitHub Packages credentials (settings.xml
+            server id "github"; .mvn/settings.xml holds environment placeholders) or a pre-populated local
+            Maven repository so offline builds with `mvn -o` can resolve this artifact together with its
+            transitive org.flexagent:flexagent-core. Verify the local cache with
+            scripts/check-offline-build.sh; scenario-by-scenario guidance (token, offline cache, no
+            FlexAgent) is in docs/offline-build.md.
         -->
         <dependency>
             <groupId>org.flexagent</groupId>
@@ -332,7 +339,7 @@
         <dependency>
             <groupId>com.agent</groupId>
             <artifactId>bug-sentinel-starter</artifactId>
-            <version>0.1.0-beta.3</version>
+            <version>0.1.0-beta.4</version>
         </dependency>
 
     </dependencies>

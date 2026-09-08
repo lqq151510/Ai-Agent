@@ -13,6 +13,7 @@ import {
   Settings2,
   ShieldCheck,
   Trash2,
+  User,
 } from 'lucide-react';
 import {
   canExportLocalAssistantSession,
@@ -547,9 +548,28 @@ export const LocalAssistantPage = ({
             ) : null}
         {visibleMessages.map((message) => (
               <article className={`kd-assistant-message kd-assistant-message--${message.role}`} key={message.id}>
-                <span className="kd-assistant-message-role">{message.role === 'user' ? '你' : '本机助手'}</span>
+                <div className="kd-assistant-message-header">
+                  <span className="kd-assistant-message-role">
+                    {message.role === 'user' ? (
+                      <>
+                        <User size={12} />
+                        <span>你</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bot size={12} />
+                        <span>本机助手</span>
+                      </>
+                    )}
+                  </span>
+                </div>
                 <p>{message.content || (message.pending ? '正在思考…' : '')}</p>
-                {message.pending && message.role === 'assistant' ? <Loader2 className="kd-spin" size={14} /> : null}
+                {message.pending && message.role === 'assistant' ? (
+                  <div className="kd-assistant-thinking">
+                    <Loader2 className="kd-spin" size={13} />
+                    <span>正在生成回复…</span>
+                  </div>
+                ) : null}
                 {message.role === 'assistant'
                   && !message.pending
                   && !message.id.startsWith('pending-assistant-')
@@ -577,21 +597,37 @@ export const LocalAssistantPage = ({
           {error ? <p className="kd-assistant-error" role="alert">{error}</p> : null}
           {exportMessage ? <p className="kd-assistant-export-message" role="status">{exportMessage}</p> : null}
           <div className="kd-assistant-composer">
-            <textarea
-              aria-label="向本机助手发送消息"
-              disabled={isSending}
-              maxLength={8000}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={onDraftKeyDown}
-              placeholder="写下一个问题、想法，或需要整理的内容…"
-              value={draft}
-            />
-            <div>
-              <span>Enter 发送 · Shift + Enter 换行</span>
-              <button className="kd-primary-button" disabled={!draft.trim() || isSending} onClick={() => void sendMessage()} type="button">
-                {isSending ? <Loader2 className="kd-spin" size={16} /> : <SendHorizontal size={16} />}
-                {isSending ? '生成中' : '发送'}
-              </button>
+            <div className="kd-assistant-composer-box">
+              <textarea
+                aria-label="向本机助手发送消息"
+                disabled={isSending}
+                maxLength={8000}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={onDraftKeyDown}
+                placeholder="写下一个问题、想法，或需要整理的内容…"
+                rows={2}
+                value={draft}
+              />
+              <div className="kd-assistant-composer-footer">
+                <div className="kd-assistant-composer-hint">
+                  {selectedModel ? (
+                    <span className="kd-assistant-model-pill" title={`${selectedModel.provider} · ${selectedModel.model}`}>
+                      <span className="kd-assistant-model-pill__dot" />
+                      {selectedModel.model}
+                    </span>
+                  ) : null}
+                  <span>Enter 发送 · Shift + Enter 换行</span>
+                </div>
+                <button
+                  className="kd-primary-button"
+                  disabled={!draft.trim() || isSending}
+                  onClick={() => void sendMessage()}
+                  type="button"
+                >
+                  {isSending ? <Loader2 className="kd-spin" size={15} /> : <SendHorizontal size={15} />}
+                  <span>{isSending ? '生成中' : '发送'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </section>

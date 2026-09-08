@@ -1693,10 +1693,8 @@ public class KnowledgeItemService {
     }
 
     private int countWords(String text) {
-        if (text == null || text.isBlank()) {
-            return 0;
-        }
-        return text.trim().split("\\s+").length;
+        // CJK 按字、拉丁/数字按词（语义与边界见 WordCounter）。
+        return WordCounter.count(text);
     }
 
     private String toJson(Map<String, ?> value) {

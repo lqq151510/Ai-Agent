@@ -44,3 +44,24 @@ test('rejects a non-numeric CFBundleVersion', () => {
     /must contain only one to three numeric dot-separated components/,
   );
 });
+
+test('rejects a CFBundleVersion that does not follow the prerelease number', () => {
+  assert.throws(
+    () => resolveMacosReleaseMetadata(sample({ version: '0.1.0-beta.4', bundleVersion: '3' })),
+    /must equal the prerelease number 4/,
+  );
+});
+
+test('accepts a CFBundleVersion that follows the prerelease number', () => {
+  assert.deepEqual(
+    resolveMacosReleaseMetadata(sample({ version: '0.1.0-beta.4', bundleVersion: '4' })).bundleVersion,
+    '4',
+  );
+});
+
+test('leaves CFBundleVersion unconstrained for multi-component prereleases', () => {
+  assert.deepEqual(
+    resolveMacosReleaseMetadata(sample({ version: '0.1.0-beta.3.1', bundleVersion: '7' })).bundleVersion,
+    '7',
+  );
+});

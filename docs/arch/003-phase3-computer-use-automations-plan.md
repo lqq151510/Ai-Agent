@@ -1,5 +1,7 @@
 # Phase 3 落地计划：Computer Use + Automations
 
+> ⚠️ **本文件描述的是「可选模块」演进线，不属于 Knowledge Desk 主产品默认交付范围；主线口径见 [000-product-line.md](000-product-line.md)。**
+
 > 版本：v0.1 | 日期：2026-06-19 | 状态：规划
 > 前置依赖：Phase 1（多线程+Tool链路）+ Phase 2（Review+Skills）已完成
 

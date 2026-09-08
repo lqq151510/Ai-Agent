@@ -1,5 +1,7 @@
 # 对标 Codex Desktop 架构设计文档
 
+> ⚠️ **本文件描述的是「可选模块」演进线，不属于 Knowledge Desk 主产品默认交付范围；主线口径见 [000-product-line.md](000-product-line.md)。**
+
 > 版本：v0.1 | 日期：2026-06-19 | 状态：草稿
 
 ---
@@ -587,8 +589,9 @@ sandbox-exec -f codex.sb java -jar backend.jar ...
 ;; codex.sb (Seatbelt profile)
 (version 1)
 (deny default)
-(allow file-read* (subpath "/Users/liuyongze/Documents/AI-agent"))
-(allow file-write* (subpath "/Users/liuyongze/Documents/AI-agent")
+;; 将 <REPO> 替换为仓库根目录的绝对路径
+(allow file-read* (subpath "<REPO>"))
+(allow file-write* (subpath "<REPO>")
                     (subpath (param "TMPDIR")))
 (allow network* (local ip "127.0.0.1"))
 (deny network* (remote))

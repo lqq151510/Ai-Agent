@@ -43,7 +43,12 @@ jobs:
           assert 'prometheus.io/path' not in backend
           assert 'path: /actuator/health/liveness' in backend
           assert 'path: /api/v1/system/health/ready' in backend
-          assert '@Profile("mq")' in kafka_config
+          # KafkaTopicConfig is enabled by a property expression (app.kafka.enabled,
+          # falling back to spring.kafka.consumer.auto-startup, default false) since
+          # the Kafka conditional refactor; it must stay conditional and off by default.
+          assert '@ConditionalOnExpression' in kafka_config
+          assert 'app.kafka.enabled' in kafka_config
+          assert ':false}' in kafka_config
           assert 'KAFKA_BOOTSTRAP_SERVERS' not in configmap
           assert 'eval' not in local_script
           assert 'redis-cli -a' not in local_script

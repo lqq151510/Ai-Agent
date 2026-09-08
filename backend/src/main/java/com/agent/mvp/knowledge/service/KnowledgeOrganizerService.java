@@ -307,10 +307,8 @@ Both summary and tags are required. tags must contain one to five short strings.
     }
 
     private int countWords(String cleaned) {
-        if (cleaned.isBlank()) {
-            return 0;
-        }
-        return cleaned.split("\\s+").length;
+        // CJK 按字、拉丁/数字按词（语义与边界见 WordCounter）。
+        return WordCounter.count(cleaned);
     }
 
     public record OrganizeResult(

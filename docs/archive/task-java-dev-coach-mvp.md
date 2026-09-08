@@ -1,5 +1,9 @@
 # Task: Java Dev Coach MVP - Multi-Agent Components
 
+> **归档说明（2026-09-08）**：本文件原为仓库根目录的 `task.md`，描述的是 Java Dev Coach 多智能体 MVP 的一次历史任务，状态 Completed。
+> Java Dev Coach 属于 **可选模块**（后端 supporting 模块，桌面无 UI 入口），不属于 Knowledge Desk 主产品默认交付范围；它同时是"AI + Java Dev Coach"早期实验线的一部分，其中的 `agent-*` 微服务已归档到 `legacy/`。
+> 主线口径见 [docs/arch/000-product-line.md](../arch/000-product-line.md)；归档约定见 [legacy/README.md](../../legacy/README.md)。文件保留用于追溯，不再作为当前任务来源。
+
 ## Status
 Completed
 

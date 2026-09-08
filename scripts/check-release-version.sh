@@ -33,7 +33,33 @@ process.stdout.write(match[1]);
 NODE
 }
 
+dependency_version() {
+  local pom_file="$1"
+  local artifact_id="$2"
+  node - "${pom_file}" "${artifact_id}" <<'NODE'
+const fs = require('fs');
+const pomPath = process.argv[2];
+const artifactId = process.argv[3];
+const xml = fs.readFileSync(pomPath, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+const blocks = xml.match(/<dependency>[\s\S]*?<\/dependency>/g) || [];
+for (const block of blocks) {
+  const idMatch = block.match(/<artifactId>\s*([^<\s]+)\s*<\/artifactId>/);
+  if (!idMatch || idMatch[1] !== artifactId) {
+    continue;
+  }
+  const versionMatch = block.match(/<version>\s*([^<\s]+)\s*<\/version>/);
+  if (versionMatch) {
+    process.stdout.write(versionMatch[1]);
+    process.exit(0);
+  }
+}
+process.exit(1);
+NODE
+}
+
 reference_version="$(package_version "${ROOT_DIR}/desktop/package.json")"
+sentinel_reference="$(dependency_version "${ROOT_DIR}/backend/pom.xml" "bug-sentinel-starter")" \
+  || fail "backend/pom.xml must pin an explicit version for the bug-sentinel-starter dependency"
 components=(
   "desktop|${reference_version}"
   "ts-cli|$(package_version "${ROOT_DIR}/ts-cli/package.json")"
@@ -41,6 +67,7 @@ components=(
   "root-maven|$(maven_project_version "${ROOT_DIR}/pom.xml")"
   "backend|$(maven_project_version "${ROOT_DIR}/backend/pom.xml")"
   "bug-sentinel-starter|$(maven_project_version "${ROOT_DIR}/bug-sentinel-starter/pom.xml")"
+  "backend:bug-sentinel-starter-dependency|${sentinel_reference}"
 )
 
 for component in "${components[@]}"; do

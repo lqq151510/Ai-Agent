@@ -90,6 +90,15 @@ function validateAppleNumericVersion(value, fieldName, componentCount) {
   }
 }
 
+function prereleaseBundleNumber(version) {
+  // Only a single-component prerelease label such as beta.3 or rc.1 carries an
+  // unambiguous number to reuse as CFBundleVersion. Anything more elaborate
+  // (for example 0.1.0-beta.3.1) is left to the maintainer instead of guessing.
+  const withoutBuildMetadata = version.split('+')[0];
+  const match = withoutBuildMetadata.match(/-[0-9A-Za-z-]+\.([0-9]+)$/);
+  return match ? match[1] : null;
+}
+
 export function resolveMacosReleaseMetadata({ packageJson, builderConfig }) {
   if (!packageJson || typeof packageJson.version !== 'string') {
     fail('desktop/package.json must contain a string version');
@@ -108,6 +117,15 @@ export function resolveMacosReleaseMetadata({ packageJson, builderConfig }) {
     fail('mac.bundleShortVersion ' + bundleShortVersion
       + ' must equal the numeric core ' + versionCore
       + ' of desktop version ' + version);
+  }
+
+  const expectedBundleVersion = prereleaseBundleNumber(version);
+  if (expectedBundleVersion !== null && bundleVersion !== expectedBundleVersion) {
+    fail('mac.bundleVersion ' + bundleVersion
+      + ' must equal the prerelease number ' + expectedBundleVersion
+      + ' of desktop version ' + version
+      + '; macOS compares CFBundleVersion when updating, so bumping the beta number'
+      + ' requires bumping desktop/electron-builder.yml mac.bundleVersion too');
   }
 
   return {

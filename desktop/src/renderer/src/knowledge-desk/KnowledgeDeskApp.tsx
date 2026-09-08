@@ -8,6 +8,8 @@ import {
   Inbox,
   LayoutDashboard,
   MessageCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   RefreshCw,
   Search,
@@ -91,6 +93,7 @@ const pages: Array<{ id: MainPage; label: string; icon: React.ElementType; badge
 const LOCAL_ASSISTANT_DRAFT_MAX_CHARS = 8_000;
 const LOCAL_ASSISTANT_BODY_CONTEXT_MAX_CHARS = 6_000;
 const LOCAL_ASSISTANT_TRUNCATION_NOTE = '\n\n（正文较长，以上为开头摘录；如需更多内容，请提示我继续补充。）';
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'kd:sidebar_collapsed';
 
 const buildAssistantDraftFromKnowledge = (
   item: KnowledgeItem,
@@ -131,6 +134,13 @@ const buildAssistantDraftFromKnowledge = (
 
 const KnowledgeDeskApp = () => {
   const [activePage, setActivePage] = useState<MainPage>('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('profile');
   const [libraryMode, setLibraryMode] = useState<'list' | 'cards'>('list');
   const [activeInboxSegment, setActiveInboxSegment] = useState<InboxSegment>('all');
@@ -177,12 +187,31 @@ const KnowledgeDeskApp = () => {
     };
   }, []);
 
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // ⌘K or Ctrl+K for search
       if (isCommandSearchShortcut(event)) {
         event.preventDefault();
         setActivePage('search');
+        return;
+      }
+
+      // ⌘B or Ctrl+B for Toggle Sidebar
+      if ((event.metaKey || event.ctrlKey) && (event.key === 'b' || event.key === 'B')) {
+        event.preventDefault();
+        toggleSidebar();
         return;
       }
 
@@ -222,7 +251,7 @@ const KnowledgeDeskApp = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [toggleSidebar]);
 
   const refreshSnapshot = useCallback(async () => {
     setIsLoadingSnapshot(true);
@@ -596,6 +625,7 @@ const KnowledgeDeskApp = () => {
         className={`${className} ${activePage === page.id ? 'is-active' : ''}`}
         key={`${className}-${page.id}`}
         onClick={() => setActivePage(page.id)}
+        title={isSidebarCollapsed ? page.label : undefined}
         type="button"
       >
         <Icon size={18} />
@@ -641,14 +671,25 @@ const KnowledgeDeskApp = () => {
   }, [snapshot.status, loadDetailJobs]);
 
   return (
-    <div className="kd-app kd-app--obsidian-index">
-      <aside className="kd-sidebar">
-        <div className="kd-brand" aria-label="知识工作台">
-          <KnowledgeDeskMark className="kd-brand-mark" title="Knowledge Desk" />
-          <div>
-            <div className="kd-brand-name">知识工作台</div>
-            <div className="kd-brand-subtitle">私人索引系统 / 01</div>
+    <div className={`kd-app ${isSidebarCollapsed ? 'kd-app--collapsed' : ''}`}>
+      <aside className={`kd-sidebar ${isSidebarCollapsed ? 'kd-sidebar--collapsed' : ''}`}>
+        <div className="kd-sidebar-header">
+          <div className="kd-brand" aria-label="知识工作台">
+            <KnowledgeDeskMark className="kd-brand-mark" title="知识工作台" />
+            <div className="kd-brand-info">
+              <div className="kd-brand-name">知识工作台</div>
+              <div className="kd-brand-subtitle">私人索引系统 / 01</div>
+            </div>
           </div>
+          <button
+            aria-label={isSidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
+            className="kd-sidebar-toggle"
+            onClick={toggleSidebar}
+            title={isSidebarCollapsed ? '展开侧边栏 (⌘B)' : '折叠侧边栏 (⌘B)'}
+            type="button"
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
         </div>
 
         <nav className="kd-nav" aria-label="主导航">
@@ -657,21 +698,45 @@ const KnowledgeDeskApp = () => {
 
         <div className="kd-import-box">
           <div className="kd-import-title">快速导入</div>
-          <button aria-label="导入网页摘录" className="kd-import-action" onClick={() => setImportMode('web')} type="button">
+          <button
+            aria-label="导入网页摘录"
+            className="kd-import-action"
+            onClick={() => setImportMode('web')}
+            title={isSidebarCollapsed ? '网页摘录' : undefined}
+            type="button"
+          >
             <Globe2 size={16} />
-            网页摘录
+            <span>网页摘录</span>
           </button>
-          <button aria-label="导入本地文档" className="kd-import-action" onClick={() => setImportMode('file')} type="button">
+          <button
+            aria-label="导入本地文档"
+            className="kd-import-action"
+            onClick={() => setImportMode('file')}
+            title={isSidebarCollapsed ? '本地文档' : undefined}
+            type="button"
+          >
             <Upload size={16} />
-            本地文档
+            <span>本地文档</span>
           </button>
-          <button aria-label="粘贴文本片段" className="kd-import-action" onClick={() => setImportMode('snippet')} type="button">
+          <button
+            aria-label="粘贴文本片段"
+            className="kd-import-action"
+            onClick={() => setImportMode('snippet')}
+            title={isSidebarCollapsed ? '粘贴内容' : undefined}
+            type="button"
+          >
             <FileText size={16} />
-            粘贴内容
+            <span>粘贴内容</span>
           </button>
         </div>
 
-        <button aria-label="打开个人中心" className="kd-user-card" onClick={() => setActivePage('settings')} type="button">
+        <button
+          aria-label="打开个人中心"
+          className="kd-user-card"
+          onClick={() => setActivePage('settings')}
+          title={isSidebarCollapsed ? `${snapshot.profile.displayName} · 个人中心` : undefined}
+          type="button"
+        >
           <div className="kd-avatar">泽</div>
           <div className="kd-user-meta">
             <strong>{snapshot.profile.displayName}</strong>
@@ -686,7 +751,7 @@ const KnowledgeDeskApp = () => {
       <main className={`kd-main kd-main--${activePage}`}>
         <header className="kd-topbar">
           <div>
-            <p className="kd-kicker">Obsidian Index / Private Memory System</p>
+            <p className="kd-kicker">Knowledge Desk / Private Memory System</p>
             <h1>{currentTitle}</h1>
           </div>
           <button

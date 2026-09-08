@@ -23,7 +23,6 @@ import {
   Save,
   Search,
   Tags,
-  Network,
   Cpu,
   X,
 } from 'lucide-react';
@@ -2171,6 +2170,16 @@ export const ContextRail = ({
   }
 
   const storagePercent = toPercent(snapshot.storage.readyItems, Math.max(snapshot.storage.totalItems, 1));
+  const activeModel =
+    snapshot.modelProviders.find((p) => p.isDefault && p.enabled) ||
+    snapshot.modelProviders.find((p) => p.state === 'connected' || p.state === 'local') ||
+    snapshot.modelProviders[0];
+
+  const isModelOnline = Boolean(activeModel && (activeModel.state === 'connected' || activeModel.state === 'local'));
+  const modelName = activeModel?.model || activeModel?.provider || '本地轻量模型';
+  const modelStatusText = activeModel
+    ? `${modelName} · ${isModelOnline ? '在线' : '离线待连'}`
+    : '本地模型未配置';
 
   return (
     <aside className="kd-context-rail">
@@ -2184,11 +2193,35 @@ export const ContextRail = ({
         <div className="kd-asset-meter"><span style={{ width: `${storagePercent}%` }} /></div>
         <p>{formatCount(snapshot.storage.readyItems)} / {formatCount(snapshot.storage.totalItems)} 条已进入可检索索引。</p>
       </ContextBlock>
-      <ContextBlock title="未来扩展位" icon={Network}>
-        <div className="kd-extension-list">
-          <span><Network size={15} /> 知识图谱</span>
-          <span><Cpu size={15} /> 个性化推荐</span>
-          <span><BookOpen size={15} /> 本机备份恢复</span>
+      <ContextBlock title="本机推理与索引状态" icon={Cpu}>
+        <div className="kd-engine-status-list">
+          <div className="kd-engine-status-item">
+            <span
+              className={`kd-engine-status-indicator ${
+                isModelOnline ? 'kd-engine-status-indicator--active' : 'kd-engine-status-indicator--idle'
+              }`}
+            />
+            <div className="kd-engine-status-info">
+              <span className="kd-engine-status-label">本地推理引擎</span>
+              <span className="kd-engine-status-value">{modelStatusText}</span>
+            </div>
+          </div>
+          <div className="kd-engine-status-item">
+            <span className="kd-engine-status-indicator kd-engine-status-indicator--active" />
+            <div className="kd-engine-status-info">
+              <span className="kd-engine-status-label">向量检索索引</span>
+              <span className="kd-engine-status-value">
+                {formatCount(snapshot.storage.readyItems)} 条嵌入向量就绪
+              </span>
+            </div>
+          </div>
+          <div className="kd-engine-status-item">
+            <span className="kd-engine-status-indicator kd-engine-status-indicator--active" />
+            <div className="kd-engine-status-info">
+              <span className="kd-engine-status-label">离线隐私保障</span>
+              <span className="kd-engine-status-value">全量数据本地隔离存储</span>
+            </div>
+          </div>
         </div>
       </ContextBlock>
     </aside>

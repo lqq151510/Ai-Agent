@@ -1,5 +1,7 @@
 # Phase 2 落地计划：Review Panel + Skills 系统
 
+> ⚠️ **本文件描述的是「可选模块」演进线，不属于 Knowledge Desk 主产品默认交付范围；主线口径见 [000-product-line.md](000-product-line.md)。**
+
 > 版本：v0.1 | 日期：2026-06-19 | 状态：规划
 > 前置依赖：Phase 1（ThreadManager + PlyPool + ToolBridge + ApprovalEngine）已完成
 

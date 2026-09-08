@@ -170,12 +170,25 @@ echo "[smoke] BASE_URL=${BASE_URL}"
 echo "[smoke] artifacts=${RUN_DIR}"
 echo "[smoke] checking health endpoints"
 
-fetch_to_file "${BASE_URL}/actuator/health" "${RUN_DIR}/actuator-health.json"
+# 健康检查用 /api/v1/system/health/ready（公开端点，与 k8s readiness 探针一致）。
+# 不使用 /actuator/health：自提交 ed1e991 起 SecurityConfig 只放行
+# /actuator/health/liveness，/actuator/health 会返回 401，而 curl -f 配合
+# set -euo pipefail 会让整个 smoke 在第一步就中止
+# （详见 scripts/benchmark/knowledge-flow-baseline.md 的 F1 记录）。
 READY_PAYLOAD="$(curl -fsS "${BASE_URL}/api/v1/system/health/ready")"
 printf '%s\n' "${READY_PAYLOAD}" > "${RUN_DIR}/readiness.json"
 if ! echo "${READY_PAYLOAD}" | grep -q '"ready":true'; then
   echo "[smoke] readiness is not true: ${READY_PAYLOAD}" >&2
   exit 1
+fi
+
+# 附加的非致命 liveness 探针：/actuator/health/liveness 是公开端点（与 k8s
+# liveness 一致），但未启用 probes 的部署里可能不存在，因此失败只告警不中止。
+if curl -fsS --max-time 5 "${BASE_URL}/actuator/health/liveness" \
+  > "${RUN_DIR}/actuator-liveness.json" 2>/dev/null; then
+  echo "[smoke] liveness probe ok"
+else
+  echo "[smoke] liveness probe unavailable (non-fatal)" >&2
 fi
 
 echo "[smoke] running register -> login -> create-session -> stream-chat"

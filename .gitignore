@@ -61,3 +61,11 @@ var/coach-artifacts/
 **/var/coach-artifacts/
 tmp/
 outputs/**/.codex-exec/
+
+# 个人本地配置（不入库；含个人信息）
+*.local.md
+AGENTS.local.md
+.claude/handoffs/
+
+# e2e 基线产物（由 KnowledgeDeskJourneyE2ETest 生成）
+**/artifacts/e2e/

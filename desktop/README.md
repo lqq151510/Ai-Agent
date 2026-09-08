@@ -1,6 +1,8 @@
 # AI Agent Desktop
 
-AI Agent 桌面客户端，基于 Electron 构建，集成后端 Java 服务、React Renderer、TS CLI、本地服务、Review/Skills/Computer Use 面板。
+AI Agent 桌面客户端，基于 Electron 构建。**桌面主界面是 Knowledge Desk**：收集箱 → 知识库 → 每日回顾 → 全局搜索 → 本机助手，后端为随包内置的 Spring Boot 服务、H2 数据库与 JRE（渲染层唯一入口 `src/renderer/src/App.tsx` → `knowledge-desk/KnowledgeDeskApp.tsx`）。
+
+> Review / Skills / Computer Use 面板、TS CLI 与本地服务属于**可选模块**（Codex 对齐演进线），当前 Beta 包默认不启用 Computer Use；产品主线与模块边界见 [../docs/arch/000-product-line.md](../docs/arch/000-product-line.md)。
 
 > 当前按单机 macOS 使用维护；签名、安装包和部署说明不是日常使用前提。
 

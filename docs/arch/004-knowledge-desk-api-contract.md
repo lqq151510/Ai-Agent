@@ -429,7 +429,7 @@
 {
   "title": "ReAct 论文笔记",
   "sourceType": "markdown",
-  "sourceUri": "/Users/liuyongze/Documents/notes/react.md",
+  "sourceUri": "<HOME>/Documents/notes/react.md",
   "content": "# ReAct\\n\\n论文笔记正文..."
 }
 ```

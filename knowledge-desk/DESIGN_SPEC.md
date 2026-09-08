@@ -41,13 +41,13 @@ Components:
 ## Delivery
 
 Static prototype:
-- `/Users/liuyongze/Documents/AI-agent/knowledge-desk/pages/dashboard.html`
-- `/Users/liuyongze/Documents/AI-agent/knowledge-desk/pages/inbox.html`
-- `/Users/liuyongze/Documents/AI-agent/knowledge-desk/pages/library.html`
-- `/Users/liuyongze/Documents/AI-agent/knowledge-desk/pages/detail.html`
-- `/Users/liuyongze/Documents/AI-agent/knowledge-desk/pages/search.html`
-- `/Users/liuyongze/Documents/AI-agent/knowledge-desk/pages/settings.html`
+- `knowledge-desk/pages/dashboard.html`
+- `knowledge-desk/pages/inbox.html`
+- `knowledge-desk/pages/library.html`
+- `knowledge-desk/pages/detail.html`
+- `knowledge-desk/pages/search.html`
+- `knowledge-desk/pages/settings.html`
 
 React mapping:
-- `/Users/liuyongze/Documents/AI-agent/desktop/src/renderer/src/knowledge-desk/KnowledgeDeskApp.tsx`
-- `/Users/liuyongze/Documents/AI-agent/desktop/src/renderer/src/knowledge-desk/knowledge-desk.css`
+- `desktop/src/renderer/src/knowledge-desk/KnowledgeDeskApp.tsx`
+- `desktop/src/renderer/src/knowledge-desk/knowledge-desk.css`

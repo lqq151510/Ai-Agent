@@ -2,6 +2,14 @@
 
 AI Agent Knowledge Desk is a local-first desktop knowledge application and a full-stack AI portfolio project. Its primary deliverable is the Electron desktop app backed by Spring Boot; the repository also contains a TypeScript CLI and an optional deployable server stack.
 
+## 产品主线与模块边界
+
+- 主产品：**AI Agent Knowledge Desk** —— local-first 个人知识工作台，macOS Electron 桌面应用，随包内置 Spring Boot 后端、H2 数据库与 JRE；核心闭环是「收集 → Inbox 整理 → AI 元数据增强 → Library 浏览/搜索 → Detail 回看」。
+- 默认交付面只有 Knowledge Desk 桌面闭环：渲染层唯一入口 `desktop/src/renderer/src/App.tsx` → `desktop/src/renderer/src/knowledge-desk/KnowledgeDeskApp.tsx`。
+- 以下均为**可选模块**，不属于主产品默认交付范围：`ts-cli`、Java Dev Coach、`python-service`、`docker-compose`/`k8s` 服务端栈、Codex 对齐的编码 Agent 能力（Thread/Worktree/PTY/Skills/Computer Use）、`local-service`、legacy `agent-*` 微服务。
+- 各可选模块的状态、是否随桌面包发布、入口文件与风险，以及「文档冲突处置规则」，见 [产品主线与模块边界](docs/arch/000-product-line.md)。
+- README 与 `docs/arch/*` 口径冲突时，以 `docs/arch/000-product-line.md` 为准。
+
 ## Personal desktop Beta scope
 
 - The macOS installer bundles the backend JAR and a Java runtime, and starts a local H2 database automatically. Normal desktop use does not require a separate Java, PostgreSQL, or Docker installation.
@@ -108,7 +116,7 @@ APPLE_TEAM_ID=<team-id> \
 
 Personal `-beta.` tags use a locally built, ad-hoc-signed (not Developer-ID-signed or notarized) DMG/ZIP and a manually reviewed GitHub prerelease. The tag must still match `desktop/package.json`, point to a commit reachable from `origin/main`, and be created only after the local release gate and main-branch CI pass.
 
-`v0.1.0-beta.3` 是已经发布的历史 personal prerelease，但其主 CI 未收口：发布组件版本不一致，且 backend-quality 有两个搜索测试失败。不要移动该 tag 或替换资产；后续候选必须重新满足上述版本一致性和 CI 门禁。
+`v0.1.0-beta.3` 是已经发布的历史 personal prerelease，但其主 CI 未收口：**tag 时组件版本不一致，且 backend-quality 有两个搜索测试失败**。不要移动该 tag 或替换资产；后续候选必须重新满足版本一致性和 CI 门禁。版本不一致已在后续提交（`9686f46`）对齐，并在 2026-09-08 完成 beta.4 收口：当前 HEAD 上 `pom.xml` / `desktop` / `ts-cli` / `local-service` 均为 `0.1.0-beta.4`（`./scripts/check-release-version.sh` 通过，`desktop/electron-builder.yml` 的 `mac.bundleVersion` 同步为 `4`）；两个搜索测试已在 beta.3 之后的 RAG 提交（`0348f72`，Milvus/Kafka 集成与 RAG 套件，改动 `EmbeddingStoreProvider`）中修复，HEAD 上 `SearchOrchestratorTest` / `SearchStrategyConfigTest` 全绿（captain 已验证）。注：`desktop/src/renderer/package.json` 仍为 `0.0.0`，它是内部 workspace 包、不在发布组件清单内，但属发布收口待确认项（t5）。
 
 Non-beta tags enter the `macOS Release Candidate` GitHub Actions job. That formal path requires the GitHub `release` Environment, Developer ID signing credentials, notarization, Gatekeeper validation, checksums, and release-manifest verification before it creates a draft release. Personal Beta convenience does not weaken the formal release gate.
 
@@ -315,6 +323,7 @@ set `SPRING_PROFILES_ACTIVE=legacy` and provide the required Sentinel receiver o
 configuration.
 
 ### Desktop Computer Use
+> 可选模块：该能力属于 Codex 对齐演进线，打包 Beta 默认不启用（见 [产品主线与模块边界](docs/arch/000-product-line.md)）。
 - Desktop exposes macOS-only `computer_use` tool actions through approval-gated IPC:
   `permissions`, `screenshot`, `click`, `type`, `keypress`, and `scroll`.
 - macOS users must grant Screen Recording and Accessibility permissions before screenshot/input actions work.

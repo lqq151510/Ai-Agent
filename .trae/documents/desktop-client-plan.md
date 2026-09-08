@@ -1,5 +1,9 @@
 # AI Agent 桌面客户端（Mac + Windows）实施计划
 
+> ⚠️ **历史文档（2026-05 计划），部分结论已作废，不得作为当前事实引用。**
+> 本文中关于"桌面版不用 Flyway / JPA `ddl-auto` 改为 `update` / 编写 H2 专用初始化脚本"的方案**已作废**：桌面版现已启用 Flyway（`spring.flyway.enabled: true`、`locations: classpath:db/h2`、`baseline-on-migrate: true`）+ `ddl-auto: validate`。
+> 当前口径见 [docs/arch/000-product-line.md](../../docs/arch/000-product-line.md) 与 [docs/arch/005-database-migration-strategy.md](../../docs/arch/005-database-migration-strategy.md)。
+
 ## 摘要
 
 将现有 AI Agent 项目改造为 Mac + Windows 双平台桌面客户端。采用 **Electron** 封装现有 React 前端，**内嵌 Spring Boot 后端**（H2 替代 PostgreSQL、Caffeine 替代 Redis），使用 **jlink 精简 JRE** 打包 Java 运行时，同时集成 CLI 终端面板并保留独立 CLI 工具。
