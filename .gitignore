@@ -10,9 +10,8 @@
 **/.DS_Store
 
 # Node
-web/node_modules/
+node_modules/
 web/dist/
-ts-cli/node_modules/
 ts-cli/dist/
 
 # Env
@@ -41,6 +40,9 @@ login-brand-icon*.png
 # CLI local state
 .cli-state/
 
+# Agent team runtime state (DSH AgentTeams mailbox / task ledger)
+.agent-teams/
+
 # Desktop build artifacts
 desktop/node_modules/
 desktop/dist/
@@ -56,6 +58,4 @@ local-service/dist/
 var/coach-artifacts/
 **/var/coach-artifacts/
 tmp/
-ts-cli/node_modules/
-ts-cli/dist/
 outputs/**/.codex-exec/

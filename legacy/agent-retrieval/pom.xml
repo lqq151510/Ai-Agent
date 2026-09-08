@@ -11,8 +11,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.agent</groupId>
-    <artifactId>agent-reflection</artifactId>
-        <version>0.1.0-beta.2</version>
+    <artifactId>agent-retrieval</artifactId>
+    <version>0.1.0-beta.3</version>
 
     <properties>
         <java.version>21</java.version>
@@ -27,7 +27,7 @@
         <dependency>
             <groupId>com.agent</groupId>
             <artifactId>agent-common</artifactId>
-            <version>0.1.0-beta.2</version>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -38,20 +38,24 @@
             <artifactId>spring-kafka</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>3.5.7</version>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-spring-boot-starter</artifactId>
-            <version>1.0.0-beta5</version>
+            <version>0.36.2</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
-            <version>1.0.0-beta5</version>
-        </dependency>
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
-            <scope>provided</scope>
+            <artifactId>langchain4j-milvus</artifactId>
+            <version>0.36.2</version>
         </dependency>
         <dependency>
             <groupId>commons-io</groupId>

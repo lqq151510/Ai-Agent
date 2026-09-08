@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        Archived agent-* microservices.
+
+        This aggregator is intentionally NOT a module of the repository root pom.xml and is
+        not part of the Knowledge Desk release build or the CI gate. Build it explicitly with:
+
+            mvn -f legacy/pom.xml -DskipTests package
+
+        See legacy/README.md for the archive rationale and the "do not revive silently" rules.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.14</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.agent</groupId>
+    <artifactId>ai-agent-legacy</artifactId>
+    <version>0.1.0-beta.3</version>
+    <packaging>pom</packaging>
+
+    <name>AI Agent Legacy Modules (archived)</name>
+    <description>Archived agent-* microservices. Not part of the Knowledge Desk product line.</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.proc>full</maven.compiler.proc>
+        <tomcat.version>10.1.55</tomcat.version>
+        <netty.version>4.1.135.Final</netty.version>
+        <kafka.version>3.9.2</kafka.version>
+    </properties>
+
+    <modules>
+        <module>agent-common</module>
+        <module>agent-gateway</module>
+        <module>agent-router</module>
+        <module>agent-retrieval</module>
+        <module>agent-generation</module>
+        <module>agent-reflection</module>
+    </modules>
+</project>

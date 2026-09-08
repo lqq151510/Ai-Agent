@@ -150,7 +150,7 @@ npm test
 
 将 `agent-common`、`agent-router`、`agent-retrieval`、`agent-generation`、`agent-reflection`、`agent-gateway` 的编译目标统一为 Java 21 后，先安装根 parent POM 与 `agent-common` 到本地 Maven 仓库，再逐模块执行 `mvn -DskipTests package`，6 个模块均构建成功。
 
-这些模块不是桌面 Beta 的必经运行时，因此该结果只证明 Java 21 编译兼容，不扩大为桌面端到端验证。
+这些模块不是桌面 Beta 的必经运行时，因此该结果只证明 Java 21 编译兼容，不扩大为桌面端到端验证。它们现已归档到 `legacy/` 并脱离根 reactor，统一构建命令为 `mvn -f legacy/pom.xml -DskipTests package`（见 `legacy/README.md`）。
 
 #### React Renderer
 
