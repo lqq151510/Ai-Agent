@@ -52,19 +52,19 @@ import org.springframework.test.context.DynamicPropertySource;
  *
  * <ol>
  *   <li><b>未配置模型源</b>：整理走本地启发式，{@code organizationStrategy=heuristic}；
- *   <li><b>模型源连通性探测通过、但实际整理调用失败</b>：证明降级发生在<b>运行期调用失败</b>路径上，
- *       {@code organizationStrategy=heuristic_fallback}（这是最容易回归的一条：只要有人把模型调用改成硬依赖，
- *       或把异常从 catch 里放出去，本用例立刻变红）；
+ *   <li><b>模型源连通性探测通过、但实际整理调用失败</b>：证明降级发生在<b>运行期调用失败</b>路径上， {@code
+ *       organizationStrategy=heuristic_fallback}（这是最容易回归的一条：只要有人把模型调用改成硬依赖， 或把异常从 catch
+ *       里放出去，本用例立刻变红）；
  *   <li><b>模型源已配置但不可达</b>：源未通过探测（{@code lastCheckStatus != ok}）时被跳过，仍返回 ready。
  * </ol>
  *
  * <p>三种形态都断言：HTTP 200、{@code status=ready}、{@code summary} 非空、{@code language}/{@code tags} 可用，
- * 并断言整理耗时低于 30s（模型不可用时不得把请求挂在超时上），同时在 {@code ingestion_jobs.result_snapshot}
- * 中核对实际落库的 {@code organizationStrategy} 取值。
+ * 并断言整理耗时低于 30s（模型不可用时不得把请求挂在超时上），同时在 {@code ingestion_jobs.result_snapshot} 中核对实际落库的 {@code
+ * organizationStrategy} 取值。
  *
- * <p>说明：{@code SearchOrchestrator}（FTS/Vector/RRF）只服务代码 RAG 路径
- * （{@code RAGMemoryService.searchCodeContext} → {@code CodeRAGService}），**不在** Knowledge Desk 的检索链路上
- * （后者走 {@code KnowledgeItemService.queryItems} 的 SQL FTS）。因此本用例不通过它来断言知识工作台检索。
+ * <p>说明：{@code SearchOrchestrator}（FTS/Vector/RRF）只服务代码 RAG 路径 （{@code
+ * RAGMemoryService.searchCodeContext} → {@code CodeRAGService}），**不在** Knowledge Desk 的检索链路上 （后者走
+ * {@code KnowledgeItemService.queryItems} 的 SQL FTS）。因此本用例不通过它来断言知识工作台检索。
  */
 @DisplayName("G2 模型不可用降级：无模型源 / 调用失败 / 源不可达 三种形态都不阻塞知识管理")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -78,6 +78,7 @@ class KnowledgeModelDegradationE2ETest {
 
     /** mock 收到的"整理请求"（非探测）次数，用于证明降级发生在模型调用失败路径上。 */
     static final AtomicInteger organizeCalls = new AtomicInteger();
+
     /** mock 收到的探测请求次数。 */
     static final AtomicInteger probeCalls = new AtomicInteger();
 
@@ -105,7 +106,8 @@ class KnowledgeModelDegradationE2ETest {
         mockServer = HttpServer.create(new InetSocketAddress(0), 0);
         mockPort = mockServer.getAddress().getPort();
         mockServer.createContext("/v1/chat/completions", new FlakyModelHandler());
-        mockServer.createContext("/v1/models", new StaticJsonHandler("{\"object\":\"list\",\"data\":[]}"));
+        mockServer.createContext(
+                "/v1/models", new StaticJsonHandler("{\"object\":\"list\",\"data\":[]}"));
         mockServer.setExecutor(null);
         mockServer.start();
         closedPort = freeClosedPort();
@@ -155,10 +157,7 @@ class KnowledgeModelDegradationE2ETest {
         assertEquals("ready", outcome.status(), "未配置模型源时整理必须成功并进入 ready");
         assertFalse(outcome.summary().isBlank(), "本地启发式必须产出摘要");
         assertFalse(outcome.language().isBlank(), "本地启发式必须识别语言");
-        assertEquals(
-                "heuristic",
-                outcome.strategy(),
-                "未配置模型源时应走本地启发式整理（无模型依赖）");
+        assertEquals("heuristic", outcome.strategy(), "未配置模型源时应走本地启发式整理（无模型依赖）");
         assertTrue(
                 outcome.elapsedMs() < ORGANIZE_UPPER_BOUND.toMillis(),
                 "整理耗时应在 30s 以内，实际 " + outcome.elapsedMs() + "ms");
@@ -173,10 +172,7 @@ class KnowledgeModelDegradationE2ETest {
         // 1) 注册一个"探测能过、真正整理会失败"的模型源
         String sourceId =
                 createModelSource(
-                        token,
-                        "降级模型源 " + marker,
-                        "http://127.0.0.1:" + mockPort + "/v1",
-                        true);
+                        token, "降级模型源 " + marker, "http://127.0.0.1:" + mockPort + "/v1", true);
         // 2) 触发连通性探测，使 lastCheckStatus=ok（否则源会被直接跳过，测不到 fallback 分支）
         ResponseEntity<Map<String, Object>> tested =
                 postJson(
@@ -185,10 +181,7 @@ class KnowledgeModelDegradationE2ETest {
                         token,
                         new ParameterizedTypeReference<>() {});
         assertStatus(tested, 200, "模型源连通性测试应返回 200");
-        assertEquals(
-                "ok",
-                tested.getBody().get("status"),
-                "探测应通过（mock 对探测请求返回合法响应）");
+        assertEquals("ok", tested.getBody().get("status"), "探测应通过（mock 对探测请求返回合法响应）");
         assertTrue(probeCalls.get() >= 1, "mock 应收到探测请求");
 
         int organizeCallsBefore = organizeCalls.get();
@@ -200,13 +193,8 @@ class KnowledgeModelDegradationE2ETest {
         assertEquals("ready", outcome.status(), "模型调用失败时整理仍必须成功并进入 ready");
         assertFalse(outcome.summary().isBlank(), "降级路径必须产出摘要");
         assertFalse(outcome.tags().isEmpty(), "降级路径必须产出标签");
-        assertEquals(
-                "heuristic_fallback",
-                outcome.strategy(),
-                "模型调用失败时应降级为 heuristic_fallback");
-        assertTrue(
-                organizeCalls.get() > organizeCallsBefore,
-                "必须真的发起过模型调用（否则测的不是运行期降级路径）");
+        assertEquals("heuristic_fallback", outcome.strategy(), "模型调用失败时应降级为 heuristic_fallback");
+        assertTrue(organizeCalls.get() > organizeCallsBefore, "必须真的发起过模型调用（否则测的不是运行期降级路径）");
         assertTrue(
                 outcome.elapsedMs() < ORGANIZE_UPPER_BOUND.toMillis(),
                 "模型失败后不得挂在超时上，实际 " + outcome.elapsedMs() + "ms");
@@ -220,10 +208,7 @@ class KnowledgeModelDegradationE2ETest {
 
         String sourceId =
                 createModelSource(
-                        token,
-                        "不可达模型源 " + marker,
-                        "http://127.0.0.1:" + closedPort + "/v1",
-                        true);
+                        token, "不可达模型源 " + marker, "http://127.0.0.1:" + closedPort + "/v1", true);
 
         // 探测失败 → ModelSourceService.test 抛出 BadGatewayException（502），但会在抛错前把
         // lastCheckStatus 落库为 error；因此整理时该源不合格，直接走本地启发式。
@@ -238,9 +223,7 @@ class KnowledgeModelDegradationE2ETest {
         // BadGatewayException，事务回滚会把该状态丢掉，因此实际取值为 unknown。
         // 这里只断言"不是 ok"（源不可用），既符合当前事实，也不会因将来修复回滚问题而变红。
         String checkStatus = modelSourceCheckStatus(token, sourceId);
-        assertFalse(
-                "ok".equalsIgnoreCase(checkStatus),
-                "探测失败的模型源不得标记为 ok，实际: " + checkStatus);
+        assertFalse("ok".equalsIgnoreCase(checkStatus), "探测失败的模型源不得标记为 ok，实际: " + checkStatus);
 
         String itemId = importSnippet(token, "不可达源样本 " + marker, "中文正文 " + marker);
         OrganizeOutcome outcome = organize(token, itemId);
@@ -259,8 +242,13 @@ class KnowledgeModelDegradationE2ETest {
     // 业务操作
     // ==================================================================================
 
-    private record OrganizeOutcome(String status, String summary, String language, String strategy,
-            List<String> tags, long elapsedMs) {}
+    private record OrganizeOutcome(
+            String status,
+            String summary,
+            String language,
+            String strategy,
+            List<String> tags,
+            long elapsedMs) {}
 
     private OrganizeOutcome organize(String token, String itemId) {
         long started = System.nanoTime();
@@ -292,7 +280,9 @@ class KnowledgeModelDegradationE2ETest {
                 String.valueOf(body.get("summary")),
                 String.valueOf(body.get("language")),
                 strategy,
-                maps(body.get("tags")).stream().map(tag -> String.valueOf(tag.get("name"))).toList(),
+                maps(body.get("tags")).stream()
+                        .map(tag -> String.valueOf(tag.get("name")))
+                        .toList(),
                 elapsedMs);
     }
 
@@ -327,10 +317,7 @@ class KnowledgeModelDegradationE2ETest {
     /** 读取模型源的 lastCheckStatus（ok / error / unknown）。 */
     private String modelSourceCheckStatus(String token, String sourceId) {
         ResponseEntity<List<Map<String, Object>>> sources =
-                getJson(
-                        "/api/v1/model-sources",
-                        token,
-                        new ParameterizedTypeReference<>() {});
+                getJson("/api/v1/model-sources", token, new ParameterizedTypeReference<>() {});
         assertStatus(sources, 200, "模型源列表应返回 200");
         for (Map<String, Object> source : sources.getBody()) {
             if (sourceId.equals(String.valueOf(source.get("id")))) {
@@ -340,7 +327,8 @@ class KnowledgeModelDegradationE2ETest {
         throw new AssertionError("未找到模型源: " + sourceId);
     }
 
-    private String createModelSource(String token, String name, String baseUrl, boolean asDefault) {        ResponseEntity<Map<String, Object>> response =
+    private String createModelSource(String token, String name, String baseUrl, boolean asDefault) {
+        ResponseEntity<Map<String, Object>> response =
                 postJson(
                         "/api/v1/model-sources",
                         Map.of(
@@ -448,7 +436,8 @@ class KnowledgeModelDegradationE2ETest {
     static class FlakyModelHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            String body =
+                    new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             boolean isProbe = body.contains("Reply with the single word: ok.");
             if (isProbe) {
                 probeCalls.incrementAndGet();
@@ -476,7 +465,8 @@ class KnowledgeModelDegradationE2ETest {
         }
     }
 
-    private static void sendJson(HttpExchange exchange, int status, String body) throws IOException {
+    private static void sendJson(HttpExchange exchange, int status, String body)
+            throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);

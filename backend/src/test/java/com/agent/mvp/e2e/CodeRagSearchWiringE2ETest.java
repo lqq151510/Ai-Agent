@@ -44,12 +44,11 @@ import org.springframework.test.context.DynamicPropertySource;
  * G1（可选）：{@code SearchOrchestrator} 在真实 Spring 上下文中的接线验证。
  *
  * <p><b>重要澄清</b>：{@code SearchOrchestrator}（FTS + Vector + RRF，默认 {@code ADAPTIVE}）只服务<b>代码 RAG</b>
- * 路径：{@code RAGMemoryService.searchCodeContext} → {@code CodeRAGService}。它<b>不在</b> Knowledge Desk 的检索链路上
- * ——知识工作台的 {@code GET /api/v1/knowledge-items/search} 走 {@code KnowledgeItemService.queryItems} 的 SQL 检索
- * （{@code to_tsvector(...)}）。后续维护者不要再用它来断言"知识工作台检索"。
+ * 路径：{@code RAGMemoryService.searchCodeContext} → {@code CodeRAGService}。它<b>不在</b> Knowledge Desk
+ * 的检索链路上 ——知识工作台的 {@code GET /api/v1/knowledge-items/search} 走 {@code
+ * KnowledgeItemService.queryItems} 的 SQL 检索 （{@code to_tsvector(...)}）。后续维护者不要再用它来断言"知识工作台检索"。
  *
- * <p>本用例离线可跑：mock 提供 {@code /v1/embeddings}（确定性向量）与 {@code /v1/models}，不依赖任何外部模型。
- * 断言内容：
+ * <p>本用例离线可跑：mock 提供 {@code /v1/embeddings}（确定性向量）与 {@code /v1/models}，不依赖任何外部模型。 断言内容：
  *
  * <ul>
  *   <li>{@code app.search.default-mode=ADAPTIVE}、融合算法为 {@code RRF}、{@code rrf-k=60}（配置接线正确）；
@@ -58,8 +57,8 @@ import org.springframework.test.context.DynamicPropertySource;
  * </ul>
  *
  * <p>边界说明：H2（MODE=PostgreSQL）不提供 {@code to_tsvector} 等 Postgres 全文检索能力，因此本 profile 下
- * <b>无法</b>断言"FTS 与 Vector 双策略经 RRF 融合后的顺序"；该融合顺序由既有单测
- * {@code SearchOrchestratorTest}（adaptive 回退、无策略达标、精确查找走 hybrid）以 mock 策略覆盖。
+ * <b>无法</b>断言"FTS 与 Vector 双策略经 RRF 融合后的顺序"；该融合顺序由既有单测 {@code SearchOrchestratorTest}（adaptive
+ * 回退、无策略达标、精确查找走 hybrid）以 mock 策略覆盖。
  */
 @DisplayName("G1 SearchOrchestrator 接线：ADAPTIVE/RRF 配置 + 代码 RAG 向量检索真实可用")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -119,11 +118,13 @@ class CodeRagSearchWiringE2ETest {
                                 + UUID.randomUUID().toString().replace("-", "")
                                 + ";DB_CLOSE_DELAY=-1;MODE=PostgreSQL");
         registry.add(
-                "app.data-dir",
-                () -> Path.of("target", "kd-g1-data").toAbsolutePath().toString());
+                "app.data-dir", () -> Path.of("target", "kd-g1-data").toAbsolutePath().toString());
         registry.add(
                 "logging.file.name",
-                () -> Path.of("target", "kd-g1-data", "backend-g1.log").toAbsolutePath().toString());
+                () ->
+                        Path.of("target", "kd-g1-data", "backend-g1.log")
+                                .toAbsolutePath()
+                                .toString());
     }
 
     @Test
@@ -151,19 +152,22 @@ class CodeRagSearchWiringE2ETest {
         awaitEmbedded(marker);
 
         List<String> results = ragMemoryService.searchCodeContext(marker, 5);
-        System.out.println("[g1-wiring] results=" + results.size() + " containsMarker="
-                + results.stream().anyMatch(r -> r != null && r.contains(marker)));
+        System.out.println(
+                "[g1-wiring] results="
+                        + results.size()
+                        + " containsMarker="
+                        + results.stream().anyMatch(r -> r != null && r.contains(marker)));
         assertFalse(results.isEmpty(), "ADAPTIVE 模式下代码 RAG 检索应返回结果");
         assertTrue(
-                results.stream().anyMatch(r -> r != null && r.contains(marker)),
-                "检索结果应包含刚入库的标记文本");
+                results.stream().anyMatch(r -> r != null && r.contains(marker)), "检索结果应包含刚入库的标记文本");
     }
 
     /** 等待 embedding 调用被 mock 观察到（入库是同步的，这里只做有界确认）。 */
     private void awaitEmbedded(String marker) {
         Instant deadline = Instant.now().plus(INGEST_WAIT);
         while (Instant.now().isBefore(deadline)) {
-            if (embeddingInputs.stream().anyMatch(input -> input != null && input.contains(marker))) {
+            if (embeddingInputs.stream()
+                    .anyMatch(input -> input != null && input.contains(marker))) {
                 return;
             }
             try {
@@ -207,7 +211,9 @@ class CodeRagSearchWiringE2ETest {
                     sb.append(',');
                 }
                 float[] vector = vectorFor(texts.get(i));
-                sb.append("{\"object\":\"embedding\",\"index\":").append(i).append(",\"embedding\":[");
+                sb.append("{\"object\":\"embedding\",\"index\":")
+                        .append(i)
+                        .append(",\"embedding\":[");
                 for (int d = 0; d < vector.length; d++) {
                     if (d > 0) {
                         sb.append(',');
@@ -255,7 +261,8 @@ class CodeRagSearchWiringE2ETest {
         }
     }
 
-    private static void sendJson(HttpExchange exchange, int status, String body) throws IOException {
+    private static void sendJson(HttpExchange exchange, int status, String body)
+            throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);

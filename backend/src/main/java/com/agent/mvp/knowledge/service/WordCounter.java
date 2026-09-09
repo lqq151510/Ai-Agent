@@ -3,8 +3,8 @@ package com.agent.mvp.knowledge.service;
 /**
  * 知识条目词数统计（导入与整理共用，单一实现）。
  *
- * <p>为什么需要它：早期实现是 {@code text.trim().split("\\s+").length}，对中文（不写空格）会把整段
- * 正文算成 1 个"词"，导致知识工作台的 wordCount 严重低估。本实现按语言特性分别计数：
+ * <p>为什么需要它：早期实现是 {@code text.trim().split("\\s+").length}，对中文（不写空格）会把整段 正文算成 1 个"词"，导致知识工作台的
+ * wordCount 严重低估。本实现按语言特性分别计数：
  *
  * <ul>
  *   <li><b>CJK 字符按字计数</b>：CJK 统一表意文字（含扩展 A、兼容表意文字）、日文假名、韩文音节各计 1；

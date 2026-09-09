@@ -39,8 +39,8 @@ import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
  *
  * <ol>
  *   <li>两条血统的版本号集合必须一致；单侧存在的版本必须显式登记。
- *   <li>每个已发布迁移文件的 SHA-256 必须与 {@code migration-checksums.txt} 基线一致
- *       （Flyway 对已应用迁移的 checksum mismatch 会让用户端直接启动失败）。
+ *   <li>每个已发布迁移文件的 SHA-256 必须与 {@code migration-checksums.txt} 基线一致 （Flyway 对已应用迁移的 checksum
+ *       mismatch 会让用户端直接启动失败）。
  *   <li>桌面 profile 不得回退到 {@code ddl-auto: update}，也不得丢掉 Flyway 配置。
  * </ol>
  */
@@ -78,13 +78,15 @@ class MigrationLineageParityTest {
         assertEquals(
                 Set.of(),
                 pgOnly,
-                "db/migration 中这些版本在 db/h2 缺失：" + pgOnly
+                "db/migration 中这些版本在 db/h2 缺失："
+                        + pgOnly
                         + "。桌面版只加载 classpath:db/h2，缺失会让新表在桌面端不存在；"
                         + "请补 H2 等价迁移，或登记到 INTENTIONALLY_ONE_SIDED 并更新 docs/arch/005。");
         assertEquals(
                 Set.of(),
                 h2Only,
-                "db/h2 中这些版本在 db/migration 缺失：" + h2Only
+                "db/h2 中这些版本在 db/migration 缺失："
+                        + h2Only
                         + "。请补服务端等价迁移，或登记到 INTENTIONALLY_ONE_SIDED 并更新 docs/arch/005。");
     }
 
@@ -103,7 +105,12 @@ class MigrationLineageParityTest {
             String actual = sha256(resource.getInputStream());
             if (!Objects.equals(entry.getValue(), actual)) {
                 failures.add(
-                        entry.getKey() + "：内容已变更（baseline=" + entry.getValue() + "，actual=" + actual + "）");
+                        entry.getKey()
+                                + "：内容已变更（baseline="
+                                + entry.getValue()
+                                + "，actual="
+                                + actual
+                                + "）");
             }
         }
 
@@ -135,9 +142,7 @@ class MigrationLineageParityTest {
                 yaml.contains("baseline-on-migrate: true"),
                 "桌面版必须保留 baseline-on-migrate: true 以兼容既有本地库");
         assertTrue(yaml.contains("ddl-auto: validate"), "桌面版 jpa.hibernate.ddl-auto 必须为 validate");
-        assertFalse(
-                yaml.contains("ddl-auto: update"),
-                "桌面版不得回退到 ddl-auto: update（会造成 schema 漂移）");
+        assertFalse(yaml.contains("ddl-auto: update"), "桌面版不得回退到 ddl-auto: update（会造成 schema 漂移）");
     }
 
     private static Set<String> versionsIn(String location) throws IOException {

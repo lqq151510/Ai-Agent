@@ -68,13 +68,13 @@ import org.springframework.test.context.DynamicPropertySource;
  *   <li><b>助手</b>：会话 + 同步/流式对话 + 会话导出，并断言<b>导入的知识确实进入了模型上下文</b>
  * </ol>
  *
- * <p>知识闭环断言的实现方式：内置 HttpServer 同时模拟 OpenAI 兼容的 {@code /v1/models}、{@code
- * /v1/chat/completions} 与 {@code /v1/embeddings}。整理成功后 {@code KnowledgeItemService} 会异步把条目正文写入
- * embedding store，助手每轮对话又会用用户消息检索该 store 并把命中内容拼进 system prompt；因此本测试在 mock
- * 侧捕获 {@code /v1/chat/completions} 的请求体，断言其中包含导入内容的唯一标记。
+ * <p>知识闭环断言的实现方式：内置 HttpServer 同时模拟 OpenAI 兼容的 {@code /v1/models}、{@code /v1/chat/completions} 与
+ * {@code /v1/embeddings}。整理成功后 {@code KnowledgeItemService} 会异步把条目正文写入 embedding
+ * store，助手每轮对话又会用用户消息检索该 store 并把命中内容拼进 system prompt；因此本测试在 mock 侧捕获 {@code /v1/chat/completions}
+ * 的请求体，断言其中包含导入内容的唯一标记。
  *
- * <p>注意：应用侧 {@code app.local-vector-store.enabled=false}（来自 application-test.yml）只关闭磁盘持久化，
- * 内存 embedding store 仍然生效，这正是本测试可以离线断言知识闭环的原因。
+ * <p>注意：应用侧 {@code app.local-vector-store.enabled=false}（来自 application-test.yml）只关闭磁盘持久化， 内存
+ * embedding store 仍然生效，这正是本测试可以离线断言知识闭环的原因。
  */
 @DisplayName("Knowledge Desk 核心链路 E2E：导入 → 整理 → 检索 → 复习 → 助手")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -142,10 +142,14 @@ class KnowledgeDeskJourneyE2ETest {
                                 + UUID.randomUUID().toString().replace("-", "")
                                 + ";DB_CLOSE_DELAY=-1;MODE=PostgreSQL");
         // 桌面 profile 默认把 data-dir 指到 ~/.ai-agent-desktop，测试里重定向到 target/ 下。
-        registry.add("app.data-dir", () -> Path.of("target", "kd-e2e-data").toAbsolutePath().toString());
+        registry.add(
+                "app.data-dir", () -> Path.of("target", "kd-e2e-data").toAbsolutePath().toString());
         registry.add(
                 "logging.file.name",
-                () -> Path.of("target", "kd-e2e-data", "backend-e2e.log").toAbsolutePath().toString());
+                () ->
+                        Path.of("target", "kd-e2e-data", "backend-e2e.log")
+                                .toAbsolutePath()
+                                .toString());
     }
 
     // ==================================================================================
@@ -158,8 +162,7 @@ class KnowledgeDeskJourneyE2ETest {
     void knowledgeDeskFiveStepJourney() {
         String token = registerAndLogin();
         String marker = "KD-E2E-" + UUID.randomUUID();
-        String snippetContent =
-                "端到端链路标记 " + marker + "：本机知识工作台导入的内容会被整理、检索、复习，并进入助手上下文。";
+        String snippetContent = "端到端链路标记 " + marker + "：本机知识工作台导入的内容会被整理、检索、复习，并进入助手上下文。";
 
         // ---------- 步骤 1：导入 ----------
         Map<String, Object> snippet = importSnippet(token, "链路标记片段", snippetContent);
@@ -247,10 +250,7 @@ class KnowledgeDeskJourneyE2ETest {
         assertTrue(
                 ((Number) batch.getBody().get("selectedCount")).intValue() >= 3,
                 "批量整理应选中剩余 inbox 条目，实际: " + batch.getBody().get("selectedCount"));
-        assertEquals(
-                0,
-                ((Number) batch.getBody().get("failedCount")).intValue(),
-                "批量整理不应有失败条目");
+        assertEquals(0, ((Number) batch.getBody().get("failedCount")).intValue(), "批量整理不应有失败条目");
 
         Map<String, Object> reprocessed = reprocess(token, snippetId);
         assertEquals("ready", reprocessed.get("status"), "重新整理后仍应为 ready");
@@ -273,9 +273,7 @@ class KnowledgeDeskJourneyE2ETest {
                         token,
                         new ParameterizedTypeReference<>() {});
         assertStatus(search, 200, "搜索应返回 200");
-        assertTrue(
-                ((Number) search.getBody().get("total")).longValue() >= 1,
-                "按标记搜索应至少命中一条");
+        assertTrue(((Number) search.getBody().get("total")).longValue() >= 1, "按标记搜索应至少命中一条");
         assertTrue(
                 maps(search.getBody().get("items")).stream()
                         .anyMatch(item -> snippetId.equals(String.valueOf(item.get("id")))),
@@ -297,7 +295,8 @@ class KnowledgeDeskJourneyE2ETest {
                         token,
                         new ParameterizedTypeReference<>() {});
         assertStatus(searchInbox, 200, "inbox 搜索应返回 200");
-        assertEquals(0L, ((Number) searchInbox.getBody().get("total")).longValue(), "整理后不应再有 inbox 命中");
+        assertEquals(
+                0L, ((Number) searchInbox.getBody().get("total")).longValue(), "整理后不应再有 inbox 命中");
 
         ResponseEntity<Map<String, Object>> readyList =
                 getJson(
@@ -330,7 +329,8 @@ class KnowledgeDeskJourneyE2ETest {
         // 标签名会被服务端规范化为小写（KnowledgeItemService#normalizeTagNames）
         assertTrue(
                 maps(updated.getBody().get("tags")).stream()
-                        .anyMatch(tag -> normalizedManualTag.equals(String.valueOf(tag.get("name")))),
+                        .anyMatch(
+                                tag -> normalizedManualTag.equals(String.valueOf(tag.get("name")))),
                 "更新后应包含手动标签（小写规范化）");
 
         ResponseEntity<Map<String, Object>> createdTag =
@@ -353,13 +353,11 @@ class KnowledgeDeskJourneyE2ETest {
                 "同名标签应返回同一个 id");
 
         // ---------- 步骤 4：复习 ----------
-        ResponseEntity<String> queueRaw =
-                getRaw("/api/v1/knowledge-reviews/queue?limit=10", token);
+        ResponseEntity<String> queueRaw = getRaw("/api/v1/knowledge-reviews/queue?limit=10", token);
         assertStatus(queueRaw, 200, "复习队列应返回 200");
         for (String forbidden : List.of("rawContent", "sourceUri", "contentHash", "sourceAsset")) {
             assertFalse(
-                    queueRaw.getBody().contains(forbidden),
-                    "复习队列是安全精简 DTO，不应包含字段: " + forbidden);
+                    queueRaw.getBody().contains(forbidden), "复习队列是安全精简 DTO，不应包含字段: " + forbidden);
         }
         ResponseEntity<Map<String, Object>> queue =
                 getJson(
@@ -377,8 +375,12 @@ class KnowledgeDeskJourneyE2ETest {
                         new ParameterizedTypeReference<>() {});
         assertStatus(firstReview, 200, "首次复习应返回 200");
         assertEquals("good", firstReview.getBody().get("rating"), "应回显 rating");
-        assertEquals(1, ((Number) firstReview.getBody().get("intervalDays")).intValue(), "首次 good 间隔为 1 天");
-        assertEquals(1, ((Number) firstReview.getBody().get("repetitions")).intValue(), "首次 good 次数为 1");
+        assertEquals(
+                1,
+                ((Number) firstReview.getBody().get("intervalDays")).intValue(),
+                "首次 good 间隔为 1 天");
+        assertEquals(
+                1, ((Number) firstReview.getBody().get("repetitions")).intValue(), "首次 good 次数为 1");
         assertEquals(
                 2.5,
                 ((Number) firstReview.getBody().get("easeFactor")).doubleValue(),
@@ -393,8 +395,12 @@ class KnowledgeDeskJourneyE2ETest {
                         token,
                         new ParameterizedTypeReference<>() {});
         assertStatus(secondReview, 200, "第二次复习应返回 200");
-        assertEquals(7, ((Number) secondReview.getBody().get("intervalDays")).intValue(), "第二次 easy 间隔为 7 天");
-        assertEquals(2, ((Number) secondReview.getBody().get("repetitions")).intValue(), "第二次复习次数应为 2");
+        assertEquals(
+                7,
+                ((Number) secondReview.getBody().get("intervalDays")).intValue(),
+                "第二次 easy 间隔为 7 天");
+        assertEquals(
+                2, ((Number) secondReview.getBody().get("repetitions")).intValue(), "第二次复习次数应为 2");
         assertEquals(
                 2.65,
                 ((Number) secondReview.getBody().get("easeFactor")).doubleValue(),
@@ -402,7 +408,8 @@ class KnowledgeDeskJourneyE2ETest {
                 "第二次 easy 的 easeFactor 应为 2.65");
 
         // 边界：未整理条目不可复习
-        Map<String, Object> inboxItem = importSnippet(token, "未整理片段 " + marker, "inbox 内容 " + marker);
+        Map<String, Object> inboxItem =
+                importSnippet(token, "未整理片段 " + marker, "inbox 内容 " + marker);
         ResponseEntity<Map<String, Object>> reviewInbox =
                 postJson(
                         "/api/v1/knowledge-reviews/" + id(inboxItem) + "/complete",
@@ -412,7 +419,10 @@ class KnowledgeDeskJourneyE2ETest {
         assertStatus(reviewInbox, 400, "未整理条目复习应返回 400");
 
         ResponseEntity<Map<String, Object>> summary =
-                getJson("/api/v1/knowledge-reviews/summary", token, new ParameterizedTypeReference<>() {});
+                getJson(
+                        "/api/v1/knowledge-reviews/summary",
+                        token,
+                        new ParameterizedTypeReference<>() {});
         assertStatus(summary, 200, "复习摘要应返回 200");
         assertNotNull(summary.getBody().get("dueCount"), "摘要应包含 dueCount");
 
@@ -420,7 +430,9 @@ class KnowledgeDeskJourneyE2ETest {
                 getJson("/api/v1/dashboard/summary", token, new ParameterizedTypeReference<>() {});
         assertStatus(dashboard, 200, "首页摘要应返回 200");
         assertTrue(((Number) dashboard.getBody().get("totalItems")).longValue() >= 5, "总条目数应 >= 5");
-        assertTrue(((Number) dashboard.getBody().get("readyItems")).longValue() >= 4, "ready 条目数应 >= 4");
+        assertTrue(
+                ((Number) dashboard.getBody().get("readyItems")).longValue() >= 4,
+                "ready 条目数应 >= 4");
         assertNotNull(dashboard.getBody().get("review"), "首页摘要应包含 review 字段");
         assertFalse(maps(dashboard.getBody().get("topTags")).isEmpty(), "首页摘要应包含标签统计");
 
@@ -437,16 +449,18 @@ class KnowledgeDeskJourneyE2ETest {
                         new ParameterizedTypeReference<>() {});
         assertStatus(chat, 200, "同步对话应返回 200");
         assertNotNull(chat.getBody().get("reply"), "对话应返回 reply 字段");
-        assertEquals(sessionId, String.valueOf(chat.getBody().get("sessionId")), "回复的 sessionId 应匹配");
+        assertEquals(
+                sessionId, String.valueOf(chat.getBody().get("sessionId")), "回复的 sessionId 应匹配");
 
         String prompt = latestChatRequest(chatCallsBefore);
         assertNotNull(prompt, "mock 应捕获到 /v1/chat/completions 请求");
-        assertTrue(
-                prompt.contains(marker),
-                "助手 system prompt 应包含刚导入的知识内容（知识闭环断言）");
+        assertTrue(prompt.contains(marker), "助手 system prompt 应包含刚导入的知识内容（知识闭环断言）");
 
         ResponseEntity<String> stream =
-                postStream("/api/v1/agent/chat/stream", Map.of("sessionId", sessionId, "message", "请流式回复 " + marker), token);
+                postStream(
+                        "/api/v1/agent/chat/stream",
+                        Map.of("sessionId", sessionId, "message", "请流式回复 " + marker),
+                        token);
         assertStatus(stream, 200, "流式对话应返回 200");
         assertTrue(stream.getBody().contains("event:done"), "SSE 流应包含 done 事件");
 
@@ -534,8 +548,14 @@ class KnowledgeDeskJourneyE2ETest {
         // 预热：先跑一轮，避免把 JIT/连接建立成本算进基线
         String warmId = id(importSnippet(token, "预热 " + marker, "预热正文 " + marker));
         organize(token, warmId);
-        getJson("/api/v1/knowledge-items/search?q=" + marker, token, new ParameterizedTypeReference<>() {});
-        getJson("/api/v1/knowledge-reviews/queue?limit=10", token, new ParameterizedTypeReference<>() {});
+        getJson(
+                "/api/v1/knowledge-items/search?q=" + marker,
+                token,
+                new ParameterizedTypeReference<>() {});
+        getJson(
+                "/api/v1/knowledge-reviews/queue?limit=10",
+                token,
+                new ParameterizedTypeReference<>() {});
         String sessionId = createSession(token);
         postJson(
                 "/api/v1/agent/chat",
@@ -565,16 +585,21 @@ class KnowledgeDeskJourneyE2ETest {
             samples.get("organize").add(System.nanoTime() - t0);
 
             t0 = System.nanoTime();
-            getJson("/api/v1/knowledge-items/search?q=" + marker, token, new ParameterizedTypeReference<>() {});
+            getJson(
+                    "/api/v1/knowledge-items/search?q=" + marker,
+                    token,
+                    new ParameterizedTypeReference<>() {});
             samples.get("search").add(System.nanoTime() - t0);
 
             t0 = System.nanoTime();
-            getJson("/api/v1/knowledge-reviews/queue?limit=10", token, new ParameterizedTypeReference<>() {});
+            getJson(
+                    "/api/v1/knowledge-reviews/queue?limit=10",
+                    token,
+                    new ParameterizedTypeReference<>() {});
             samples.get("review_queue").add(System.nanoTime() - t0);
 
             // 每次使用全新随机词元，避免命中语义缓存（阈值 0.95），确保测到的是真实的模型往返路径。
-            String coldPrompt =
-                    "冷路径请求 " + UUID.randomUUID() + " " + UUID.randomUUID() + " " + i;
+            String coldPrompt = "冷路径请求 " + UUID.randomUUID() + " " + UUID.randomUUID() + " " + i;
             t0 = System.nanoTime();
             postJson(
                     "/api/v1/agent/chat",
@@ -605,10 +630,7 @@ class KnowledgeDeskJourneyE2ETest {
                     percentileMillis(values, 0.99) < 10_000,
                     entry.getKey() + " p99 应低于 10s（本地 mock 环境的合理性上限）");
         }
-        assertEquals(
-                iterations,
-                modelCalls,
-                "随机词元应绕过语义缓存，使每次 assistant_chat 都走真实模型往返路径");
+        assertEquals(iterations, modelCalls, "随机词元应绕过语义缓存，使每次 assistant_chat 都走真实模型往返路径");
     }
 
     // ==================================================================================
@@ -713,7 +735,8 @@ class KnowledgeDeskJourneyE2ETest {
         Instant deadline = Instant.now().plus(INGEST_WAIT);
         while (Instant.now().isBefore(deadline)) {
             boolean seen =
-                    embeddingInputs.stream().anyMatch(input -> input != null && input.contains(marker));
+                    embeddingInputs.stream()
+                            .anyMatch(input -> input != null && input.contains(marker));
             if (seen) {
                 return;
             }
@@ -792,7 +815,8 @@ class KnowledgeDeskJourneyE2ETest {
             sb.append("\"p50_ms\": ").append(percentileMillis(values, 0.50)).append(", ");
             sb.append("\"p90_ms\": ").append(percentileMillis(values, 0.90)).append(", ");
             sb.append("\"p99_ms\": ").append(percentileMillis(values, 0.99)).append(", ");
-            sb.append("\"max_ms\": ").append(millis(values.stream().mapToLong(Long::longValue).max().orElse(0)));
+            sb.append("\"max_ms\": ")
+                    .append(millis(values.stream().mapToLong(Long::longValue).max().orElse(0)));
             sb.append('}');
             if (++index < samples.size()) {
                 sb.append(',');
@@ -826,8 +850,8 @@ class KnowledgeDeskJourneyE2ETest {
     /**
      * 基线产物目录：仓库根目录下的 {@code artifacts/e2e}。
      *
-     * <p>Surefire 的 {@code user.dir} 是模块目录（backend/），因此这里显式向上定位仓库根，避免产物落到
-     * {@code backend/artifacts}；也支持用 {@code -De2e.baseline.dir=<path>} 覆盖。
+     * <p>Surefire 的 {@code user.dir} 是模块目录（backend/），因此这里显式向上定位仓库根，避免产物落到 {@code
+     * backend/artifacts}；也支持用 {@code -De2e.baseline.dir=<path>} 覆盖。
      */
     private static Path baselineDir() {
         String override = System.getProperty("e2e.baseline.dir");
@@ -878,7 +902,8 @@ class KnowledgeDeskJourneyE2ETest {
     private ResponseEntity<String> getRaw(String path, String accessToken, MediaType accept) {
         HttpHeaders headers = authHeaders(accessToken);
         headers.setAccept(List.of(accept));
-        return restTemplate.exchange(url(path), HttpMethod.GET, new HttpEntity<>(headers), String.class);
+        return restTemplate.exchange(
+                url(path), HttpMethod.GET, new HttpEntity<>(headers), String.class);
     }
 
     private ResponseEntity<String> postStream(String path, Object payload, String accessToken) {
@@ -957,13 +982,15 @@ class KnowledgeDeskJourneyE2ETest {
             chatRequestBodies.add(requestBody);
 
             boolean stream =
-                    requestBody.contains("\"stream\":true") || requestBody.contains("\"stream\": true");
+                    requestBody.contains("\"stream\":true")
+                            || requestBody.contains("\"stream\": true");
             if (stream) {
                 String sse =
-                        "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"e2e-\"}}]}\n\n"
-                                + "data: {\"choices\":[{\"delta\":{\"content\":\"knowledge-\"}}]}\n\n"
-                                + "data: {\"choices\":[{\"delta\":{\"content\":\"reply\"}}]}\n\n"
-                                + "data: [DONE]\n\n";
+                        "data:"
+                            + " {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"e2e-\"}}]}\n\n"
+                            + "data: {\"choices\":[{\"delta\":{\"content\":\"knowledge-\"}}]}\n\n"
+                            + "data: {\"choices\":[{\"delta\":{\"content\":\"reply\"}}]}\n\n"
+                            + "data: [DONE]\n\n";
                 byte[] bytes = sse.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
                 exchange.sendResponseHeaders(200, bytes.length);
@@ -976,7 +1003,7 @@ class KnowledgeDeskJourneyE2ETest {
                     exchange,
                     200,
                     "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"e2e-knowledge-reply\"}}],"
-                            + "\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":5,\"total_tokens\":10}}");
+                        + "\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":5,\"total_tokens\":10}}");
         }
     }
 
@@ -1009,7 +1036,9 @@ class KnowledgeDeskJourneyE2ETest {
                     sb.append(',');
                 }
                 float[] vector = vectorFor(texts.get(i));
-                sb.append("{\"object\":\"embedding\",\"index\":").append(i).append(",\"embedding\":[");
+                sb.append("{\"object\":\"embedding\",\"index\":")
+                        .append(i)
+                        .append(",\"embedding\":[");
                 for (int d = 0; d < vector.length; d++) {
                     if (d > 0) {
                         sb.append(',');
@@ -1018,7 +1047,8 @@ class KnowledgeDeskJourneyE2ETest {
                 }
                 sb.append("]}");
             }
-            sb.append("],\"model\":\"text-embedding-3-small\",\"usage\":{\"prompt_tokens\":1,\"total_tokens\":1}}");
+            sb.append(
+                    "],\"model\":\"text-embedding-3-small\",\"usage\":{\"prompt_tokens\":1,\"total_tokens\":1}}");
             sendJson(exchange, 200, sb.toString());
         }
 
@@ -1044,7 +1074,8 @@ class KnowledgeDeskJourneyE2ETest {
         }
     }
 
-    private static void sendJson(HttpExchange exchange, int status, String body) throws IOException {
+    private static void sendJson(HttpExchange exchange, int status, String body)
+            throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);
