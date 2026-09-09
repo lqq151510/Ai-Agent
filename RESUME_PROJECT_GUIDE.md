@@ -5,7 +5,7 @@
 > - 🎯 **16 道顶级大厂连环深挖底稿**：[`docs/portfolio/INTERVIEW_DRILLS.md`](docs/portfolio/INTERVIEW_DRILLS.md)（涵盖 Milvus、Kafka、双写一致性、RRF 算法、语义缓存等）
 > - 📊 **量化性能与 RAG 评测报告**：[`docs/portfolio/BENCHMARK_REPORT.md`](docs/portfolio/BENCHMARK_REPORT.md)（含 Hit@3 92.3% 自动化基准、大模型语义缓存与多级缓存架构设计）
 >
-> 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端 364 项自动化测试全绿（350 项通过、14 项跳过、0 失败、0 错误），且通过 JaCoCo 行 ≥65%（实测 75.39%）、分支 ≥60%（实测 61.63%）双重强门禁。
+> 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端 387 项自动化测试全绿（373 项通过、14 项跳过、0 失败、0 错误），且通过 JaCoCo 行 ≥65%（实测 77.69%）、分支 ≥60%（实测 64.26%）双重强门禁；该基线绑定已发布的 `v0.1.0-beta.4`（`main@09d3cb0`）。
 
 ## 1. 简历可直接使用的版本
 
@@ -27,15 +27,15 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 2. **基于 Kafka 落地异步切片与文档向量化削峰事件流**：设计 `KnowledgeIngestionProducer`（同步等待 Broker ACK 确认与 2s 超时降级）与消费者解耦文档导入后的切片与向量入库；消费者端配置 Spring Kafka `DefaultErrorHandler` + `DeadLetterPublishingRecoverer` 实现指数退避重试与死信队列（DLT）路由闭环；建立基于 SHA-256 摘要与进程内条带互斥锁（Striped Lock）的双重检查防重机制，消除锁分裂竞态并抑制本地异步降级与 Consumer 重试时的重复切片写入。
 3. **RRF 混合检索与用户级 Pre-filtering 下推**：结合全文检索（BM25/FTS）与密集向量检索，在包含 8 篇典型技术文档与 13 组对比查询的模拟评测集上，验证 RRF（\(k=60\)）排名融合有效平衡了专有名词与语义排序，模拟 Top-3 召回率达 **92.3%**；检索请求强制将 `userId` 下推到底层向量引擎，实现租户级数据逻辑隔离与跨租户防穿透。
 4. **大模型语义缓存与多级防击穿拓扑**：针对高频重复相似问答，设计基于高维向量余弦相似度（阈值 ≥0.92）的语义缓存拦截层，命中相似查询直接复用历史响应，显著削减 LLM API 调用开销与排队延迟；针对元数据设计 Caffeine L1 + Redis L2 两级缓存拓扑，从架构上落地互斥锁防击穿、随机 TTL 抖动防雪崩、空值缓存防穿透，并结合 Cache-Aside 双写淘汰保障最终一致性。
-5. **严苛的双门禁质量工程**：全系统建立 364 项自动化测试（350 项通过、14 项跳过、0 失败、0 错误），配置 JaCoCo 行（实测 75.39% ≥65%）与分支（实测 61.63% ≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，为架构重构与故障降级路径建立稳固的自动化回归防护。
+5. **严苛的双门禁质量工程**：全系统建立 387 项自动化测试（373 项通过、14 项跳过、0 失败、0 错误），配置 JaCoCo 行（实测 77.69% ≥65%）与分支（实测 64.26% ≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，为架构重构与故障降级路径建立稳固的自动化回归防护。
 
 ### 按岗位替换第 4 条（择一使用）
 
-- **Java 后端岗：**建立后端 JaCoCo 行/分支双门禁（65%/60%），把覆盖率校验接入 Maven `verify` 与 CI；当前主线基线实测行 75.39%、分支 61.63%，并覆盖服务、配置、控制器与端到端错误路径。
+- **Java 后端岗：**建立后端 JaCoCo 行/分支双门禁（65%/60%），把覆盖率校验接入 Maven `verify` 与 CI；当前发布基线（`v0.1.0-beta.4`）实测行 77.69%、分支 64.26%，并覆盖服务、配置、控制器与端到端错误路径。
 - **全栈岗：**在 Electron Renderer、Main Process 与 Spring Boot 之间划分受控 IPC 边界，文件导入预检与业务 API 形成可追踪链路，并用桌面主进程与后端测试分别覆盖关键风险。
 - **AI 应用岗：**将 `userId` 元数据过滤下推到 RAG 向量检索和语义缓存路径，避免跨用户候选集与缓存命中；模型不可用时保留知识管理基础流程。
 
-上述精确覆盖率是已推送主线的未发布候选基线，不应同时写成 `v0.1.0-beta.2` 的发布指标。
+上述精确覆盖率即已发布 `v0.1.0-beta.4`（`main@09d3cb0`）的验证基线；引用历史 Beta.2/Beta.3 资产时不得套用该数字。
 
 ## 2. 30 秒项目介绍
 
@@ -47,7 +47,7 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 >
 > 技术上，Renderer 使用 React 和 TypeScript，Electron Main Process 负责文件导入和进程管理，Spring Boot 负责鉴权、知识条目、标签、复习调度、模型源和 Assistant API。桌面 Profile 使用 H2、Caffeine 和带 JSON 快照的本地向量索引，并随安装包带一个 jlink 裁剪的 Java 21 运行时，因此用户不需要另外安装 Java、PostgreSQL 或 Docker。
 >
-> 我遇到的三个关键问题，一是 Renderer 不应该拿到用户绝对路径，所以我把预检、路径边界、符号链接和文件稳定性校验放在 Main Process；二是 RAG 不能在检索后才过滤用户数据，我把 userId 条件下推到 EmbeddingSearchRequest，并补了跨用户和无用户上下文测试；三是桌面 PgVector 不应成为启动前置条件，因此我为主知识索引加入本地 JSON 快照、损坏隔离和落盘失败继续内存工作的持久化边界。发布侧我固定了 Beta tag、manifest 与 SHA-256，使安装包可以追溯到提交；当前源码还把 JaCoCo 行/分支门禁接入 Maven `verify` 与 CI。这里要区分：Beta.2 证明发布资产，`main@344b740` 的 344 项后端测试和 76.39%/62.87% 覆盖率是未发布候选基线。
+> 我遇到的三个关键问题，一是 Renderer 不应该拿到用户绝对路径，所以我把预检、路径边界、符号链接和文件稳定性校验放在 Main Process；二是 RAG 不能在检索后才过滤用户数据，我把 userId 条件下推到 EmbeddingSearchRequest，并补了跨用户和无用户上下文测试；三是桌面 PgVector 不应成为启动前置条件，因此我为主知识索引加入本地 JSON 快照、损坏隔离和落盘失败继续内存工作的持久化边界。发布侧我固定了 Beta tag、manifest 与 SHA-256，使安装包可以追溯到提交；当前源码还把 JaCoCo 行/分支门禁接入 Maven `verify` 与 CI。这里要区分：Beta.2/Beta.3 是历史发布资产，`v0.1.0-beta.4`（`main@09d3cb0`）的 387 项后端测试和 77.69%/64.26% 覆盖率是当前发布基线。
 
 ## 4. 五个最值得展开的技术故事
 
@@ -63,7 +63,7 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 - 问题：开发环境可运行不代表安装包可运行；曾出现 Bean 缺失、JRE 模块不完整、PgVector 驱动初始化失败。
 - 根因：Desktop Profile 仍隐式依赖遗留服务，jlink 未包含 Spring 代理所需模块，向量存储没有真正降级。
 - 修复：去除错误 Profile 限制；加入 `jdk.unsupported`；Desktop Profile 关闭 PgVector，使用带 JSON 快照的本地向量索引；把后端 JAR 与 JRE 放入 Electron resources。
-- 验证：从候选打包产物独立启动，轮询 readiness，并验证不依赖外部 Java、PostgreSQL 或 Docker；2026-08-27 隔离 smoke 返回 HTTP 200/`ready=true`，模型服务不可用仍按可选依赖降级。签名、Gatekeeper 和人工窗口交互仍需单独回归。
+- 验证：从候选打包产物独立启动，轮询 readiness，并验证不依赖外部 Java、PostgreSQL 或 Docker；2026-09-09 在 `v0.1.0-beta.4` 候选 `.app` 上完成隔离 `--user-data-dir` 双启动 smoke（`scripts/beta4-isolated-smoke.sh`）：模型不可用时 `ready=true` 降级启动、H2 数据落盘、退出无后端进程残留、重启数据复用。人工窗口交互与签名分发仍保留为边界说明。
 
 ### 故事 C：多用户 RAG 隔离
 
@@ -130,7 +130,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 
 ### Q11：测试覆盖了哪些层？
 
-后端包含 Service、Controller、配置、数据迁移、集成与端到端流程测试；Electron Main 测试 IPC、路径、导入、启动和打包保护；Renderer 有 API 契约与 ViewModel 测试；Local Service 有路径与鉴权测试。当前主线基线通过 `mvn --settings .mvn/settings.xml -pl backend -am clean verify`：`backend` 357 项测试、0 failure、0 error、14 skipped，JaCoCo 行 75.18%、分支 61.59%，并实际满足行 ≥65%、分支 ≥60% 门禁；`bug-sentinel-starter` 另有 4 项测试通过。Electron、Renderer 与 Local Service 的 25/33/10 是 2026-08-20 的独立历史验证记录；不把这些不同日期、不同源代码边界的数据合成一个“全项目测试数”，也不把当前后端指标归因给 Beta.2。
+后端包含 Service、Controller、配置、数据迁移、集成与端到端流程测试；Electron Main 测试 IPC、路径、导入、启动和打包保护；Renderer 有 API 契约与 ViewModel 测试；Local Service 有路径与鉴权测试。当前发布基线通过 `mvn --settings .mvn/settings.xml -pl backend -am clean verify`：`backend` 387 项测试、0 failure、0 error、14 skipped，JaCoCo 行 77.69%、分支 64.26%，并实际满足行 ≥65%、分支 ≥60% 门禁，绑定已发布的 `v0.1.0-beta.4`（`main@09d3cb0`）；`bug-sentinel-starter` 另有 4 项测试通过。Electron、Renderer 与 Local Service 的 25/33/10 是 2026-08-20 的独立历史验证记录；不把这些不同日期、不同源代码边界的数据合成一个“全项目测试数”。
 
 ### Q12：为什么测试日志里模型调用失败仍可能整体通过？
 
@@ -161,18 +161,18 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 
 示例：
 
-> 打包应用曾经只能在开发机上运行。根因不是 Electron 本身，而是后端 Profile、jlink 模块和 PgVector 初始化仍带着开发环境假设。我分别修正 Bean 条件、加入 `jdk.unsupported`，让 Desktop Profile 在 PgVector 不可用时落到带 JSON 快照的本地向量索引。现有自动化覆盖资源布局与恢复边界；2026-08-27 已从候选 `.app` 内置 JRE 启动后端并请求 readiness，返回 HTTP 200/`ready=true`，模型服务不可用也未阻塞启动。签名、Gatekeeper、下载回验、人工窗口交互以及大规模索引/跨进程并发基准仍未完成。
+> 打包应用曾经只能在开发机上运行。根因不是 Electron 本身，而是后端 Profile、jlink 模块和 PgVector 初始化仍带着开发环境假设。我分别修正 Bean 条件、加入 `jdk.unsupported`，让 Desktop Profile 在 PgVector 不可用时落到带 JSON 快照的本地向量索引。现有自动化覆盖资源布局与恢复边界；2026-09-09 已从 `v0.1.0-beta.4` 候选 `.app` 完成隔离双启动 smoke：内置 JRE 启动后端 readiness 返回 HTTP 200/`ready=true`，模型服务不可用未阻塞启动，且验证了退出清理与重启持久化。Gatekeeper 分发与大规模索引/跨进程并发基准仍未完成。
 
 ## 7. 不要在简历或面试中这样说
 
 - 不说“零外部依赖”：AI 功能需要本机模型服务。
-- 不说“已通过 Apple 公证”：Beta.2 是 ad-hoc 签名。
+- 不说“已通过 Apple 公证”：当前 Beta 均为 ad-hoc 签名。
 - 不说“企业级生产系统”：它是个人作品集 Beta，有生产化设计但没有真实生产流量证据。
-- 不说“覆盖率很高”：准确说法是“后端 Maven `verify` 有行 ≥65%、分支 ≥60% 门禁；当前主线实测基线为行 75.18%、分支 61.59%”，并说明它尚未对应已发布 tag。
+- 不说“覆盖率很高”：准确说法是“后端 Maven `verify` 有行 ≥65%、分支 ≥60% 门禁；当前发布基线为行 77.69%、分支 64.26%，绑定 `v0.1.0-beta.4`（`main@09d3cb0`）”。
 - 不说“实测 32,000 QPS”或“线上实测 64.8% Token 节省”：没有集群物理压测证据前，严禁在简历中写未经实测的 QPS 或节省数字；技术交流着重体现多级防线设计（防穿透/击穿/雪崩）、双写淘汰一致性与高维向量语义拦截原理。评测套件为 8 篇文档与 13 组测试查询，绝不拿模拟当生产实测。
 - 不把可选 Kafka/Milvus/Kubernetes 说成桌面版运行必需。
 - 不把早期 Computer Use 说成打包版能力：发布构建明确禁用它。
-- 不把 357 个后端测试（14 skipped）说成全系统测试；历史 225 个测试也不能与当前 357 个相加，更不能在没有对应验证记录时归因给 Beta.2。
+- 不把 387 个后端测试（14 skipped）说成全系统测试；历史测试数（225/344/357 等）也不能与当前 387 个相加，更不能在没有对应验证记录时归因给历史 Beta。
 
 ## 8. 面试官可能指出的不足
 
@@ -195,7 +195,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 ## 9. 面试前准备清单
 
 - 能在白板上画出 [`PROJECT_SHOWCASE.md`](PROJECT_SHOWCASE.md) 的产品闭环和运行时架构。
-- 记住四个事实：Java 21、Desktop Profile、本地向量快照恢复、后端 JaCoCo 门禁（行 65%/分支 60%）；已发布 Beta.2 仍为 ad-hoc signed。
+- 记住四个事实：Java 21、Desktop Profile、本地向量快照恢复、后端 JaCoCo 门禁（行 65%/分支 60%，发布基线实测 77.69%/64.26%）；已发布 Beta 均为 ad-hoc signed。
 - 准备一个“模型可用”和一个“模型不可用”的演示路径。
 - 能解释 H2 与 PostgreSQL、单体与微服务、Electron 与纯 Web 的取舍。
 - 能打开 GitHub Release、manifest 和 SHA256SUMS 作为证据。

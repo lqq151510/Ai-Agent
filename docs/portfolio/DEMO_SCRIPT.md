@@ -53,11 +53,11 @@
 
 ### 4:20—5:00 工程证据
 
-1. 打开 GitHub `v0.1.0-beta.3` Release。
+1. 打开 GitHub `v0.1.0-beta.4` Release。
 2. 展示 macOS arm64 的 DMG、ZIP 和 SHA256SUMS。
 3. 说清楚这是 ad-hoc signed 的个人 Beta，不是 Apple 公证发行版。
-4. 发布物只说明版本、平台、签名和可追溯资产；本轮没有把下载回验或 GUI 人工回归说成已完成。
-5. 如面试官追问当前工程状态，主动说明 Beta.3 主 CI 尚未全绿：版本一致性检查失败，backend-quality 有 2 个失败测试。2026-08-27 `main@344b740` 的“344 tests、0 failures、76.39%/62.87%”仅是历史开发基线，不归因给 Beta.3。
+4. 发布物说明版本、平台、签名和可追溯资产；`release-manifest.json` 绑定了构建提交 `09d3cb0`。
+5. 如面试官追问验证深度，主动给出三类证据：后端 387 项测试与 JaCoCo 双门禁（行 77.69%/分支 64.26%，同提交实测）；DMG/ZIP 下载回验与逐资产 SHA-256 复算；`scripts/beta4-isolated-smoke.sh` 的隔离双启动 smoke（降级启动、落盘、退出清理、重启复用）。
 
 ## 10 分钟版本增加内容
 
