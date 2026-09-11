@@ -51,6 +51,11 @@ desktop/dist/
 desktop/release/
 desktop/release-dev/
 desktop/backend-jre/
+# PyInstaller bundle for the Python baseline (produced by python-backend/scripts/build-binary.sh)
+desktop/backend-python/*
+!desktop/backend-python/.gitkeep
+python-backend/build/
+python-backend/dist/
 
 # Local service
 local-service/node_modules/
