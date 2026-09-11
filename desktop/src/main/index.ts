@@ -1,5 +1,6 @@
 import { app, globalShortcut, Notification, shell } from 'electron';
 import { BackendManager } from './backend-manager';
+import { describeMissingArtifacts, resolveBackendRuntime } from './backend-runtime';
 import { CliManager } from './cli-manager';
 import { WindowManager } from './window-manager';
 import { TrayManager } from './tray-manager';
@@ -16,7 +17,7 @@ import { SkillManager } from './skill-manager';
 import { ComputerUseManager } from './computer-use-manager';
 import { KnowledgeSourceManager } from './knowledge-source-manager';
 import { findFreePort } from './utils/network';
-import { getDataDir, getJrePath, getBackendJarPath, getBackendStartupTimeoutMs } from './utils/env';
+import { getDataDir, getResourcePath, getBackendStartupTimeoutMs } from './utils/env';
 import { getLocalBackendEndpoint } from './utils/local-backend-endpoint';
 import { ensureDesktopSecrets } from './utils/secrets';
 
@@ -150,8 +151,21 @@ if (!gotTheLock) {
       }
 
       const dataDir = getDataDir();
-      const jrePath = getJrePath();
-      const jarPath = getBackendJarPath();
+      const runtimeResolution = resolveBackendRuntime({
+        resourceRoot: getResourcePath(),
+        isPackaged: app.isPackaged,
+        env: process.env,
+        platform: process.platform,
+      });
+      const runtimeNotice = [runtimeResolution.notice, describeMissingArtifacts(runtimeResolution)]
+        .filter((entry): entry is string => Boolean(entry))
+        .join('; ');
+      if (runtimeNotice) {
+        console.warn(`[desktop] ${runtimeNotice}`);
+      }
+      console.info(
+        `[desktop] Backend runtime: ${runtimeResolution.runtime.describe()} (source=${runtimeResolution.source})`,
+      );
       const secrets = attachedBackend ? undefined : ensureDesktopSecrets(dataDir);
 
       // Legacy developer tools can only run from a source checkout. A signed
@@ -159,7 +173,7 @@ if (!gotTheLock) {
       // merely because a user-controlled environment variable is present.
       const isLegacyEnabled = !app.isPackaged && process.env.AI_AGENT_ENABLE_LEGACY_DEVTOOLS === '1';
 
-      backendManager = new BackendManager(jrePath, jarPath, dataDir, activePort, {
+      backendManager = new BackendManager(runtimeResolution.runtime, dataDir, activePort, {
         startupTimeoutMs: getBackendStartupTimeoutMs(),
         secrets,
         attachedBackend: attachedBackend ?? undefined,

@@ -152,7 +152,41 @@ npm run dist:linux
 ./scripts/build-all.sh --mac --skip-renderer
 ```
 
+## 后端运行时选择（Java / Python 基线）
+
+桌面端通过 **显式配置** 选择受管后端运行时，绝无隐式替换（坏了就是报错，不会悄悄切换基线）：
+
+| 优先级 | 来源 | 说明 |
+| --- | --- | --- |
+| 1 | `KD_BACKEND_RUNTIME=java\|python` | **仅开发模式** 生效；打包版忽略该环境变量 |
+| 2 | `desktop/backend-runtime.json` | 构建期写入、随包发布的选择开关（当前默认 `java`） |
+| 3 | 默认 `java` | 既有 Spring Boot 基线，行为不变 |
+
+```bash
+# 构建 Python 基线（PyInstaller onedir，arm64/x64 各自本机构建）
+npm run build:python-backend
+
+# 端到端验证：Electron 启动器 → 打包二进制 → readiness 探活
+node scripts/verify-python-runtime.cjs
+
+# 打包版选择基线（写入 backend-runtime.json，随包发布）
+./scripts/set-backend-runtime.sh python   # 或 java（默认）
+npm run pack                              # electron-builder --dir
+
+# 验收打包产物中的 Python 后端（不开 GUI：布局/解析/探活/建库）
+DESKTOP_PACKAGE_DIR=release/mac-arm64 npm run verify:packaged:python
+```
+
+- Python 基线产物：`desktop/backend-python/knowledge-desk-backend/`（gitignore，不入库）。
+- 两条基线的契约一致（`/api/v1`），数据目录、密钥、端口、日志与 readiness 轮询由 `BackendManager`
+  统一管理；`BackendStatusSnapshot` 新增 `runtimeKind` / `runtimeLabel` 便于界面展示。
+- 选中运行时缺少产物时，启动直接失败并给出缺失清单，便于在打包验收前发现。
+
 ## macOS 正式发行
+
+> 个人演示 / 本地验收**不需要** Apple Developer 账号：`./scripts/set-backend-runtime.sh python && npm run pack`
+> 产出未签名的 `--dir` 应用即可运行（首次启动在「系统设置 → 隐私与安全性」里放行即可）。
+> 签名与公证仅对公开发布的分发包必需。
 
 正式候选由仓库根目录的 `scripts/release-check-macos.sh` 或 GitHub Actions 工作流生成；两者都会强制精确 tag、干净源码、签名、公证、DMG/ZIP 完整性、Gatekeeper 和 stapler 验证。需要 Apple Developer 账号和以下环境变量：
 

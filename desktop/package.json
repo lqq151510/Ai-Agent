@@ -22,7 +22,9 @@
     "dist:mac:x64": "npm run build && electron-builder --mac --x64",
     "dist:win": "npm run build && electron-builder --win",
     "dist:linux": "npm run build && electron-builder --linux",
-    "clean": "rm -rf dist release backend-jre"
+    "build:python-backend": "bash scripts/build-python-backend.sh",
+    "clean": "rm -rf dist release backend-jre backend-python/knowledge-desk-backend",
+    "verify:packaged:python": "node scripts/verify-packaged-python-runtime.cjs"
   },
   "dependencies": {
     "electron-store": "^8.2.0",

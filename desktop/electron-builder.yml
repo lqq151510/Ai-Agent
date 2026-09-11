@@ -30,13 +30,24 @@ files:
   - "!**/.*"
 
 # extraResources：不打入 asar，运行时通过 process.resourcesPath 访问
-# 后端 JAR、JRE、TS CLI 均放在 backend-jre/ 目录下
+# 后端 JAR、JRE、Python 运行时与 TS CLI 均放在 backend-* 目录下
 extraResources:
   - from: backend-jre
     to: backend-jre
     filter:
       - "**/*"
       - "!**/.git"
+  # Python 基线（可选）：由 python-backend/scripts/build-binary.sh 产出。
+  # backend-runtime.json 选择 java 时该目录不会被引用，Java 路径保持原样。
+  - from: backend-python
+    to: backend-python
+    filter:
+      - "**/*"
+      - "!**/.git"
+      - "!**/*.md"
+  # 运行时选择开关，由 src/main/backend-runtime.ts 读取
+  - from: backend-runtime.json
+    to: backend-runtime.json
 
 asar: true
 asarUnpack:

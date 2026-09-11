@@ -2,6 +2,11 @@ import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
+import {
+  BackendRuntimeDescriptor,
+  BackendRuntimeKind,
+  createJavaRuntime,
+} from './backend-runtime';
 import type { DesktopSecrets } from './utils/secrets';
 import type { LocalBackendEndpoint } from './utils/local-backend-endpoint';
 
@@ -11,6 +16,9 @@ export type BackendMode = 'managed' | 'attached';
 export type BackendStatusSnapshot = {
   status: BackendStatus;
   mode: BackendMode;
+  /** Which packaged baseline is being supervised: the Java JAR or the Python MVP. */
+  runtimeKind: BackendRuntimeKind;
+  runtimeLabel: string;
   port: number;
   pid: number | null;
   dataDir: string;
@@ -34,11 +42,19 @@ type BackendManagerOptions = {
   attachedBackend?: LocalBackendEndpoint;
 };
 
+/**
+ * Supervises the managed local backend process.
+ *
+ * The manager is runtime agnostic: it drives whatever
+ * {@link BackendRuntimeDescriptor} it is given (Spring Boot `java -jar` or the
+ * FastAPI PyInstaller executable). Status tracking, log tailing, startup
+ * timeout, stop, restart, attached-backend mode and readiness polling are
+ * unchanged from the JAR-only implementation.
+ */
 export class BackendManager {
   private process: ChildProcess | null = null;
   private status: BackendStatus = 'stopped';
-  private readonly jrePath: string;
-  private readonly jarPath: string;
+  private readonly runtime: BackendRuntimeDescriptor;
   private readonly dataDir: string;
   private readonly port: number;
   private readonly logPath: string;
@@ -56,14 +72,44 @@ export class BackendManager {
   private lastExitCode: number | null = null;
   private lastError: string | null = null;
   private restartCount = 0;
+  private readonly options: BackendManagerOptions;
   private readonly listeners = new Set<(status: BackendStatusSnapshot) => void>();
 
-  constructor(jrePath: string, jarPath: string, dataDir: string, port: number, options: BackendManagerOptions) {
-    this.jrePath = jrePath;
-    this.jarPath = jarPath;
-    this.dataDir = dataDir;
-    this.port = port;
-    if (options.attachedBackend && options.attachedBackend.port !== port) {
+  constructor(
+    runtime: BackendRuntimeDescriptor,
+    dataDir: string,
+    port: number,
+    options?: BackendManagerOptions,
+  );
+  /** Legacy positional form: keeps existing JAR/JRE call sites working. */
+  constructor(
+    jrePath: string,
+    jarPath: string,
+    dataDir: string,
+    port: number,
+    options?: BackendManagerOptions,
+  );
+  constructor(
+    runtimeOrJrePath: BackendRuntimeDescriptor | string,
+    dataDirOrJarPath: string,
+    portOrDataDir?: number | string,
+    optionsOrPort?: BackendManagerOptions | number,
+    legacyOptions?: BackendManagerOptions,
+  ) {
+    if (typeof runtimeOrJrePath === 'string') {
+      this.runtime = createJavaRuntime(runtimeOrJrePath, dataDirOrJarPath);
+      this.dataDir = String(portOrDataDir);
+      this.port = Number(optionsOrPort);
+      this.options = legacyOptions ?? {};
+    } else {
+      this.runtime = runtimeOrJrePath;
+      this.dataDir = dataDirOrJarPath;
+      this.port = Number(portOrDataDir);
+      this.options = (optionsOrPort as BackendManagerOptions) ?? {};
+    }
+
+    const options = this.options;
+    if (options.attachedBackend && options.attachedBackend.port !== this.port) {
       throw new Error('Attached backend port must match the active desktop port');
     }
     this.mode = options.attachedBackend ? 'attached' : 'managed';
@@ -102,28 +148,34 @@ export class BackendManager {
       throw new Error(message);
     }
 
-    this.prepareStart(`Starting managed backend on port ${this.port}`);
+    const missingArtifacts = this.runtime.requiredArtifacts.filter(
+      (artifact) => !fs.existsSync(artifact),
+    );
+    if (missingArtifacts.length > 0) {
+      const message =
+        `Backend runtime "${this.runtime.kind}" is incomplete; missing: ${missingArtifacts.join(', ')}`;
+      this.prepareStart(`Refusing to start managed backend: ${message}`);
+      this.lastError = message;
+      this.setStatus('error');
+      throw new Error(message);
+    }
 
-    const args = [
-      '-jar', this.jarPath,
-      '--spring.profiles.active=desktop',
-      `--server.port=${this.port}`,
-      '--server.address=127.0.0.1',
-      `--app.data-dir=${this.dataDir}`,
-    ];
+    this.prepareStart(
+      `Starting managed backend (${this.runtime.describe()}) on port ${this.port}`,
+    );
 
-    this.process = spawn(this.jrePath, args, {
+    const context = { port: this.port, dataDir: this.dataDir, secrets };
+    const args = this.runtime.resolveArgs(context);
+
+    this.process = spawn(this.runtime.command, args, {
       // Finder and `open` do not guarantee a writable process working directory.
-      // The backend still has a relative Logback file appender, so anchor it in
-      // the Desktop runtime directory instead of inheriting `/` from the launcher.
+      // The backend still writes relative runtime files, so anchor it in the
+      // Desktop runtime directory instead of inheriting `/` from the launcher.
       cwd: this.dataDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        SPRING_OUTPUT_ANSI_ENABLED: 'never',
-        APP_DESKTOP_MODE: 'true',
-        JWT_SECRET: secrets.jwtSecret,
-        SECURITY_DB_ENCRYPTION_KEY: secrets.dbEncryptionKey,
+        ...this.runtime.resolveEnv(context),
       },
     });
 
@@ -206,10 +258,16 @@ export class BackendManager {
     return this.baseUrl;
   }
 
+  getRuntimeKind(): BackendRuntimeKind {
+    return this.runtime.kind;
+  }
+
   getStatus(): BackendStatusSnapshot {
     return {
       status: this.status,
       mode: this.mode,
+      runtimeKind: this.runtime.kind,
+      runtimeLabel: this.runtime.describe(),
       port: this.port,
       pid: this.process?.pid ?? null,
       dataDir: this.dataDir,

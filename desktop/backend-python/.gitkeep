@@ -1,0 +1,3 @@
+# Placeholder so a clean checkout still has the extraResources source directory
+# expected by electron-builder.yml. The real PyInstaller bundle is produced by
+# python-backend/scripts/build-binary.sh and is intentionally not committed.
