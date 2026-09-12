@@ -96,7 +96,10 @@ def summary(session: Session, user_id: str) -> dict:
     due_count = len(rows)
 
     next_due = session.execute(
-        select(func.min(_due_expression())).where(
+        select(func.min(_due_expression()))
+        .select_from(KnowledgeItem)
+        .outerjoin(ReviewState, ReviewState.knowledge_item_id == KnowledgeItem.id)
+        .where(
             KnowledgeItem.user_id == user_id,
             KnowledgeItem.status == KnowledgeStatus.READY,
         )

@@ -18,7 +18,9 @@ const os = require('node:os');
 const path = require('node:path');
 
 const desktopRoot = path.join(__dirname, '..');
-const packageDir = process.env.DESKTOP_PACKAGE_DIR || path.join(desktopRoot, 'release', 'mac-arm64');
+const packageDir = path.resolve(
+  process.env.DESKTOP_PACKAGE_DIR || path.join(desktopRoot, 'release', 'mac-arm64'),
+);
 
 const findAppBundle = (directory) => {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {

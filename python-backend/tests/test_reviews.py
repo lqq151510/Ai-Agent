@@ -89,6 +89,28 @@ def test_completed_item_leaves_the_queue_immediately(client: TestClient, auth: d
     assert summary["nextDueAt"]
 
 
+def test_summary_does_not_use_another_users_review_schedule(
+    client: TestClient, auth: dict[str, str], second_auth: dict[str, str]
+) -> None:
+    first_item = _ready_item(client, auth, "第一位用户的复习资料")
+    first_schedule = client.post(
+        f"/api/v1/knowledge-reviews/{first_item['id']}/complete",
+        json={"rating": "easy"},
+        headers=auth,
+    ).json()
+
+    second_item = _ready_item(client, second_auth, "第二位用户的复习资料")
+    client.post(
+        f"/api/v1/knowledge-reviews/{second_item['id']}/complete",
+        json={"rating": "good"},
+        headers=second_auth,
+    )
+
+    summary = client.get("/api/v1/knowledge-reviews/summary", headers=auth)
+    assert summary.status_code == 200
+    assert summary.json() == {"dueCount": 0, "nextDueAt": first_schedule["dueAt"]}
+
+
 def test_again_resets_schedule(client: TestClient, auth: dict[str, str]) -> None:
     item = _ready_item(client, auth)
     url = f"/api/v1/knowledge-reviews/{item['id']}/complete"

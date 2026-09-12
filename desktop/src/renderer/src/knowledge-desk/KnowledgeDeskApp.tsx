@@ -70,6 +70,7 @@ import { ReviewPage } from './knowledgeDeskReview';
 import { LocalAssistantPage } from './knowledgeDeskAssistant';
 import { SettingsPage } from './knowledgeDeskSettings';
 import { KnowledgeDeskMark } from './KnowledgeDeskMark';
+import { shouldRefreshKnowledgeDeskSnapshot } from './knowledgeDeskBackendStatus';
 import type { MainPage, SettingsTab, ImportMode } from './knowledgeDeskTypes';
 import {
   applySnapshotItemUpdate,
@@ -94,6 +95,16 @@ const LOCAL_ASSISTANT_DRAFT_MAX_CHARS = 8_000;
 const LOCAL_ASSISTANT_BODY_CONTEXT_MAX_CHARS = 6_000;
 const LOCAL_ASSISTANT_TRUNCATION_NOTE = '\n\n（正文较长，以上为开头摘录；如需更多内容，请提示我继续补充。）';
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'kd:sidebar_collapsed';
+
+type DesktopBackendStatusApi = {
+  onBackendStatusChanged?: (
+    callback: (status: { status?: unknown }) => void,
+  ) => (() => void) | void;
+};
+
+const getDesktopBackendStatusApi = () => (
+  window as unknown as { electronAPI?: DesktopBackendStatusApi }
+).electronAPI;
 
 const buildAssistantDraftFromKnowledge = (
   item: KnowledgeItem,
@@ -165,6 +176,7 @@ const KnowledgeDeskApp = () => {
   const [assistantDraft, setAssistantDraft] = useState<{ id: number; text: string } | null>(null);
   const detailRequestRef = useRef(0);
   const detailJobsRequestRef = useRef(0);
+  const refreshedAfterBackendReadyRef = useRef(false);
   const desktopFilePickerAvailable = canUseDesktopFilePicker();
   const desktopBatchFileImportAvailable = canUseDesktopBatchFileImport();
   const desktopBackupPickerAvailable = canUseDesktopBackupPicker();
@@ -268,6 +280,27 @@ const KnowledgeDeskApp = () => {
       throw error;
     }
   }, []);
+
+  useEffect(() => {
+    const api = getDesktopBackendStatusApi();
+    const unsubscribe = api?.onBackendStatusChanged?.((status) => {
+      if (
+        refreshedAfterBackendReadyRef.current
+        || !shouldRefreshKnowledgeDeskSnapshot(status)
+      ) {
+        return;
+      }
+      refreshedAfterBackendReadyRef.current = true;
+      void refreshSnapshot().catch(() => {
+        // Keep the degraded snapshot visible. Manual retry remains available
+        // if the backend becomes unavailable again after its ready event.
+      });
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [refreshSnapshot]);
 
   const showNotice = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotice({ message, type });
