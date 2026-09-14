@@ -302,7 +302,6 @@ sequenceDiagram
 - 当前 `main` 的包内资源布局与 Renderer 降级契约已有自动测试；`main@344b740` 候选 `.app` 已在隔离用户目录中完成内置后端 readiness smoke（HTTP 200、`ready=true`，模型不可用仍可启动），但尚未完成签名/Gatekeeper、下载回验或人工窗口交互，因此不能称为新 Beta 的完整安装包证据。
 - **Python 基线目前只在本机 arm64 验证**；x64 与 universal 包未构建（PyInstaller 不支持交叉编译，需在对应架构上各构建一次）。
 - Python 基线**尚未签名/公证**，也**未做真实模型调用联调**（AI 路径只经 mock 与本地启发式验证），**未完成完整人工 GUI 数据流程回归**（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）。
-- CI 的 `python-service-test` 仍指向旧的 `python-service/`（Python 3.11），**尚未覆盖 `python-backend/`**。
 
 ## 8. 可验证交付证据
 
@@ -333,10 +332,11 @@ sequenceDiagram
 | 渲染层测试 | `cd desktop/src/renderer && npm run test` | **36 passed**（13 个测试文件） |
 | Electron 主进程测试 | `cd desktop && npm run test:main` | **44 pass / 0 fail** |
 | 打包 Python 运行时验收 | `cd desktop && DESKTOP_PACKAGE_DIR=release/python-arm64 npm run verify:packaged:python` | **9 项检查全部 PASS** |
+| CI 覆盖 Python 基线 | `.github/workflows/ci.yml` 的 `python-backend-test` job（Python 3.12 + uv） | 已加入（2026-09-14 校准）；本机等价复跑 **173 passed / 91%** |
 
 - 打包验收实际通过项：`.app` 内含 PyInstaller 运行时且可执行、运行时选择器随包发布并指向 `python`、打包版在无环境变量时解析到内置运行时且无缺失制品、启动器状态进入 `running`、readiness 返回 HTTP 200 且 `{"status":"ready"}`、在 dataDir 内创建 SQLite 数据库、渲染层资源为相对引用。
 - 已验证产物：`desktop/release/python-arm64/mac-arm64/AI Agent.app`，主可执行文件与内置 Python 运行时均为 Mach-O arm64。
-- 该结果只描述**工程完成度**，不构成安装包发布结论：尚未签名/公证、未构建 x64 与 universal、未做真实模型调用联调、未完成完整人工 GUI 数据流程回归，且 CI 尚未覆盖 `python-backend/`。
+- 该结果只描述**工程完成度**，不构成安装包发布结论：尚未签名/公证、未构建 x64 与 universal、未做真实模型调用联调、未完成完整人工 GUI 数据流程回归。
 
 更细的证据和复现命令见 [`docs/portfolio/EVIDENCE.md`](docs/portfolio/EVIDENCE.md)。
 

@@ -99,7 +99,7 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 - 行动：新增 `python-backend/`（FastAPI + SQLAlchemy 2 + Alembic + 本地 SQLite，Python 3.12 / uv 管理依赖），与既有 `backend/` 并排存在、不覆盖 Java 实现；桌面侧新增 `backend-runtime.ts`，按 `KD_BACKEND_RUNTIME`（仅开发期生效）→ `backend-runtime.json`（构建期写入、随包发布）→ 默认 `java` 的优先级解析运行时，并用 PyInstaller `onedir` 把 Python 运行时打进 `extraResources`。
 - 关键取舍：**拒绝隐式回退**。选中基线缺产物时直接失败并列出缺失清单，因为静默切到另一条基线会在 H2 与 SQLite 之间改变数据路径，这比启动失败更难诊断。
 - 验证：Python 后端 173 项 pytest（含 `test_contract.py` 的路由清单与字段命名门禁）、渲染层 36 项、Electron 主进程 44 项；arm64 打包产物 `AI Agent.app` 的运行时验收 9 项全部 PASS（含 readiness HTTP 200、在 dataDir 内创建 SQLite）。另有一处产品细节：渲染层可能先于后端就绪而加载，此时显示降级预览数据，后端进入 `running` 后自动重取快照切到真实数据。
-- 边界：这是本机 arm64 的工程完成度，不是发布结论——未签名/公证、未构建 x64/universal、未做真实模型调用、未完成完整人工 GUI 数据流程回归，CI 也尚未覆盖 `python-backend/`。
+- 边界：这是本机 arm64 的工程完成度，不是发布结论——未签名/公证、未构建 x64/universal、未做真实模型调用、未完成完整人工 GUI 数据流程回归。（CI 覆盖已于 2026-09-14 校准：`.github/workflows/ci.yml` 新增 `python-backend-test` job，以 Python 3.12 + uv 执行 `uv run pytest`。）
 
 ## 5. 高频面试问答
 
@@ -195,7 +195,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 - 不把 Python 基线说成“已经替代 Java 基线”或“已发布”：它是可显式切换的第二条基线，默认与可回退路径仍是 Java（仓库提交的 `backend-runtime.json` 当前值为 `java`）。
 - 不说“已完成签名/公证”或“已支持 x64”：Python 基线已实测的产物是本机 arm64 未签名目录包（`desktop/release/python-arm64/`），x64 与 universal 尚未构建。
 - 不说“已完成完整 GUI 数据流程回归”：当前自动化覆盖到打包运行时验收与渲染层单测，人工端到端（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）回归尚未做。
-- 不把 Python 基线的 173 项 pytest 与 Java 基线的 387 项后端测试相加，也不声称 CI 已覆盖 `python-backend/`（当前 `python-service-test` job 仍指向旧的 `python-service/`）。
+- 不把 Python 基线的 173 项 pytest 与 Java 基线的 387 项后端测试相加。CI 覆盖已于 2026-09-14 校准（新增 `python-backend-test` job，Python 3.12 + uv，`uv run pytest --cov=knowledge_desk`），但该 job 默认不在 branch ruleset 的 required checks 中，在被强制之前不要把它说成"合并门禁"。
 
 ## 8. 面试官可能指出的不足
 
