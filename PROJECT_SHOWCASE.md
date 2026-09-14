@@ -6,6 +6,8 @@
 
 AI Agent Knowledge Desk 是一款 Local-First 的个人知识工作台：用户可以导入网页、文件和文本片段，在 Inbox 中整理内容，通过标签、搜索和每日复习重新利用知识；AI 整理与助手能力通过用户自己配置的本机 OpenAI-compatible 模型提供。
 
+在运行时层，它有一条**契约冻结、实现可替换**的后端设计：桌面包可并排携带 Java（Spring Boot + H2 + jlink JRE，默认）与 Python（FastAPI + SQLite + Alembic）两条本地后端基线，由显式运行时选择器决定启动哪一条，二者实现同一个 `/api/v1` 契约。
+
 ## 2. 产品闭环
 
 ```mermaid
@@ -37,10 +39,18 @@ flowchart TB
     end
 
     subgraph LocalRuntime[应用内置本地运行时]
-        API[Spring Boot API<br/>认证 / 知识条目 / 标签 / 搜索<br/>复习调度 / 模型源 / SSE]
-        DB[(H2 文件数据库)]
-        VEC[(Local Persistent Embedding Store<br/>JSON snapshot + in-memory search)]
-        JRE[jlink Java 21 Runtime]
+        SELECTOR[显式运行时选择器<br/>backend-runtime.json / 开发期 KD_BACKEND_RUNTIME<br/>无隐式回退]
+        subgraph JavaBaseline[Java 基线（默认，可回退）]
+            API[Spring Boot API<br/>认证 / 知识条目 / 标签 / 搜索<br/>复习调度 / 模型源 / SSE]
+            DB[(H2 文件数据库)]
+            VEC[(Local Persistent Embedding Store<br/>JSON snapshot + in-memory search)]
+            JRE[jlink Java 21 Runtime]
+        end
+        subgraph PythonBaseline[Python 基线（本地优先 MVP）]
+            PAPI[FastAPI API<br/>同一 /api/v1 契约<br/>api / application / domain / infrastructure 分层]
+            PDB[(本地 SQLite<br/>Alembic 迁移)]
+            PBIN[PyInstaller onedir 可执行文件]
+        end
     end
 
     subgraph OptionalAI[用户可选的本机 AI 服务]
@@ -49,20 +59,43 @@ flowchart TB
 
     U --> UI
     UI --> IPC --> MAIN
-    MAIN -->|loopback HTTP| API
+    MAIN -->|loopback HTTP| SELECTOR
+    SELECTOR --> API
+    SELECTOR --> PAPI
     JRE --> API
     API --> DB
     API --> VEC
+    PBIN --> PAPI
+    PAPI --> PDB
     API -.->|仅 AI 功能需要| MODEL
+    PAPI -.->|仅 AI 功能需要| MODEL
 ```
 
 ### 为什么这样拆分
 
 - Renderer 只负责交互与状态展示，不直接获得任意文件系统能力。
 - Electron Main Process 负责本地文件选择、路径校验、导入桥接和后端进程生命周期，缩小前端被注入时的影响范围。
-- Spring Boot 保持业务规则、鉴权、数据一致性和 API 协议的单一来源。
-- 桌面包内置 JRE 与后端 JAR，普通知识管理不要求用户安装 Java、PostgreSQL 或 Docker。
+- 后端保持业务规则、鉴权、数据一致性和 API 协议的单一来源；这个单一来源是 `/api/v1` **契约**本身，而不是某一种实现语言。
+- 桌面包内置 JRE 与后端 JAR，普通知识管理不要求用户安装 Java、PostgreSQL 或 Docker；Python 基线同样以自包含可执行文件随包发布。
+- 后端运行时由一个显式选择器决定，且**没有隐式回退**：选中的基线缺少产物时启动直接失败并列出缺失清单，避免一个损坏的 Python bundle 悄悄改变产品的数据路径。
 - AI 服务保持可替换，模型不可用时不阻塞知识库的基础读写和检索流程。
+
+### Python 基线（FastAPI 本地优先 MVP）
+
+`python-backend/` 是**新增**的独立后端实现，与 `backend/` 并排存在，**不覆盖、不改造**既有 Java 实现（Java 基线保持为可回退路径）。
+
+| 维度 | 实现 |
+| --- | --- |
+| 技术栈 | FastAPI + SQLAlchemy 2 + Alembic + Pydantic 2，依赖由 uv 锁定（Python 3.12 基线） |
+| 分层 | `api` / `application` / `domain` / `infrastructure`；路由层不直接访问数据库或调用模型，只做契约转换与依赖注入 |
+| 数据 | 新建本地 SQLite（`<dataDir>/knowledge-desk.sqlite3`）+ 受管原件目录；**不导入旧 H2 数据** |
+| 迁移 | 进程启动时执行 `alembic upgrade head`（在 head 时为 no-op，可重复执行）；`compare_metadata` 断言「迁移后 schema == ORM 元数据」防漂移 |
+| 安全 | `hashlib.scrypt` 口令哈希、HS256 JWT（区分 `access`/`refresh`）、Fernet 加密模型凭据（API 只返回掩码）、日志/任务错误/导出统一脱敏、受管原件只记录相对路径 |
+| 降级 | 未配置模型时默认走确定性本地启发式（摘要 + 标签 + 清理）并标记 `local_heuristic`；`KD_ORGANIZE_NO_MODEL=fail` 可切换为严格失败 |
+| 文档解析 | PDF（pdfplumber）/ DOCX（python-docx）/ PPTX（python-pptx）/ MD / TXT / HTML 原生解析，MarkItDown 为可选回退 |
+| 打包 | PyInstaller `onedir`，产物进入 `extraResources`，由运行时选择器引用 |
+
+契约对齐是这条路线的核心约束：`tests/test_contract.py` 对路由清单与字段命名做回归门禁，并把三处与 Electron 主进程的**隐式耦合**固化为测试——登录失败必须返回 `Invalid email or password`（主进程据此触发首次运行自动注册）、邮箱重复必须包含 `already`（主进程据此判定为可忽略冲突）、知识条目 id 必须是 36 位 UUID（主进程用 UUID 正则白名单校验复习提交路径）。
 
 ## 4. 分层技术架构
 
@@ -180,6 +213,34 @@ sequenceDiagram
     Manager-->>App: 加载主界面
 ```
 
+### 5.4 运行时选择与 Python 基线启动
+
+```mermaid
+sequenceDiagram
+    actor User as 用户
+    participant App as Electron App
+    participant Resolver as resolveBackendRuntime
+    participant Manager as BackendManager
+    participant Py as PyInstaller 二进制
+    participant API as FastAPI 后端
+
+    User->>App: 启动应用
+    App->>Resolver: 读取 backend-runtime.json（开发期可被 KD_BACKEND_RUNTIME 覆盖）
+    alt 选中基线缺少产物
+        Resolver-->>App: 返回缺失清单，不静默回退到另一条基线
+    else 产物齐备
+        Resolver-->>Manager: 运行时可执行文件与所需制品
+        Manager->>Py: 申请 loopback 端口并以环境变量启动（无 CLI 参数）
+        Py->>API: 执行 alembic upgrade head
+        API->>API: 初始化 SQLite 与受管原件目录
+        Manager->>API: 轮询 readiness
+        API-->>Manager: ready
+        App->>API: 自动重新拉取快照（从降级预览数据切到真实数据）
+    end
+```
+
+设计重点：选择是显式的，坏包会**失败并报出缺失清单**而不是换一条基线启动；渲染层即使先于后端就绪加载，也会在后端进入 `running` 时自动切到真实数据，不需要用户手动刷新。
+
 ## 6. 关键工程决策
 
 ### Local-First，而不是默认云端 SaaS
@@ -193,6 +254,14 @@ sequenceDiagram
 
 - 桌面主路径使用一个 Spring Boot 后端，减少本地进程数量和故障面。
 - 仓库保留 Router、Retrieval、Generation、Reflection 等实验性/扩展模块，但面试时不应把它们说成 Beta 桌面版必经链路。
+
+### 后端实现可替换：契约冻结 + 显式运行时选择
+
+- **问题**：本地后端的运行时体积与语言绑定性是桌面产品的实际成本项，但直接重写后端会同时赌上既有功能与前端。
+- **选择**：不替换实现，而是**增加一条并排基线**——`python-backend/`（FastAPI + SQLite）与 `backend/`（Spring Boot + H2）共存于同一个桌面包，由 `backend-runtime.json` 或开发期环境变量显式选择。
+- **关键前提是契约冻结**：两条基线实现同一 `/api/v1` 契约，因此前端**零改动**即可切换，后端替换不迫使界面重写。
+- **拒绝隐式回退**：选中的基线缺少产物时直接失败并列出缺失清单。理由是静默切换基线会悄悄改变产品的数据路径（H2 ↔ SQLite），这比启动失败更难诊断。
+- **代价**：需要长期维护两套实现的契约一致性。因此一致性由 `tests/test_contract.py` 的路由清单与字段命名门禁守住，而不是靠文档约定。
 
 ### 安全边界前移到 Electron Main
 
@@ -219,6 +288,9 @@ sequenceDiagram
 - 主知识向量索引的本地持久化、重启恢复与损坏快照隔离
 - 非敏感知识库备份与合并恢复
 - 独立 macOS arm64 打包与在线 Beta 发布
+- **Python 后端基线**（FastAPI + 本地 SQLite + Alembic），覆盖与 Java 基线相同的知识管理闭环，并保持 `/api/v1` 契约不变
+- **双后端运行时选择器**：PyInstaller 打包、随包发布、打包产物自动验收（资源布局 / 运行时解析 / readiness 探活 / SQLite 建库）
+- 渲染层在后端就绪后**自动重取快照**：冷启动时先展示降级预览数据，后端进入 `running` 后自动切换到真实 SQLite 数据
 
 ### 明确边界
 
@@ -228,6 +300,9 @@ sequenceDiagram
 - 桌面主路径不依赖 Docker；云端 Compose/Kubernetes 是可选部署形态。
 - 覆盖率只描述后端 JaCoCo 范围；当前开发基线与已发布 Beta 的证据分开记录，不使用“高覆盖率”这类模糊宣传语。
 - 当前 `main` 的包内资源布局与 Renderer 降级契约已有自动测试；`main@344b740` 候选 `.app` 已在隔离用户目录中完成内置后端 readiness smoke（HTTP 200、`ready=true`，模型不可用仍可启动），但尚未完成签名/Gatekeeper、下载回验或人工窗口交互，因此不能称为新 Beta 的完整安装包证据。
+- **Python 基线目前只在本机 arm64 验证**；x64 与 universal 包未构建（PyInstaller 不支持交叉编译，需在对应架构上各构建一次）。
+- Python 基线**尚未签名/公证**，也**未做真实模型调用联调**（AI 路径只经 mock 与本地启发式验证），**未完成完整人工 GUI 数据流程回归**（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）。
+- CI 的 `python-service-test` 仍指向旧的 `python-service/`（Python 3.11），**尚未覆盖 `python-backend/`**。
 
 ## 8. 可验证交付证据
 
@@ -248,10 +323,25 @@ sequenceDiagram
 - JaCoCo：Lines 5543/7256（76.39%），Branches 1649/2623（62.87%）；Maven `verify` 实际执行全局行 ≥65%、分支 ≥60% 双门禁。
 - 该结果可展示已推送的主线质量基线；候选 `.app` 的后端 readiness smoke 已通过，但它不是 Beta.2 的发布结论，也不能在完成签名/Gatekeeper、下载回验、人工 GUI 回归、tag 和 Release 前称为新 Beta 发布结果。
 
+### Python 后端基线验证（2026-09-12，本机，非发布证据）
+
+- 源代码边界：`main` 提交 `1ed2b69`（已推送至 `origin/main`）。
+
+| 验证项 | 命令 | 结果 |
+| --- | --- | --- |
+| Python 后端测试 | `cd python-backend && uv run pytest` | **173 passed** |
+| 渲染层测试 | `cd desktop/src/renderer && npm run test` | **36 passed**（13 个测试文件） |
+| Electron 主进程测试 | `cd desktop && npm run test:main` | **44 pass / 0 fail** |
+| 打包 Python 运行时验收 | `cd desktop && DESKTOP_PACKAGE_DIR=release/python-arm64 npm run verify:packaged:python` | **9 项检查全部 PASS** |
+
+- 打包验收实际通过项：`.app` 内含 PyInstaller 运行时且可执行、运行时选择器随包发布并指向 `python`、打包版在无环境变量时解析到内置运行时且无缺失制品、启动器状态进入 `running`、readiness 返回 HTTP 200 且 `{"status":"ready"}`、在 dataDir 内创建 SQLite 数据库、渲染层资源为相对引用。
+- 已验证产物：`desktop/release/python-arm64/mac-arm64/AI Agent.app`，主可执行文件与内置 Python 运行时均为 Mach-O arm64。
+- 该结果只描述**工程完成度**，不构成安装包发布结论：尚未签名/公证、未构建 x64 与 universal、未做真实模型调用联调、未完成完整人工 GUI 数据流程回归，且 CI 尚未覆盖 `python-backend/`。
+
 更细的证据和复现命令见 [`docs/portfolio/EVIDENCE.md`](docs/portfolio/EVIDENCE.md)。
 
 ## 9. 面试中的推荐表达
 
-> 我做的不是一个单纯的聊天 UI，而是一套可独立启动的个人知识工作台。它用 Electron 和 React 提供桌面体验，用 Spring Boot 管理知识条目、标签、复习和模型源；桌面包内置 Java 运行时和 H2，所以不需要用户另装 Java、数据库或 Docker。AI 是可选增强能力，通过本机 OpenAI-compatible 服务接入。项目里我重点解决了 Electron 文件边界、多用户 RAG 隔离、桌面独立启动和可验证发布四个工程问题。
+> 我做的不是一个单纯的聊天 UI，而是一套可独立启动的个人知识工作台。它用 Electron 和 React 提供桌面体验，用 Spring Boot 管理知识条目、标签、复习和模型源；桌面包内置 Java 运行时和 H2，所以不需要用户另装 Java、数据库或 Docker。AI 是可选增强能力，通过本机 OpenAI-compatible 服务接入。项目里我重点解决了 Electron 文件边界、多用户 RAG 隔离、桌面独立启动和可验证发布四个工程问题。另外我把后端做成了**契约冻结、实现可替换**的两条基线：Java/Spring Boot 是默认可回退路径，Python/FastAPI 是新的本地优先 MVP，二者实现同一个 `/api/v1` 契约，切换后端实现不需要改一行渲染层业务代码。
 
 面试话术、追问与演示流程见 [`RESUME_PROJECT_GUIDE.md`](RESUME_PROJECT_GUIDE.md)。

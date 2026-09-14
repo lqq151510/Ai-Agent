@@ -7,6 +7,8 @@
 >
 > 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端 387 项自动化测试全绿（373 项通过、14 项跳过、0 失败、0 错误），且通过 JaCoCo 行 ≥65%（实测 77.69%）、分支 ≥60%（实测 64.26%）双重强门禁；该基线绑定已发布的 `v0.1.0-beta.4`（`main@09d3cb0`）。
 
+> **新增的 Python 后端基线**（FastAPI + SQLite + Alembic，`main@1ed2b69`，2026-09-12 本机复跑）：Python 后端 **173 项 pytest 通过**、渲染层 **36 项**、Electron 主进程 **44 项**测试通过，arm64 打包运行时验收 **9 项全部 PASS**。这是**工程完成度**，不是发布结论：未签名/公证、未构建 x64、未做真实模型调用、未完成完整人工 GUI 数据流程回归。
+
 ## 1. 简历可直接使用的版本
 
 ### 项目名称
@@ -15,19 +17,21 @@
 
 ### 技术栈
 
-Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、PostgreSQL (pgvector)、Caffeine、MyBatis-Plus、Flyway、Docker、Electron、React、TypeScript、JaCoCo
+Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、PostgreSQL (pgvector)、Caffeine、MyBatis-Plus、Flyway、Docker、Electron、React、TypeScript、JaCoCo、**Python 3.12、FastAPI、SQLAlchemy 2、Alembic、SQLite、PyInstaller、uv、pytest**
 
 ### 项目描述
 
-独立设计并实现支持多端自适应的 AI 智能知识工作台。具备从网页/文档采集、异步分块切片、高维向量存储到智能 RAG 检索、间隔复习与 Agent 问答全链路闭环；架构上兼顾“生产集群态（Milvus + Kafka + Redis）”与“桌面极简零依赖态（H2 + 本地 JSON 向量快照）”。
+独立设计并实现支持多端自适应的 AI 智能知识工作台。具备从网页/文档采集、异步分块切片、高维向量存储到智能 RAG 检索、间隔复习与 Agent 问答全链路闭环；架构上兼顾“生产集群态（Milvus + Kafka + Redis）”与“桌面极简零依赖态（H2 + 本地 JSON 向量快照）”；后端在 `/api/v1` 契约冻结的前提下，支持 Java（Spring Boot + H2）与 Python（FastAPI + SQLite）两条**可显式切换**的本地基线。
 
-### 项目亮点（推荐 5 条）
+### 项目亮点（推荐 5 条，第 6 条为全栈/双栈岗备选）
 
 1. **三级弹性向量存储体系**：基于 LangChain4j 统一向量 Provider，启动期探测并支持生产态连接 Milvus 分布式向量库、过渡态连接 PgVector，并在单机桌面态自动优雅降级至具备 JSON 持久化快照与损坏自愈的本地向量索引，提升单机与轻量场景下的启动弹性与容错能力。
 2. **基于 Kafka 落地异步切片与文档向量化削峰事件流**：设计 `KnowledgeIngestionProducer`（同步等待 Broker ACK 确认与 2s 超时降级）与消费者解耦文档导入后的切片与向量入库；消费者端配置 Spring Kafka `DefaultErrorHandler` + `DeadLetterPublishingRecoverer` 实现指数退避重试与死信队列（DLT）路由闭环；建立基于 SHA-256 摘要与进程内条带互斥锁（Striped Lock）的双重检查防重机制，消除锁分裂竞态并抑制本地异步降级与 Consumer 重试时的重复切片写入。
 3. **RRF 混合检索与用户级 Pre-filtering 下推**：结合全文检索（BM25/FTS）与密集向量检索，在包含 8 篇典型技术文档与 13 组对比查询的模拟评测集上，验证 RRF（\(k=60\)）排名融合有效平衡了专有名词与语义排序，模拟 Top-3 召回率达 **92.3%**；检索请求强制将 `userId` 下推到底层向量引擎，实现租户级数据逻辑隔离与跨租户防穿透。
 4. **大模型语义缓存与多级防击穿拓扑**：针对高频重复相似问答，设计基于高维向量余弦相似度（阈值 ≥0.92）的语义缓存拦截层，命中相似查询直接复用历史响应，显著削减 LLM API 调用开销与排队延迟；针对元数据设计 Caffeine L1 + Redis L2 两级缓存拓扑，从架构上落地互斥锁防击穿、随机 TTL 抖动防雪崩、空值缓存防穿透，并结合 Cache-Aside 双写淘汰保障最终一致性。
 5. **严苛的双门禁质量工程**：全系统建立 387 项自动化测试（373 项通过、14 项跳过、0 失败、0 错误），配置 JaCoCo 行（实测 77.69% ≥65%）与分支（实测 64.26% ≥60%）双重强门禁并接入 Maven `verify` 与 CI/CD Pipeline，为架构重构与故障降级路径建立稳固的自动化回归防护。
+
+6. **契约冻结下的后端实现可替换性（全栈 / 双栈岗建议补上）**：在保持 `/api/v1` 契约不变的前提下，新增一条与 Spring Boot 并排的 FastAPI + SQLite 后端基线，由显式运行时选择器（`backend-runtime.json`，开发期可由环境变量覆盖）决定启动哪一条，并**刻意不做隐式回退**——选中基线缺少产物时直接失败并输出缺失清单，避免静默切换在 H2 与 SQLite 之间改变数据路径。前端零改动即可切换后端实现，契约一致性由路由清单与字段命名测试门禁守住（Python 后端 173 项 pytest，含契约回归测试）。
 
 ### 按岗位替换第 4 条（择一使用）
 
@@ -39,7 +43,7 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 
 ## 2. 30 秒项目介绍
 
-> Knowledge Desk 是我独立完成的 Local-First 全栈 AI 桌面项目。它不是单纯聊天应用，而是把资料采集、Inbox 整理、标签搜索、每日复习和 AI 问答串成一个知识闭环。前端使用 Electron、React 和 TypeScript，后端使用 Java 21 与 Spring Boot；安装包内置 JRE 和 H2，基础知识管理不依赖 Java、Docker 或外部数据库。项目中我重点解决了本地文件安全边界、多用户 RAG 隔离和桌面独立发布问题。
+> Knowledge Desk 是我独立完成的 Local-First 全栈 AI 桌面项目。它不是单纯聊天应用，而是把资料采集、Inbox 整理、标签搜索、每日复习和 AI 问答串成一个知识闭环。前端使用 Electron、React 和 TypeScript，后端使用 Java 21 与 Spring Boot；安装包内置 JRE 和 H2，基础知识管理不依赖 Java、Docker 或外部数据库。后端我还做成了**契约冻结的可替换双基线**：在不改 `/api/v1` 契约、不改一行前端业务代码的前提下，新增了一条 FastAPI + SQLite 的 Python 本地后端，由显式运行时选择器决定启动哪一条。项目中我重点解决了本地文件安全边界、多用户 RAG 隔离、桌面独立发布和后端可替换性四个问题。
 
 ## 3. 90 秒项目介绍
 
@@ -48,8 +52,10 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 > 技术上，Renderer 使用 React 和 TypeScript，Electron Main Process 负责文件导入和进程管理，Spring Boot 负责鉴权、知识条目、标签、复习调度、模型源和 Assistant API。桌面 Profile 使用 H2、Caffeine 和带 JSON 快照的本地向量索引，并随安装包带一个 jlink 裁剪的 Java 21 运行时，因此用户不需要另外安装 Java、PostgreSQL 或 Docker。
 >
 > 我遇到的三个关键问题，一是 Renderer 不应该拿到用户绝对路径，所以我把预检、路径边界、符号链接和文件稳定性校验放在 Main Process；二是 RAG 不能在检索后才过滤用户数据，我把 userId 条件下推到 EmbeddingSearchRequest，并补了跨用户和无用户上下文测试；三是桌面 PgVector 不应成为启动前置条件，因此我为主知识索引加入本地 JSON 快照、损坏隔离和落盘失败继续内存工作的持久化边界。发布侧我固定了 Beta tag、manifest 与 SHA-256，使安装包可以追溯到提交；当前源码还把 JaCoCo 行/分支门禁接入 Maven `verify` 与 CI。这里要区分：Beta.2/Beta.3 是历史发布资产，`v0.1.0-beta.4`（`main@09d3cb0`）的 387 项后端测试和 77.69%/64.26% 覆盖率是当前发布基线。
+>
+> 后端可替换性是我后来加的一条线：在不动 `/api/v1` 契约的前提下，我并排做了一条 FastAPI + SQLite 的 Python 本地后端，桌面包可以同时携带两条基线，用 `backend-runtime.json` 显式选择启动哪一条。这里我刻意**不做隐式回退**——选中的基线缺产物就启动失败并报出缺失清单，因为静默换一条基线会在 H2 和 SQLite 之间悄悄改变数据路径。Python 基线本机 173 项 pytest 通过、arm64 打包运行时验收 9 项全过；但它目前只是本机 arm64 的工程完成度，尚未签名、未构建 x64、未做真实模型联调。
 
-## 4. 五个最值得展开的技术故事
+## 4. 六个最值得展开的技术故事
 
 ### 故事 A：从“聊天应用”转向“知识闭环”
 
@@ -85,6 +91,15 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 - 方案：固定版本和 Git commit，生成 DMG/ZIP、`release-manifest.json` 与 `SHA256SUMS`，上传后按 GitHub 实际资产名重建清单，再独立下载校验。
 - 结果：`v0.1.0-beta.2` 是可追溯的 GitHub prerelease。
 - 边界：个人 Beta 使用 ad-hoc 签名；没有声称 Developer ID 或 notarization 已完成。
+
+### 故事 F：不改前端换后端——契约冻结与显式运行时选择
+
+- 问题：桌面包把 Spring Boot + H2 与内嵌 JRE 绑成唯一后端，运行时体积与语言绑定性是实际成本；但直接重写后端会同时赌上既有功能与整个前端。
+- 判断：可以替换的是**实现**，不能动的是**契约**。只要 `/api/v1` 的路径、方法、字段命名（camelCase）、状态码与 `{"message","code"}` 错误结构不变，前端就没有理由改。
+- 行动：新增 `python-backend/`（FastAPI + SQLAlchemy 2 + Alembic + 本地 SQLite，Python 3.12 / uv 管理依赖），与既有 `backend/` 并排存在、不覆盖 Java 实现；桌面侧新增 `backend-runtime.ts`，按 `KD_BACKEND_RUNTIME`（仅开发期生效）→ `backend-runtime.json`（构建期写入、随包发布）→ 默认 `java` 的优先级解析运行时，并用 PyInstaller `onedir` 把 Python 运行时打进 `extraResources`。
+- 关键取舍：**拒绝隐式回退**。选中基线缺产物时直接失败并列出缺失清单，因为静默切到另一条基线会在 H2 与 SQLite 之间改变数据路径，这比启动失败更难诊断。
+- 验证：Python 后端 173 项 pytest（含 `test_contract.py` 的路由清单与字段命名门禁）、渲染层 36 项、Electron 主进程 44 项；arm64 打包产物 `AI Agent.app` 的运行时验收 9 项全部 PASS（含 readiness HTTP 200、在 dataDir 内创建 SQLite）。另有一处产品细节：渲染层可能先于后端就绪而加载，此时显示降级预览数据，后端进入 `running` 后自动重取快照切到真实数据。
+- 边界：这是本机 arm64 的工程完成度，不是发布结论——未签名/公证、未构建 x64/universal、未做真实模型调用、未完成完整人工 GUI 数据流程回归，CI 也尚未覆盖 `python-backend/`。
 
 ## 5. 高频面试问答
 
@@ -130,7 +145,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 
 ### Q11：测试覆盖了哪些层？
 
-后端包含 Service、Controller、配置、数据迁移、集成与端到端流程测试；Electron Main 测试 IPC、路径、导入、启动和打包保护；Renderer 有 API 契约与 ViewModel 测试；Local Service 有路径与鉴权测试。当前发布基线通过 `mvn --settings .mvn/settings.xml -pl backend -am clean verify`：`backend` 387 项测试、0 failure、0 error、14 skipped，JaCoCo 行 77.69%、分支 64.26%，并实际满足行 ≥65%、分支 ≥60% 门禁，绑定已发布的 `v0.1.0-beta.4`（`main@09d3cb0`）；`bug-sentinel-starter` 另有 4 项测试通过。Electron、Renderer 与 Local Service 的 25/33/10 是 2026-08-20 的独立历史验证记录；不把这些不同日期、不同源代码边界的数据合成一个“全项目测试数”。
+后端包含 Service、Controller、配置、数据迁移、集成与端到端流程测试；Electron Main 测试 IPC、路径、导入、启动和打包保护；Renderer 有 API 契约与 ViewModel 测试；Local Service 有路径与鉴权测试。当前发布基线通过 `mvn --settings .mvn/settings.xml -pl backend -am clean verify`：`backend` 387 项测试、0 failure、0 error、14 skipped，JaCoCo 行 77.69%、分支 64.26%，并实际满足行 ≥65%、分支 ≥60% 门禁，绑定已发布的 `v0.1.0-beta.4`（`main@09d3cb0`）；`bug-sentinel-starter` 另有 4 项测试通过。Electron、Renderer 与 Local Service 的 25/33/10 是 2026-08-20 的独立历史验证记录；不把这些不同日期、不同源代码边界的数据合成一个“全项目测试数”。新增的 Python 后端基线另有 173 项 pytest 通过；渲染层 36 项与 Electron 主进程 44 项是 2026-09-12 在 `main@1ed2b69` 上的复跑结果（与上一条 25/33/10 的历史记录分属不同日期与代码边界，同样不能相加）。
 
 ### Q12：为什么测试日志里模型调用失败仍可能整体通过？
 
@@ -147,6 +162,10 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 ### Q15：下一步你会怎么做？
 
 优先做三件事：修复本机 Electron 运行时后补充安装后自动化 E2E；按候选协议建立真实数据集的搜索质量、冷/热启动和安装包体积基准；再评估多设备同步，而不是立即拆更多微服务。
+
+### Q16：为什么同时维护两条后端基线（Java 与 Python）？
+
+这不是为了堆技术栈，而是让“后端实现”变成可替换项。前提是契约必须先冻结：两条基线实现同一 `/api/v1` 契约，路径、方法、camelCase 字段、状态码与错误结构一致，因此前端零改动就能切换。收益是我能在不触碰产品界面的前提下重新权衡本地运行时（体积、依赖面、语言栈）；风险相应转移到契约一致性上，所以我用路由清单与字段命名测试做门禁，并把三处与 Electron 主进程的隐式耦合（登录失败文案、邮箱重复包含 `already`、知识条目 id 为 36 位 UUID）固化进测试。边界同样要说清：Python 基线目前只是本机 arm64 的工程完成度，未签名、未构建 x64、未做真实模型联调，CI 也还没覆盖它；默认与可回退路径仍是 Java 基线。
 
 ## 6. 深挖追问的回答结构
 
@@ -173,6 +192,10 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 - 不把可选 Kafka/Milvus/Kubernetes 说成桌面版运行必需。
 - 不把早期 Computer Use 说成打包版能力：发布构建明确禁用它。
 - 不把 387 个后端测试（14 skipped）说成全系统测试；历史测试数（225/344/357 等）也不能与当前 387 个相加，更不能在没有对应验证记录时归因给历史 Beta。
+- 不把 Python 基线说成“已经替代 Java 基线”或“已发布”：它是可显式切换的第二条基线，默认与可回退路径仍是 Java（仓库提交的 `backend-runtime.json` 当前值为 `java`）。
+- 不说“已完成签名/公证”或“已支持 x64”：Python 基线已实测的产物是本机 arm64 未签名目录包（`desktop/release/python-arm64/`），x64 与 universal 尚未构建。
+- 不说“已完成完整 GUI 数据流程回归”：当前自动化覆盖到打包运行时验收与渲染层单测，人工端到端（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）回归尚未做。
+- 不把 Python 基线的 173 项 pytest 与 Java 基线的 387 项后端测试相加，也不声称 CI 已覆盖 `python-backend/`（当前 `python-service-test` job 仍指向旧的 `python-service/`）。
 
 ## 8. 面试官可能指出的不足
 
@@ -198,6 +221,8 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 - 记住四个事实：Java 21、Desktop Profile、本地向量快照恢复、后端 JaCoCo 门禁（行 65%/分支 60%，发布基线实测 77.69%/64.26%）；已发布 Beta 均为 ad-hoc signed。
 - 准备一个“模型可用”和一个“模型不可用”的演示路径。
 - 能解释 H2 与 PostgreSQL、单体与微服务、Electron 与纯 Web 的取舍。
+- 能讲清双后端基线：契约冻结是前提（`/api/v1` 不变则前端零改动）、拒绝隐式回退的理由（静默切换会改变 H2 ↔ SQLite 数据路径）、以及验证口径（Python 173 / 渲染层 36 / 主进程 44，arm64 打包运行时验收 9 项 PASS）。
+- 记住 Python 基线的边界一句话：本机 arm64、未签名/未公证、未构建 x64、未做真实模型联调、未完成完整人工 GUI 回归。
 - 能打开 GitHub Release、manifest 和 SHA256SUMS 作为证据。
 - 不背整段答案；每个故事只记“问题—根因—选择—验证—边界”。
 

@@ -7,7 +7,7 @@
 
 ## 1. 一句话定位
 
-**主产品 = AI Agent Knowledge Desk**：一个 local-first 的个人知识工作台，以 macOS Electron 桌面应用为交付形态，随包内置 Spring Boot 后端、H2 数据库与 JRE。正常桌面使用不需要用户单独安装 Java、PostgreSQL 或 Docker。
+**主产品 = AI Agent Knowledge Desk**：一个 local-first 的个人知识工作台，以 macOS Electron 桌面应用为交付形态，随包内置**受管后端运行时**。后端有两条并排的基线，由显式运行时选择器决定启动哪一条：**Java 基线**（Spring Boot + H2 + jlink JRE，默认且可回退）与 **Python 基线**（FastAPI + 本地 SQLite + Alembic，PyInstaller onedir 随包）。两条基线实现同一个 `/api/v1` 契约。正常桌面使用不需要用户单独安装 Java、PostgreSQL 或 Docker。
 
 核心闭环：**收集 → Inbox 整理 → AI 元数据增强 → Library 浏览/搜索 → Detail 回看（保留来源上下文）**。这不是一个以聊天为主入口的产品。
 
@@ -16,9 +16,13 @@
 | 组成 | 状态 | 入口 |
 | --- | --- | --- |
 | 桌面渲染层（Knowledge Desk） | 已实现，主界面 | `desktop/src/renderer/src/App.tsx` → `desktop/src/renderer/src/knowledge-desk/KnowledgeDeskApp.tsx` |
-| 知识闭环 API | 已实现 | `backend/src/main/java/com/agent/mvp/`（`/api/v1/knowledge-items`、`/tags`、`/model-sources`、`/ingestion-jobs`、`/knowledge-reviews`、`/dashboard`、`/settings`） |
-| 内置运行时 | 已实现，随包 | `desktop/backend-jre/backend.jar`、`desktop/backend-jre/jre` |
-| 本地数据 | 已实现 | H2（桌面 profile `application-desktop.yml`），无需外部数据库 |
+| 知识闭环 API（Java 基线，默认） | 已实现 | `backend/src/main/java/com/agent/mvp/`（`/api/v1/knowledge-items`、`/tags`、`/model-sources`、`/ingestion-jobs`、`/knowledge-reviews`、`/dashboard`、`/settings`） |
+| 知识闭环 API（Python 基线，可切换、非默认） | 已实现 | `python-backend/src/knowledge_desk/`（FastAPI，实现同一 `/api/v1` 契约：`api` / `application` / `domain` / `infrastructure` 分层） |
+| 后端运行时选择器 | 已实现 | `desktop/src/main/backend-runtime.ts`；选择值存于 `desktop/backend-runtime.json`（仓库当前提交值为 `java`），开发期可由 `KD_BACKEND_RUNTIME` 覆盖（打包版忽略） |
+| 内置运行时（Java 基线） | 已实现，随包 | `desktop/backend-jre/backend.jar`、`desktop/backend-jre/jre` |
+| 内置运行时（Python 基线） | 已实现，随包（`extraResources`） | `desktop/backend-python/knowledge-desk-backend/`（PyInstaller `onedir`，按本机架构构建，不能交叉编译） |
+| 本地数据（Java 基线） | 已实现 | H2（桌面 profile `application-desktop.yml`），无需外部数据库 |
+| 本地数据（Python 基线） | 已实现 | 本地 SQLite `<dataDir>/knowledge-desk.sqlite3` + Alembic 迁移（启动时 `upgrade head`，可重复执行） |
 
 桌面渲染层只有唯一入口 `App.tsx`，它直接挂载 `KnowledgeDeskApp`；仓库中不存在第二个主导航/聊天主界面。
 
@@ -46,6 +50,7 @@
 - **默认随桌面包发布**：**否**（不在 `desktop/electron-builder.yml` 的 `extraResources`，也不在 `desktop/backend-jre/` 中；仅存在于 Compose 服务 `python-service`）
 - **入口**：`python-service/main.py`；服务定义见 `docker-compose.yml`（`python-service` 段）
 - **风险**：桌面版只能走本地/降级解析路径；把 `python-service` 写成桌面版必备组件属于事实错误。
+- **易混淆项**：本节说的是 `python-service/`（旧文档解析服务），与主线的 **`python-backend/`**（FastAPI 本地后端基线，见 §2）是两个不同目录、两种不同职责。`python-backend/` 属于**主产品交付面**；`python-service/` 属于**可选模块**。二者在 `electron-builder.yml` 中的体现也不同：`backend-python` 条目来自 `python-backend/`，与 `python-service/` 无关。
 
 ### 3.4 `docker-compose` / `k8s` 服务端栈
 
@@ -92,6 +97,7 @@
 | --- | --- | --- | --- | --- |
 | G1 | **本机助手的 system prompt 与检索文案仍按"coding agent / 日志诊断"表述**：`AgentContextService.buildMessages` 的 system prompt 是 "You are a Java AI coding assistant. Use provided tool context as factual repo grounding…"；注入上下文前的标题是 "Here are some relevant historical log diagnoses for reference:"；而实际注入的是知识工作台导入的资料（`KnowledgeItemService` 整理后写入同一个 embedding store）。 | e2e-engineer 实测（t6）；代码：`backend/.../AgentContextService.java`、`RAGMemoryService.searchSimilarDiagnoses` | 助手是主界面之一（`knowledgeDeskAssistant.tsx`），但对外措辞把它描述成 coding assistant / 日志诊断，与"Knowledge Desk 是知识工作台"不一致 | 单独任务：改 system prompt 与上下文标题；评估 `searchSimilarDiagnoses` 重命名的调用面（含测试与 e2e） |
 | G2 | **助手复用的是 legacy `/api/v1/agent/chat/stream` 通道**：Electron 主进程 `local-chat:send` → `streamLocalChat` → `POST /api/v1/agent/chat/stream`（`toolsEnabled: false`），004 契约未描述该链路。 | `desktop/src/main/ipc-registry.ts`；`docs/arch/006-knowledge-desk-spec-alignment.md` D5 | 助手链路缺少契约说明，联调/回归时无参照 | 单独任务：把助手链路写入 004 或新增助手契约文档 |
+| G3 | **CI 尚未覆盖新的 `python-backend/` 基线**：`.github/workflows/ci.yml` 的 `python-service-test` job 仍以 `working-directory: ./python-service` 与 Python 3.11 运行旧的文档解析服务测试；主线的 FastAPI 基线（`python-backend/`，Python 3.12、173 项 pytest）不在任何 CI 门禁内。 | `.github/workflows/ci.yml`（`python-service-test` job，L127–148）；`python-backend/pyproject.toml`（`requires-python = ">=3.12,<3.13"`） | Python 基线的契约回归（含 `test_contract.py` 的路由清单与 camelCase 字段命名门禁）目前只靠本机手动执行，主分支合入时无自动防护；README/简历材料必须继续声明该边界 | 单独任务：把该 job 校准为 `python-backend/` + `uv run pytest`（或新增独立 job），确认 Python 版本与 `pyproject.toml` 一致后再作为门禁启用 |
 
 ## 6. 变更记录
 
@@ -99,12 +105,13 @@
 - 2026-09-08 更新：§3.7 对齐 WS2 归档结果（根 `pom.xml` 已删除 legacy profile，改为独立聚合器；最终路径 `legacy/`）；新增附录 A 声明-实现一致性核对表。
 - 2026-09-08 更新：新增 §5「已知行为缺口」（G1 助手 prompt/检索文案、G2 助手复用 legacy 通道），记录 e2e-engineer 实测；§4 增补 006 引用。
 - 2026-09-08 更新：归档目录路径二次校准（曾短暂改到 `archive/` 子目录，已全部回退），最终裁定为 `legacy/`，以根 `pom.xml` 注释为准；同步 §3.7、附录 A11、`docs/arch/006`、`docs/archive/task-java-dev-coach-mvp.md` 中的引用。
+- 2026-09-14 更新：登记 Python 后端基线进入主线交付面（§4 第 6 条要求口径升级须先落到本文件，本次与 README 等材料在同一批收尾中一并更新，故此处同步登记）——§1 定位、§2 新增 Python 基线与运行时选择器条目、§3.3 补充 `python-service` 与 `python-backend` 的区分、§5 新增 G3（CI 未覆盖 `python-backend/`）、附录 A 新增 A18–A20 并校正 A7 的验证命令与快照时间；同步 `README.md`、`PROJECT_SHOWCASE.md`、`RESUME_PROJECT_GUIDE.md`、`python-backend/README.md`。
 
 ---
 
 ## 附录 A：声明-实现一致性核对表
 
-**快照时间**：2026-09-08 15:42（CST）｜**基线**：branch `main`，HEAD `590f7d9`（工作树含 WS2/WS3/WS4 并发改动）
+**快照时间**：A1–A17 于 2026-09-08 15:42（CST）在 HEAD `590f7d9` 验证；A18–A20 于 2026-09-14 在 HEAD `1ed2b69` 增补｜**基线**：branch `main`
 **复验方式**：`ssh_exec(alias="localhost", command="export PATH=\"/opt/homebrew/bin:/Users/liuyongze/java/jdk-21.0.10.jdk/Contents/Home/bin:$PATH\"; export JAVA_HOME=/Users/liuyongze/java/jdk-21.0.10.jdk/Contents/Home; cd /Users/liuyongze/Documents/AI-agent && <命令>")`
 **状态含义**：✅ 已验证（本次实跑）｜⚠️ 部分验证（有前提/时效性）｜TODO 未执行（附原因）
 
@@ -123,10 +130,13 @@
 | A11 | legacy `agent-*` 不在根 reactor、不参与 CI 与发布产物 | 本文 §3.7 | `sed -n '15,30p' pom.xml`；`ls legacy/`；`grep -n "<module>" legacy/pom.xml` | 根 `<modules>` 仅 `backend`、`bug-sentinel-starter`，无 `legacy` profile；`legacy/pom.xml` 聚合 6 个模块；根目录已无 `agent-*` 目录 | ✅（2026-09-08 15:47 快照，最终路径 `legacy/`） |
 | A12 | 发布组件版本一致（`0.1.0-beta.4`，2026-09-08 由 beta.3 收口） | README「macOS Beta candidate workflow」 | `./scripts/check-release-version.sh` | `[release-version] all release components use 0.1.0-beta.4`；bundle 元数据 `0.1.0` / `bundleVersion 4`；exit 0 | ✅（`desktop/src/renderer/package.json` 的 `0.0.0` 是内部 workspace 包，不在发布组件清单） |
 | A13 | beta.3 历史问题中的两个搜索测试已修复，HEAD 上全绿 | README L119 | `mvn -pl backend -Dtest=SearchOrchestratorTest,SearchStrategyConfigTest -DfailIfNoTests=false test` | `SearchOrchestratorTest` 3/3 通过；`SearchStrategyConfigTest` 3/3 通过；`Tests run: 6, Failures: 0, Errors: 0`；`BUILD SUCCESS`；mvn exit 0 | ✅ |
-| A14 | Knowledge Desk 渲染层核心链路（导入/列表/搜索/复习/备份/降级/视图模型）可用 | 本文 §2 | `cd desktop/src/renderer && npm test`（vitest） | 12 个测试文件、35 个测试全部通过，exit 0 | ✅ |
+| A14 | Knowledge Desk 渲染层核心链路（导入/列表/搜索/复习/备份/降级/视图模型）可用 | 本文 §2 | `cd desktop/src/renderer && npm test`（vitest） | 12 个测试文件、35 个测试全部通过，exit 0 | ✅（2026-09-08 快照；2026-09-14 于 `1ed2b69` 复跑为 **13 个测试文件 / 36 项通过**，新增项为「后端就绪后自动重取快照」） |
 | A15 | API 与 readiness 路径一致性 | README | `./scripts/check-consistency.sh` | `[consistency] API and readiness path checks passed`；exit 0 | ✅ |
 | A16 | 打包产物布局：`app.asar` 含 renderer 与 main、JRE `java` 可执行、renderer 引用相对 Vite 资源 | README 打包门禁 | `node desktop/scripts/verify-packaged-app.cjs`（内部执行 `electron-builder --dir --mac`） | 未执行 | **TODO**：需要完整 electron-builder `--dir` 打包（数分钟 + 临时产物），属发布验证范围，建议由 release-verifier 在 WS6 全量验证中执行 |
 | A17 | macOS 安装包 ad-hoc 签名、未公证边界声明 | README「macOS Beta candidate workflow」 | 需实际构建 DMG/ZIP 后执行 `codesign -dv` / `spctl -a -vv` / Gatekeeper 校验 | 未执行 | **TODO**：依赖真实打包与签名环境，属 WS6 发布验证范围 |
+| A18 | Python 基线（`python-backend/`）已实现，并与 Java 基线共享同一 `/api/v1` 契约 | 本文 §1、§2；README「Managed backend runtimes」 | `cd python-backend && .venv/bin/python -m pytest`（本机 `uv` 不在 PATH，改用 uv 创建的同一虚拟环境解释器） | `173 passed`，1 warning；`--cov=knowledge_desk` 覆盖率 91%（2615 statements / 244 miss）。契约门禁为 `tests/test_contract.py`（46 项，含路由清单与 camelCase 字段命名） | ✅（2026-09-14 于 HEAD `1ed2b69` 实跑） |
+| A19 | 桌面后端由显式运行时选择器决定，仓库当前提交值为 Java，且**无隐式回退** | 本文 §1、§2；README「Managed backend runtimes」 | `cat desktop/backend-runtime.json` + `ls desktop/src/main/backend-runtime.ts` + `grep -n "backend-python" -e "backend-runtime.json" desktop/electron-builder.yml` | `backend-runtime.json` = `{"backendRuntime": "java"}`；`desktop/src/main/backend-runtime.ts` 存在（优先级 `KD_BACKEND_RUNTIME`（仅开发期）→ `backend-runtime.json` → `java`）；`electron-builder.yml` 命中 `from: backend-python`（L42）与 `from: backend-runtime.json`（L49） | ✅（2026-09-14 于 HEAD `1ed2b69` 实跑） |
+| A20 | 打包版 Python 运行时可通过自动验收（资源布局 / 运行时解析 / readiness / SQLite 建库） | 本文 §2；README「Verified engineering baseline」；`desktop/README.md` | `cd desktop && npm run build:main && DESKTOP_PACKAGE_DIR=release/python-arm64 node scripts/verify-packaged-python-runtime.cjs` | `PACKAGED PYTHON RUNTIME: PASSED`：9 项 `step` 全部 PASS（PyInstaller 二进制存在且可执行、选择器随包且指向 `python`、无缺失制品、launcher 进入 `running`、readiness HTTP 200 且 `{"status":"ready","database":"ok"}`、dataDir 内创建 SQLite、renderer 相对引用资源）。产物为本机 arm64 **未签名**目录包 | ✅（2026-09-14 于 HEAD `1ed2b69` 实跑；**非发布证据**） |
 
 ### 附录 A 使用说明
 

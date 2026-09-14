@@ -121,7 +121,7 @@ MarkItDown 作为**可选**回退（`uv sync --extra markitdown`），仅在原�
 ## 测试与验证
 
 ```bash
-uv run pytest                      # 172 passed
+uv run pytest                      # 173 passed
 uv run pytest --cov=knowledge_desk # 覆盖率 ~91%
 ./scripts/smoke-local.sh           # 起真实进程，跑完整闭环
 ```
@@ -140,8 +140,16 @@ Agent 流式聊天、会话、Dev Coach、Sentinel、CLI、Computer Use、Kubern
 发布报表接口均不迁移，继续保留在 Java/扩展范围内，后续按独立阶段评估。
 多用户服务端部署、跨设备同步、旧 H2 数据迁移同样不在范围内。
 
-## 后续阶段（未完成）
+## 桌面集成的当前状态
 
-1. Electron 侧 `BackendManager` 抽象为受管本地进程启动器，并支持 Java / Python 基线显式切换。
-2. PyInstaller 构建 macOS arm64 / x64 后端运行时，作为 `extraResources` 打入安装包。
-3. 安装包验收：`.app` 启动后 `curl --noproxy '*'` 验证 readiness，再人工回归核心页面交互。
+本节原为「后续阶段（未完成）」。三项均已在后续提交中落地，保留原编号以便对照：
+
+1. **已完成**（`830ad52`）：Electron 侧 `BackendManager` 已抽象为受管本地进程启动器；`desktop/src/main/backend-runtime.ts` 支持 Java / Python 基线**显式切换**（`KD_BACKEND_RUNTIME`（仅开发期）→ `backend-runtime.json` → 默认 `java`），且**无隐式回退**——选中基线缺产物时启动失败并列出缺失清单。
+2. **已完成（仅 arm64）**（`830ad52`、`1ed2b69`）：PyInstaller 构建 macOS arm64 运行时，并通过 `electron-builder.yml` 的 `extraResources` 打入安装包。**x64 / universal 未构建**（PyInstaller 不支持交叉编译，需在对应架构上各构建一次）。
+3. **已完成（自动化验收部分）**：`desktop/scripts/verify-packaged-python-runtime.cjs` 对 `.app` 做不开 GUI 的验收——产物存在且可执行、选择器指向 `python`、打包版解析到内置运行时、启动器 `running`、readiness HTTP 200 `{"status":"ready"}`、dataDir 内创建 SQLite，**9 项检查全部 PASS**。**人工 GUI 数据流程回归（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）尚未执行。**
+
+### 仍未完成 / 边界
+
+- **未签名、未公证**：当前是未签名目录包，不是可公开发行的安装包。
+- **未做真实模型调用联调**：AI 整理路径只经 mock endpoint 与确定性本地启发式验证。
+- **CI 未覆盖本目录**：`.github/workflows/ci.yml` 的 `python-service-test` job 仍指向旧的 `python-service/`（Python 3.11），`python-backend/` 的回归目前只在本机执行。

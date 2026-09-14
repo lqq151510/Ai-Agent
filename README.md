@@ -1,12 +1,13 @@
 # AI Agent Knowledge Desk
 
-AI Agent Knowledge Desk is a local-first desktop knowledge application and a full-stack AI portfolio project. Its primary deliverable is the Electron desktop app backed by Spring Boot; the repository also contains a TypeScript CLI and an optional deployable server stack.
+AI Agent Knowledge Desk is a local-first desktop knowledge application and a full-stack AI portfolio project. Its primary deliverable is the Electron desktop app; the managed local backend ships as **two explicitly selectable baselines** — a Java 21 / Spring Boot server (default, reversible fallback) and a Python 3.12 / FastAPI MVP — behind one frozen `/api/v1` contract. The repository also contains a TypeScript CLI and an optional deployable server stack.
 
 ## 产品主线与模块边界
 
-- 主产品：**AI Agent Knowledge Desk** —— local-first 个人知识工作台，macOS Electron 桌面应用，随包内置 Spring Boot 后端、H2 数据库与 JRE；核心闭环是「收集 → Inbox 整理 → AI 元数据增强 → Library 浏览/搜索 → Detail 回看」。
+- 主产品：**AI Agent Knowledge Desk** —— local-first 个人知识工作台，macOS Electron 桌面应用，随包内置受管后端运行时（默认 Spring Boot + H2 + jlink JRE，可选 FastAPI + SQLite 基线）与 Electron 渲染层；核心闭环是「收集 → Inbox 整理 → AI 元数据增强 → Library 浏览/搜索 → Detail 回看」。
 - 默认交付面只有 Knowledge Desk 桌面闭环：渲染层唯一入口 `desktop/src/renderer/src/App.tsx` → `desktop/src/renderer/src/knowledge-desk/KnowledgeDeskApp.tsx`。
-- 以下均为**可选模块**，不属于主产品默认交付范围：`ts-cli`、Java Dev Coach、`python-service`、`docker-compose`/`k8s` 服务端栈、Codex 对齐的编码 Agent 能力（Thread/Worktree/PTY/Skills/Computer Use）、`local-service`、legacy `agent-*` 微服务。
+- 主产品的受管后端有两个**基线**，由显式运行时选择器决定，二者实现**同一个 `/api/v1` 契约**：`backend/`（Java 21 + Spring Boot，默认且可回退）与 `python-backend/`（Python 3.12 + FastAPI 本地优先 MVP）。它们属于主产品交付面，**不是**可选附加模块。
+- 以下均为**可选模块**，不属于主产品默认交付范围：`ts-cli`、Java Dev Coach、`python-service`（旧文档解析服务，与 `python-backend` 无关）、`docker-compose`/`k8s` 服务端栈、Codex 对齐的编码 Agent 能力（Thread/Worktree/PTY/Skills/Computer Use）、`local-service`、legacy `agent-*` 微服务。
 - 各可选模块的状态、是否随桌面包发布、入口文件与风险，以及「文档冲突处置规则」，见 [产品主线与模块边界](docs/arch/000-product-line.md)。
 - README 与 `docs/arch/*` 口径冲突时，以 `docs/arch/000-product-line.md` 为准。
 
@@ -17,11 +18,39 @@ AI Agent Knowledge Desk is a local-first desktop knowledge application and a ful
 - AI 知识整理可使用用户主动配置并通过连接测试的 DeepSeek 官方 API、OpenAI 官方 API 或 OpenAI-compatible 端点；未配置或模型不可用时，基础知识管理保持可用并降级到本地整理能力。
 - API Key 使用加密的模型来源持久化；演示、日志和备份均不得暴露真实密钥。当前桌面设置页聚焦知识整理，不把尚未完成的检索问答或完整多云路由包装为已交付能力。
 
+## Verified engineering baseline (local, not a release claim)
+
+以下数字来自主线 `main@1ed2b69` 的本机复跑，只描述**当前工程完成度**，**不构成任何已发布安装包的验收结论**（发布证据与边界始终分开记录）：
+
+| 验证项 | 命令 | 结果 |
+| --- | --- | --- |
+| Python 后端测试 | `cd python-backend && uv run pytest` | **173 passed** |
+| 渲染层测试 | `cd desktop/src/renderer && npm run test` | **36 passed**（13 个测试文件） |
+| Electron 主进程测试 | `cd desktop && npm run test:main` | **44 pass / 0 fail** |
+| 打包 Python 运行时验收 | `cd desktop && DESKTOP_PACKAGE_DIR=release/python-arm64 npm run verify:packaged:python` | **9 项检查全部 PASS** |
+
+打包验收（`verify-packaged-python-runtime.cjs`，不开 GUI）实际通过的内容：`.app` 内含 PyInstaller 运行时且可执行、运行时选择器随包发布并指向 `python`、打包版在无环境变量时解析到内置运行时且无缺失制品、启动器状态进入 `running`、readiness 返回 HTTP 200 且 `{"status":"ready"}`、在 dataDir 内创建 SQLite 数据库、渲染层资源为相对引用。
+
+已构建并实测的产物是本机 **arm64** 目录包 `desktop/release/python-arm64/mac-arm64/AI Agent.app`：主可执行文件与内置 Python 运行时均为 Mach-O arm64。
+
+> 复跑说明：本机 `uv` 不在 PATH，上表的 Python 测试实际以 `python-backend/.venv/bin/python -m pytest` 在 uv 创建的同一虚拟环境中执行（结果一致，173 passed）。
+
+本机 GUI 已实测的自动恢复路径：渲染层可能先于受管后端就绪而加载并显示降级预览数据；当后端状态进入 `running` 时，渲染层自动重新拉取快照，**切换到来自真实 SQLite 的数据**，无需手动刷新（`desktop/src/renderer/src/knowledge-desk/knowledgeDeskBackendStatus.ts` 的 `shouldRefreshKnowledgeDeskSnapshot` + `KnowledgeDeskApp.tsx` 的订阅，另有渲染层测试覆盖）。
+
+### 尚未验证（诚实边界）
+
+- **仅本机 arm64 构建**；x64 与 universal 包未构建（PyInstaller 不支持交叉编译，需在对应架构上各构建一次）。
+- **未签名、未公证**：当前是未签名目录包，不是可公开发行的安装包。
+- **未做真实模型调用**：AI 整理路径只经 mock endpoint 与确定性本地启发式验证，尚未用真实 DeepSeek/OpenAI 凭据联调。
+- **未完成完整人工 GUI 数据流程回归**（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）；自动化目前覆盖到打包运行时验收与渲染层单测。
+- **CI 尚未覆盖 `python-backend/`**：`.github/workflows/ci.yml` 的 `python-service-test` job 仍指向旧的 `python-service/`（Python 3.11），需要在后续单独校准。
+
 Repository components:
 
-- `backend`: Spring Boot API for authentication, knowledge workflows, model sources, sessions, and SSE chat
-- `desktop`: Electron + React desktop client with a bundled standalone runtime
-- `python-service`: local document parsing service
+- `backend`: Spring Boot API for authentication, knowledge workflows, model sources, sessions, and SSE chat (default Java baseline)
+- `python-backend`: FastAPI + SQLAlchemy 2 + Alembic local-first backend MVP that implements the same `/api/v1` contract on a local SQLite database
+- `desktop`: Electron + React desktop client with a bundled standalone runtime and an explicit Java/Python runtime selector
+- `python-service`: local document parsing service (unrelated to `python-backend`)
 - `ts-cli`: TypeScript + React (Ink) terminal client
 - `docker-compose`: optional single-host server stack with PostgreSQL, Redis, Kafka, Milvus, parsing, and monitoring
 
@@ -30,6 +59,36 @@ Portfolio and interview materials:
 - [Product architecture and core flows](PROJECT_SHOWCASE.md)
 - [Resume bullets and interview playbook](RESUME_PROJECT_GUIDE.md)
 - [Demo script and verification evidence](docs/portfolio/README.md)
+
+## Managed backend runtimes (Java / Python)
+
+桌面端受管后端有两条**可并排打包**的基线，运行哪一条由**显式配置**决定，**不存在隐式回退**——选中的基线缺少产物时启动直接失败并列出缺失清单，而不是悄悄启动另一条基线：
+
+| 优先级 | 来源 | 说明 |
+| --- | --- | --- |
+| 1 | `KD_BACKEND_RUNTIME=java\|python` | **仅开发模式**生效；打包版忽略该环境变量，防止用户可控环境变量改写签名应用的运行时 |
+| 2 | `desktop/backend-runtime.json` | 构建期写入、随包发布（`extraResources`）；仓库当前提交值为 `java` |
+| 3 | 默认 `java` | 既有 Spring Boot 基线，行为不变 |
+
+- `java`（`backend/`）：Spring Boot + H2 + 随包 jlink JRE，历史主路径，默认值。
+- `python`（`python-backend/`）：FastAPI + SQLAlchemy 2 + Alembic + 本地 SQLite（Python 3.12，uv 管理依赖），以 PyInstaller `onedir` 产物 `desktop/backend-python/knowledge-desk-backend/` 随包发布，进程完全由环境变量驱动（无 CLI 参数）。
+- **兼容策略**：两条基线实现同一 `/api/v1` 契约（路径、方法、camelCase 字段、状态码、`{"message","code"}` 错误结构），因此替换后端运行时**不需要重写 Electron/React 渲染层业务代码**。
+- 实现细节、契约对齐说明与 MVP 边界见 [`python-backend/README.md`](python-backend/README.md)；桌面侧切换与打包见 [`desktop/README.md`](desktop/README.md)。
+
+```bash
+# 构建 Python 基线（PyInstaller 按本机架构产物；arm64/x64 需各自构建，不能交叉编译）
+cd desktop && npm run build:python-backend
+
+# 端到端验证：Electron 启动器 → 打包二进制 → readiness 探活
+node scripts/verify-python-runtime.cjs
+
+# 选择随包发布的基线，然后打包
+./scripts/set-backend-runtime.sh python   # 或 java（默认）
+npm run pack
+
+# 打包产物验收（不开 GUI：资源布局 / 运行时解析 / readiness 探活 / 建库）
+DESKTOP_PACKAGE_DIR=release/mac-arm64 npm run verify:packaged:python
+```
 
 ## AI + Java Dev Coach（supporting Beta module）
 
