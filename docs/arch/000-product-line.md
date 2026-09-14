@@ -106,6 +106,7 @@
 - 2026-09-08 更新：新增 §5「已知行为缺口」（G1 助手 prompt/检索文案、G2 助手复用 legacy 通道），记录 e2e-engineer 实测；§4 增补 006 引用。
 - 2026-09-08 更新：归档目录路径二次校准（曾短暂改到 `archive/` 子目录，已全部回退），最终裁定为 `legacy/`，以根 `pom.xml` 注释为准；同步 §3.7、附录 A11、`docs/arch/006`、`docs/archive/task-java-dev-coach-mvp.md` 中的引用。
 - 2026-09-14 更新：登记 Python 后端基线进入主线交付面（§4 第 6 条要求口径升级须先落到本文件，本次与 README 等材料在同一批收尾中一并更新，故此处同步登记）——§1 定位、§2 新增 Python 基线与运行时选择器条目、§3.3 补充 `python-service` 与 `python-backend` 的区分、§5 新增 G3（CI 未覆盖 `python-backend/`）、附录 A 新增 A18–A20 并校正 A7 的验证命令与快照时间；同步 `README.md`、`PROJECT_SHOWCASE.md`、`RESUME_PROJECT_GUIDE.md`、`python-backend/README.md`。
+- 2026-09-14 校正：落实上一行声称的「校正 A7」——附录 A7 的验证命令由 `grep -n python desktop/electron-builder.yml`（期望无输出）替换为精确匹配 `grep -n "python-service" desktop/electron-builder.yml`，因为前者在主线新增 `from: backend-python`（`electron-builder.yml` L42）后会命中 4 行并误报失败；同时更新 A14 的状态注记（2026-09-14 复跑：13 个测试文件 / 36 项通过）。
 
 ---
 
@@ -123,7 +124,7 @@
 | A4 | 桌面包内置后端运行时（`backend.jar` + `jre`） | 本文 §2；README Beta scope | `ls -la desktop/backend-jre` + `grep -A6 extraResources desktop/electron-builder.yml` | `backend.jar`（229,306,231 B）、`jre/`、`local-service/`、`ts-cli/`；`extraResources: from: backend-jre` | ✅ |
 | A5 | 桌面版使用内置 H2，正常使用无需外部数据库 | 本文 §2；README Beta scope | `grep -nE h2 backend/src/main/resources/application-desktop.yml`；`grep -nE ddl-auto backend/src/main/resources/application-desktop.yml` | `jdbc:h2:file:${user.home}/.ai-agent-desktop/db;AUTO_SERVER=TRUE`、`driver-class-name: org.h2.Driver`、`ddl-auto: validate`、`locations: classpath:db/h2` | ✅（注：`validate` + `classpath:db/h2` 是 WS4 统一 Flyway 迁移进行中的状态） |
 | A6 | `ts-cli`、`local-service` 随桌面包发布，但不属于主界面 | 本文 §3.1、§3.6 | `ls desktop/backend-jre` | 含 `ts-cli/`、`local-service/` 子目录 | ✅ |
-| A7 | `python-service` **不**随桌面包发布，仅存在于 Compose 服务端栈 | 本文 §3.3 | `grep -n python desktop/electron-builder.yml`（期望无输出）+ `ls desktop/backend-jre` | electron-builder.yml 无 python；`backend-jre/` 无 python；服务定义仅在 `docker-compose.yml` | ✅ |
+| A7 | `python-service` **不**随桌面包发布，仅存在于 Compose 服务端栈 | 本文 §3.3 | `grep -n "python-service" desktop/electron-builder.yml`（期望无输出）+ `ls desktop/backend-jre` | `python-service` 在 `electron-builder.yml` 中 0 命中（exit 1）；`backend-jre/` 无 python；服务定义仅在 `docker-compose.yml` | ✅（2026-09-14 校正验证命令：原命令 `grep -n python …` 会命中主线新增的 `backend-python` 条目而误报失败） |
 | A8 | Java Dev Coach 后端已实现但桌面无 UI 入口 | 本文 §3.2 | `grep -rni coach desktop/src/renderer/src --include=*.ts --include=*.tsx` | 0 命中（后端 `com.agent.mvp.coach.CoachController` 存在） | ✅ |
 | A9 | Codex 对齐编码 Agent 能力：主进程已实现、渲染层无 UI | 本文 §3.5 | `ls desktop/src/main/*.ts`；`grep -rni -e thread-manager -e worktree -e ptyManager -e skill-manager -e computerUse desktop/src/renderer/src` | 主进程 22 个模块（含 `thread-manager`、`worktree-manager`、`pty-manager`、`pty-pool`、`skill-manager`、`computer-use-manager`、`approval-engine`、`git-manager`、`diff-parse`、`tool-execution-bridge`）；渲染层 0 命中 | ✅ |
 | A10 | 打包 beta 明确排除 Computer Use，即使 `AI_AGENT_ENABLE_LEGACY_DEVTOOLS=1` 也不启用 | 本文 §3.5；README L123 | `grep -n -e isPackaged -e ENABLE_LEGACY_DEVTOOLS desktop/src/main/index.ts` | `index.ts:160 const isLegacyEnabled = !app.isPackaged && process.env.AI_AGENT_ENABLE_LEGACY_DEVTOOLS === '1';` | ✅ |
