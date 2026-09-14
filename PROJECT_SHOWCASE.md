@@ -301,7 +301,7 @@ sequenceDiagram
 - 覆盖率只描述后端 JaCoCo 范围；当前开发基线与已发布 Beta 的证据分开记录，不使用“高覆盖率”这类模糊宣传语。
 - 当前 `main` 的包内资源布局与 Renderer 降级契约已有自动测试；`main@344b740` 候选 `.app` 已在隔离用户目录中完成内置后端 readiness smoke（HTTP 200、`ready=true`，模型不可用仍可启动），但尚未完成签名/Gatekeeper、下载回验或人工窗口交互，因此不能称为新 Beta 的完整安装包证据。
 - **Python 基线目前只在本机 arm64 验证**；x64 与 universal 包未构建（PyInstaller 不支持交叉编译，需在对应架构上各构建一次）。
-- Python 基线**尚未签名/公证**，也**未做真实模型调用联调**（AI 路径只经 mock 与本地启发式验证），**未完成完整人工 GUI 数据流程回归**（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）。
+- Python 基线**尚未签名/公证**，也**未做真实模型调用联调**（AI 路径只经 mock 与本地启发式验证）。**数据闭环已实证**：2026-09-14 用打包运行时同一后端二进制 + 隔离数据目录，跑通「导入 → 整理 → 搜索 → 复习 → 重启后仍存在」共 17 项检查；**人工 GUI 窗口交互回归仍未完成**。
 
 ## 8. 可验证交付证据
 
@@ -333,10 +333,11 @@ sequenceDiagram
 | Electron 主进程测试 | `cd desktop && npm run test:main` | **44 pass / 0 fail** |
 | 打包 Python 运行时验收 | `cd desktop && DESKTOP_PACKAGE_DIR=release/python-arm64 npm run verify:packaged:python` | **9 项检查全部 PASS** |
 | CI 覆盖 Python 基线 | `.github/workflows/ci.yml` 的 `python-backend-test` job（Python 3.12 + uv） | 已在 GitHub Actions 通过（run `34815641536`，`main@c1aef75`，48 秒）；本机等价复跑 **173 passed / 91%** |
+| 数据闭环（隔离 + 打包运行时） | 打包 `.app` 内 `backend-python/knowledge-desk-backend` + 隔离 `KD_DATA_DIR`，重启前后两阶段 | **17 项检查全部 PASS**（阶段 1 十项 / 重启清理一项 / 阶段 2 七项）；隔离 SQLite 163840 字节，真实用户数据未被触碰 |
 
 - 打包验收实际通过项：`.app` 内含 PyInstaller 运行时且可执行、运行时选择器随包发布并指向 `python`、打包版在无环境变量时解析到内置运行时且无缺失制品、启动器状态进入 `running`、readiness 返回 HTTP 200 且 `{"status":"ready"}`、在 dataDir 内创建 SQLite 数据库、渲染层资源为相对引用。
 - 已验证产物：`desktop/release/python-arm64/mac-arm64/AI Agent.app`，主可执行文件与内置 Python 运行时均为 Mach-O arm64。
-- 该结果只描述**工程完成度**，不构成安装包发布结论：尚未签名/公证、未构建 x64 与 universal、未做真实模型调用联调、未完成完整人工 GUI 数据流程回归。
+- 该结果只描述**工程完成度**，不构成安装包发布结论：尚未签名/公证、未构建 x64 与 universal、未做真实模型调用联调。数据闭环（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）已在隔离环境中验证通过（17 项检查），但**人工 GUI 窗口交互回归**仍未完成。
 
 更细的证据和复现命令见 [`docs/portfolio/EVIDENCE.md`](docs/portfolio/EVIDENCE.md)。
 

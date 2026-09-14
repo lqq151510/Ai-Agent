@@ -146,7 +146,8 @@ Agent 流式聊天、会话、Dev Coach、Sentinel、CLI、Computer Use、Kubern
 
 1. **已完成**（`830ad52`）：Electron 侧 `BackendManager` 已抽象为受管本地进程启动器；`desktop/src/main/backend-runtime.ts` 支持 Java / Python 基线**显式切换**（`KD_BACKEND_RUNTIME`（仅开发期）→ `backend-runtime.json` → 默认 `java`），且**无隐式回退**——选中基线缺产物时启动失败并列出缺失清单。
 2. **已完成（仅 arm64）**（`830ad52`、`1ed2b69`）：PyInstaller 构建 macOS arm64 运行时，并通过 `electron-builder.yml` 的 `extraResources` 打入安装包。**x64 / universal 未构建**（PyInstaller 不支持交叉编译，需在对应架构上各构建一次）。
-3. **已完成（自动化验收部分）**：`desktop/scripts/verify-packaged-python-runtime.cjs` 对 `.app` 做不开 GUI 的验收——产物存在且可执行、选择器指向 `python`、打包版解析到内置运行时、启动器 `running`、readiness HTTP 200 `{"status":"ready"}`、dataDir 内创建 SQLite，**9 项检查全部 PASS**。**人工 GUI 数据流程回归（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）尚未执行。**
+3. **已完成（自动化验收部分）**：`desktop/scripts/verify-packaged-python-runtime.cjs` 对 `.app` 做不开 GUI 的验收——产物存在且可执行、选择器指向 `python`、打包版解析到内置运行时、启动器 `running`、readiness HTTP 200 `{"status":"ready"}`、dataDir 内创建 SQLite，**9 项检查全部 PASS**。
+   **完整数据闭环已于 2026-09-14 验证通过**：用打包 `.app` 内**同一个**后端二进制 + 隔离 `KD_DATA_DIR`，两阶段（重启前/后）跑通 **17 项检查**——导入（snippet + web）→ 整理（本地启发式）→ 搜索 → 复习提交 → 停止后端 → 以同一数据目录重启 → 账号可登录、条目仍在、summary 一致、搜索仍命中、复习到期数维持。**人工 GUI 窗口交互回归仍未执行。**
 4. **已完成**（2026-09-14）：**CI 覆盖本目录**——`.github/workflows/ci.yml` 新增独立的 `python-backend-test` job（Python 3.12 + uv），执行 `uv sync --frozen --extra dev` 与 `uv run pytest --cov=knowledge_desk`；原有的 `python-service-test`（Python 3.11，旧的文档解析服务）保留不变。已在 GitHub Actions 上通过（run `34815641536`，`main@c1aef75`，耗时 48 秒，全部步骤 success）。
 
 ### 仍未完成 / 边界

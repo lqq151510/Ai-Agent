@@ -111,6 +111,7 @@
 - 2026-09-14 回填：A21 由「部分验证」升级为「已验证」——GitHub Actions run `34815641536`（`main@c1aef75`）上 `python-backend-test` 全部步骤 success，耗时 48 秒（Python 3.12 → uv → `uv sync --frozen --extra dev` → `uv run pytest --cov=knowledge_desk`）。残留待办不变：该 job 仍需在仓库设置中手动加入 `main` 的 required status checks 才能强制门禁。
 - 2026-09-14 更新：**补全渲染层 CI 缺口** —— `desktop-test` job 原本只跑 `npm run test:main`（主进程），渲染层 36 项 vitest 用例从未进入 CI（`scripts/release-check.sh` 中亦无任何 renderer/vitest 调用）。现新增 `Install renderer dependencies` 与 `Run Desktop Renderer Tests` 两步，并把 `desktop/src/renderer/package-lock.json` 纳入 `cache-dependency-path`；附录 A 新增 A22。同步更新 `README.md` 的 CI 覆盖段落。
 - 2026-09-14 回填：A22 由「部分验证」升级为「已验证」——GitHub Actions run `34816439242`（`main@b98e13d`）上 `desktop-test` 全部步骤 success（07:08:16→07:08:50，34 秒），其中 `Install renderer dependencies` 与 `Run Desktop Renderer Tests` 首次在 CI 中执行并通过；本 run 其余 job（`python-backend-test`、`backend-quality`、`deployment-config`、`python-service-test`）亦为 success。
+- 2026-09-14 更新：**验证 Python 基线的完整数据闭环**（附录 A 新增 A23）—— 用打包 `.app` 内同一后端二进制 + 隔离 `KD_DATA_DIR` 两阶段跑通「导入 → 整理 → 搜索 → 复习 → 重启后仍存在」17 项检查，真实用户数据未被触碰。同时**修正 5 份文档中的过期边界表述**：原「未完成完整人工 GUI 数据流程回归」拆分为「数据闭环已验证」+「窗口级 GUI 交互仍未验证」。本会话沙箱无法启动 Electron GUI（`--user-data-dir` 被拒、HOME 隔离无输出、CDP 不可达），窗口级走查仍需真实图形会话。
 
 ---
 
@@ -146,6 +147,8 @@
 | A21 | CI 已覆盖 `python-backend/` 基线（新增 `python-backend-test` job） | 本文 §5 G3；README「CI 覆盖（2026-09-14 校准）」 | GitHub Actions run `34815641536`（`main@c1aef75`）；`grep -n "python-backend-test" .github/workflows/ci.yml` | 该 run 上 job `python-backend-test` **success**（06:57:29→06:58:17，48 秒）：`Set up Python 3.12` → `Set up uv` → `Install Dependencies`（`uv sync --frozen --extra dev`）→ `Run Pytest`（`uv run pytest --cov=knowledge_desk --cov-report=term-missing`）全部 success；`sentinel-alert.needs` 已包含该 job；本机等价复跑 `173 passed` / 91% | ✅ **已验证**（2026-09-14，`main@c1aef75`） |
 
 | A22 | CI 已覆盖渲染层（vitest）测试 | 本文 §2；README「桌面端测试补全（2026-09-14）」 | GitHub Actions run `34816439242`（`main@b98e13d`）；`grep -n "Run Desktop Renderer Tests" .github/workflows/ci.yml` | 该 run 上 job `desktop-test` **success**（07:08:16→07:08:50，34 秒），其中步骤 5 `Install renderer dependencies` 与步骤 7 `Run Desktop Renderer Tests` 均 success；`cache-dependency-path` 已含 `desktop/src/renderer/package-lock.json`；本机等价复跑 `36 passed` / 13 文件，`npm ci --dry-run` exit 0 | ✅ **已验证**（2026-09-14，`main@b98e13d`） |
+
+| A23 | Python 基线的完整数据闭环（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）已在隔离环境验证 | README「人工 GUI 窗口交互回归仍未完成」；`python-backend/README.md` §桌面集成第 3 点 | `./scripts/desktop-closed-loop-demo.sh`（打包 `.app` 内 `backend-python/knowledge-desk-backend` 二进制 + 隔离 `KD_DATA_DIR`，重启前后各跑一次） | **17 项全部 PASS**。阶段 1 十项：注册 / 登录 / snippet 导入 / web 导入 / Inbox 列表 / 整理后 summary 非空 / 搜索命中 / 复习提交（`intervalDays=1`）/ 复习后移出到期队列。重启一项：后端进程完全退出。阶段 2 七项：原账号可登录、同 id 条目仍在、summary 与停止前一致、搜索仍命中、到期数维持、Library 含该条目、任务流水可回溯。隔离 SQLite 163840 字节；真实用户数据 `~/Library/Application Support/ai-agent-desktop` 时间戳未变 | ✅ 已验证（2026-09-14）｜⚠️ **窗口级 GUI 点击走查仍未完成** —— 本会话沙箱无法启动 Electron GUI（`--user-data-dir` 被 Electron 拒绝、HOME 隔离启动无输出、CDP 调试端口不可达） |
 
 ### 附录 A 使用说明
 
