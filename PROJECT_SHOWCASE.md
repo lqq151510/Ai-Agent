@@ -332,7 +332,7 @@ sequenceDiagram
 | 渲染层测试 | `cd desktop/src/renderer && npm run test` | **36 passed**（13 个测试文件） |
 | Electron 主进程测试 | `cd desktop && npm run test:main` | **44 pass / 0 fail** |
 | 打包 Python 运行时验收 | `cd desktop && DESKTOP_PACKAGE_DIR=release/python-arm64 npm run verify:packaged:python` | **9 项检查全部 PASS** |
-| CI 覆盖 Python 基线 | `.github/workflows/ci.yml` 的 `python-backend-test` job（Python 3.12 + uv） | 已加入（2026-09-14 校准）；本机等价复跑 **173 passed / 91%** |
+| CI 覆盖 Python 基线 | `.github/workflows/ci.yml` 的 `python-backend-test` job（Python 3.12 + uv） | 已在 GitHub Actions 通过（run `34815641536`，`main@c1aef75`，48 秒）；本机等价复跑 **173 passed / 91%** |
 
 - 打包验收实际通过项：`.app` 内含 PyInstaller 运行时且可执行、运行时选择器随包发布并指向 `python`、打包版在无环境变量时解析到内置运行时且无缺失制品、启动器状态进入 `running`、readiness 返回 HTTP 200 且 `{"status":"ready"}`、在 dataDir 内创建 SQLite 数据库、渲染层资源为相对引用。
 - 已验证产物：`desktop/release/python-arm64/mac-arm64/AI Agent.app`，主可执行文件与内置 Python 运行时均为 Mach-O arm64。

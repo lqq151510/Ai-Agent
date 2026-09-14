@@ -35,7 +35,7 @@ AI Agent Knowledge Desk is a local-first desktop knowledge application and a ful
 
 > 复跑说明：本机 `uv` 不在 PATH，上表的 Python 测试实际以 `python-backend/.venv/bin/python -m pytest` 在 uv 创建的同一虚拟环境中执行（结果一致，173 passed）。
 
-CI 覆盖（2026-09-14 校准）：`.github/workflows/ci.yml` 新增独立 `python-backend-test` job —— Python 3.12 + uv，执行 `uv sync --frozen --extra dev` 与 `uv run pytest --cov=knowledge_desk`；原有 `python-service-test`（Python 3.11，旧的文档解析服务）保留不变。该 job 默认**不是** branch ruleset 的 required check，需要在仓库设置中手动加入才能在合并前强制。
+CI 覆盖（2026-09-14 校准）：`.github/workflows/ci.yml` 新增独立 `python-backend-test` job —— Python 3.12 + uv，执行 `uv sync --frozen --extra dev` 与 `uv run pytest --cov=knowledge_desk`；原有 `python-service-test`（Python 3.11，旧的文档解析服务）保留不变。该 job 已在 GitHub Actions 上通过（run `34815641536`，`main@c1aef75`，耗时 48 秒，全部步骤 success）。注意它默认**不是** branch ruleset 的 required check，需要在仓库设置中手动加入才能在合并前强制。
 
 本机 GUI 已实测的自动恢复路径：渲染层可能先于受管后端就绪而加载并显示降级预览数据；当后端状态进入 `running` 时，渲染层自动重新拉取快照，**切换到来自真实 SQLite 的数据**，无需手动刷新（`desktop/src/renderer/src/knowledge-desk/knowledgeDeskBackendStatus.ts` 的 `shouldRefreshKnowledgeDeskSnapshot` + `KnowledgeDeskApp.tsx` 的订阅，另有渲染层测试覆盖）。
 
