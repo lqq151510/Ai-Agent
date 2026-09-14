@@ -216,14 +216,23 @@ jobs:
           cache: 'npm'
           cache-dependency-path: |
             desktop/package-lock.json
+            desktop/src/renderer/package-lock.json
 
       - name: Install desktop dependencies
         working-directory: ./desktop
         run: npm ci
 
+      - name: Install renderer dependencies
+        working-directory: ./desktop/src/renderer
+        run: npm ci
+
       - name: Run Desktop Main Process Tests
         working-directory: ./desktop
         run: npm run test:main
+
+      - name: Run Desktop Renderer Tests
+        working-directory: ./desktop/src/renderer
+        run: npm run test
 
 
 

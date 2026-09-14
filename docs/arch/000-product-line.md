@@ -109,6 +109,7 @@
 - 2026-09-14 校正：落实上一行声称的「校正 A7」——附录 A7 的验证命令由 `grep -n python desktop/electron-builder.yml`（期望无输出）替换为精确匹配 `grep -n "python-service" desktop/electron-builder.yml`，因为前者在主线新增 `from: backend-python`（`electron-builder.yml` L42）后会命中 4 行并误报失败；同时更新 A14 的状态注记（2026-09-14 复跑：13 个测试文件 / 36 项通过）。
 - 2026-09-14 更新：**关闭 §5 G3** —— `.github/workflows/ci.yml` 新增独立 `python-backend-test` job（Python 3.12 + `astral-sh/setup-uv` v8.3.2 + `uv sync --frozen --extra dev` + `uv run pytest --cov=knowledge_desk`），旧的 `python-service-test`（Python 3.11）保留；`sentinel-alert.needs` 同步纳入新 job。附录 A 新增 A21；同步清除 `README.md`、`PROJECT_SHOWCASE.md`、`RESUME_PROJECT_GUIDE.md`、`python-backend/README.md` 中「CI 未覆盖 `python-backend/`」的失效表述。
 - 2026-09-14 回填：A21 由「部分验证」升级为「已验证」——GitHub Actions run `34815641536`（`main@c1aef75`）上 `python-backend-test` 全部步骤 success，耗时 48 秒（Python 3.12 → uv → `uv sync --frozen --extra dev` → `uv run pytest --cov=knowledge_desk`）。残留待办不变：该 job 仍需在仓库设置中手动加入 `main` 的 required status checks 才能强制门禁。
+- 2026-09-14 更新：**补全渲染层 CI 缺口** —— `desktop-test` job 原本只跑 `npm run test:main`（主进程），渲染层 36 项 vitest 用例从未进入 CI（`scripts/release-check.sh` 中亦无任何 renderer/vitest 调用）。现新增 `Install renderer dependencies` 与 `Run Desktop Renderer Tests` 两步，并把 `desktop/src/renderer/package-lock.json` 纳入 `cache-dependency-path`；附录 A 新增 A22（标注为部分验证，待首次 CI 运行回填）。同步更新 `README.md` 的 CI 覆盖段落。
 
 ---
 
@@ -142,6 +143,8 @@
 | A20 | 打包版 Python 运行时可通过自动验收（资源布局 / 运行时解析 / readiness / SQLite 建库） | 本文 §2；README「Verified engineering baseline」；`desktop/README.md` | `cd desktop && npm run build:main && DESKTOP_PACKAGE_DIR=release/python-arm64 node scripts/verify-packaged-python-runtime.cjs` | `PACKAGED PYTHON RUNTIME: PASSED`：9 项 `step` 全部 PASS（PyInstaller 二进制存在且可执行、选择器随包且指向 `python`、无缺失制品、launcher 进入 `running`、readiness HTTP 200 且 `{"status":"ready","database":"ok"}`、dataDir 内创建 SQLite、renderer 相对引用资源）。产物为本机 arm64 **未签名**目录包 | ✅（2026-09-14 于 HEAD `1ed2b69` 实跑；**非发布证据**） |
 
 | A21 | CI 已覆盖 `python-backend/` 基线（新增 `python-backend-test` job） | 本文 §5 G3；README「CI 覆盖（2026-09-14 校准）」 | GitHub Actions run `34815641536`（`main@c1aef75`）；`grep -n "python-backend-test" .github/workflows/ci.yml` | 该 run 上 job `python-backend-test` **success**（06:57:29→06:58:17，48 秒）：`Set up Python 3.12` → `Set up uv` → `Install Dependencies`（`uv sync --frozen --extra dev`）→ `Run Pytest`（`uv run pytest --cov=knowledge_desk --cov-report=term-missing`）全部 success；`sentinel-alert.needs` 已包含该 job；本机等价复跑 `173 passed` / 91% | ✅ **已验证**（2026-09-14，`main@c1aef75`） |
+
+| A22 | CI 已覆盖渲染层（vitest）测试 | 本文 §2；README「桌面端测试补全（2026-09-14）」 | `cd desktop/src/renderer && npm ci --dry-run`（lock 一致性）+ `npm run test`（本机等价）；`grep -n "Run Desktop Renderer Tests" .github/workflows/ci.yml` | `desktop-test` job 新增 `Install renderer dependencies`（`working-directory: ./desktop/src/renderer`，`npm ci`）与 `Run Desktop Renderer Tests`（`npm run test`，vitest + jsdom）；`cache-dependency-path` 已含 `desktop/src/renderer/package-lock.json`；本机等价复跑 `36 passed` / 13 文件，`npm ci --dry-run` exit 0（lock 与 package.json 同步） | ⚠️ **部分验证**（2026-09-14）：YAML 结构、lock 一致性与测试命令均已本地校验并实跑，但该步骤**尚未在 GitHub Actions 实际运行**；首次触发后必须回填真实结论 |
 
 ### 附录 A 使用说明
 
