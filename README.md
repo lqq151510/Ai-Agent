@@ -37,7 +37,7 @@ AI Agent Knowledge Desk is a local-first desktop knowledge application and a ful
 
 CI 覆盖（2026-09-14 校准）：`.github/workflows/ci.yml` 新增独立 `python-backend-test` job —— Python 3.12 + uv，执行 `uv sync --frozen --extra dev` 与 `uv run pytest --cov=knowledge_desk`；原有 `python-service-test`（Python 3.11，旧的文档解析服务）保留不变。该 job 已在 GitHub Actions 上通过（run `34815641536`，`main@c1aef75`，耗时 48 秒，全部步骤 success）。注意它默认**不是** branch ruleset 的 required check，需要在仓库设置中手动加入才能在合并前强制。
 
-桌面端测试补全（2026-09-14）：`desktop-test` job 原本只执行主进程测试，现已补齐渲染层 —— 新增 `Install renderer dependencies`（`npm ci`）与 `Run Desktop Renderer Tests`（`cd desktop/src/renderer && npm run test`，vitest + jsdom），`cache-dependency-path` 同步纳入 `desktop/src/renderer/package-lock.json`。至此 CI 覆盖 Electron 主进程 **44 项** 与渲染层 **36 项**测试。
+桌面端测试补全（2026-09-14）：`desktop-test` job 原本只执行主进程测试，现已补齐渲染层 —— 新增 `Install renderer dependencies`（`npm ci`）与 `Run Desktop Renderer Tests`（`cd desktop/src/renderer && npm run test`，vitest + jsdom），`cache-dependency-path` 同步纳入 `desktop/src/renderer/package-lock.json`。至此 CI 覆盖 Electron 主进程 **44 项** 与渲染层 **36 项**测试；两者均已在 GitHub Actions 上通过（run `34816439242`，`main@b98e13d`，34 秒）。
 
 本机 GUI 已实测的自动恢复路径：渲染层可能先于受管后端就绪而加载并显示降级预览数据；当后端状态进入 `running` 时，渲染层自动重新拉取快照，**切换到来自真实 SQLite 的数据**，无需手动刷新（`desktop/src/renderer/src/knowledge-desk/knowledgeDeskBackendStatus.ts` 的 `shouldRefreshKnowledgeDeskSnapshot` + `KnowledgeDeskApp.tsx` 的订阅，另有渲染层测试覆盖）。
 
