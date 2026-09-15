@@ -112,6 +112,7 @@
 - 2026-09-14 更新：**补全渲染层 CI 缺口** —— `desktop-test` job 原本只跑 `npm run test:main`（主进程），渲染层 36 项 vitest 用例从未进入 CI（`scripts/release-check.sh` 中亦无任何 renderer/vitest 调用）。现新增 `Install renderer dependencies` 与 `Run Desktop Renderer Tests` 两步，并把 `desktop/src/renderer/package-lock.json` 纳入 `cache-dependency-path`；附录 A 新增 A22。同步更新 `README.md` 的 CI 覆盖段落。
 - 2026-09-14 回填：A22 由「部分验证」升级为「已验证」——GitHub Actions run `34816439242`（`main@b98e13d`）上 `desktop-test` 全部步骤 success（07:08:16→07:08:50，34 秒），其中 `Install renderer dependencies` 与 `Run Desktop Renderer Tests` 首次在 CI 中执行并通过；本 run 其余 job（`python-backend-test`、`backend-quality`、`deployment-config`、`python-service-test`）亦为 success。
 - 2026-09-14 更新：**验证 Python 基线的完整数据闭环**（附录 A 新增 A23）—— 用打包 `.app` 内同一后端二进制 + 隔离 `KD_DATA_DIR` 两阶段跑通「导入 → 整理 → 搜索 → 复习 → 重启后仍存在」17 项检查，真实用户数据未被触碰。同时**修正 5 份文档中的过期边界表述**：原「未完成完整人工 GUI 数据流程回归」拆分为「数据闭环已验证」+「窗口级 GUI 交互仍未验证」。本会话沙箱无法启动 Electron GUI（`--user-data-dir` 被拒、HOME 隔离无输出、CDP 不可达），窗口级走查仍需真实图形会话。
+- 2026-09-15 更新：**AI 整理路径完成真实模型联调**（附录 A 新增 A24）—— 用智谱 GLM-4-Flash（免费模型，OpenAI-compatible）在隔离环境跑通 19 项检查：连接测试、真实整理（任务记录 `note=model`，产出摘要与语义标签）、停用模型源后回落 `local_heuristic`、无效凭据降级、凭据以 `enc:v1:` 落库且日志与数据目录无密钥明文。新增 `scripts/desktop-model-integration.sh`（凭据仅经环境变量传入，不落盘）。同步修正 `README.md`、`PROJECT_SHOWCASE.md`、`RESUME_PROJECT_GUIDE.md`、`python-backend/README.md` 中「未做真实模型调用联调」的过期表述，并补齐 `RESUME_PROJECT_GUIDE.md` Q16 中遗漏的「CI 还没覆盖」过期说法。
 
 ---
 
@@ -149,6 +150,8 @@
 | A22 | CI 已覆盖渲染层（vitest）测试 | 本文 §2；README「桌面端测试补全（2026-09-14）」 | GitHub Actions run `34816439242`（`main@b98e13d`）；`grep -n "Run Desktop Renderer Tests" .github/workflows/ci.yml` | 该 run 上 job `desktop-test` **success**（07:08:16→07:08:50，34 秒），其中步骤 5 `Install renderer dependencies` 与步骤 7 `Run Desktop Renderer Tests` 均 success；`cache-dependency-path` 已含 `desktop/src/renderer/package-lock.json`；本机等价复跑 `36 passed` / 13 文件，`npm ci --dry-run` exit 0 | ✅ **已验证**（2026-09-14，`main@b98e13d`） |
 
 | A23 | Python 基线的完整数据闭环（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）已在隔离环境验证 | README「人工 GUI 窗口交互回归仍未完成」；`python-backend/README.md` §桌面集成第 3 点 | `./scripts/desktop-closed-loop-demo.sh`（打包 `.app` 内 `backend-python/knowledge-desk-backend` 二进制 + 隔离 `KD_DATA_DIR`，重启前后各跑一次） | **17 项全部 PASS**。阶段 1 十项：注册 / 登录 / snippet 导入 / web 导入 / Inbox 列表 / 整理后 summary 非空 / 搜索命中 / 复习提交（`intervalDays=1`）/ 复习后移出到期队列。重启一项：后端进程完全退出。阶段 2 七项：原账号可登录、同 id 条目仍在、summary 与停止前一致、搜索仍命中、到期数维持、Library 含该条目、任务流水可回溯。隔离 SQLite 163840 字节；真实用户数据 `~/Library/Application Support/ai-agent-desktop` 时间戳未变 | ✅ 已验证（2026-09-14）｜⚠️ **窗口级 GUI 点击走查仍未完成** —— 本会话沙箱无法启动 Electron GUI（`--user-data-dir` 被 Electron 拒绝、HOME 隔离启动无输出、CDP 调试端口不可达） |
+
+| A24 | AI 整理路径已用真实 OpenAI-compatible 模型完成联调（非 mock、非本地启发式） | README「真实模型联调已通过（当前仅覆盖一个端点）」；`python-backend/README.md` §桌面集成；PROJECT_SHOWCASE §8 | `GLM_API_KEY=<key> ./scripts/desktop-model-integration.sh` | **19 项全部 PASS**。【A】创建模型源 / 响应只回掩码不回显明文 / 库内无明文 / 连接测试 `status=ok` / 列表记录 `lastCheckStatus=ok`。【B】绑定模型源 / 导入 / 整理后 `status=ready` / 摘要非空 / 模型生成标签 / 任务记录 `note=model` / 停用模型源后回落 `note=local_heuristic` / 两条路径产出可区分（启发式不产标签）。【C】无效凭据 `status=error` 且错误信息不含凭据明文。【D】凭据以 `enc:v1:` 密文落库。复跑两次摘要与标签均不同，佐证为非确定性模型生成 | ✅ 已验证（2026-09-15，智谱 GLM-4-Flash 免费模型）｜边界：仅覆盖该端点，DeepSeek / OpenAI 官方端点未单独联调（同一 `openai` SDK 路径） |
 
 ### 附录 A 使用说明
 

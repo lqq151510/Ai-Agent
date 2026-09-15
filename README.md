@@ -45,7 +45,7 @@ CI 覆盖（2026-09-14 校准）：`.github/workflows/ci.yml` 新增独立 `pyth
 
 - **仅本机 arm64 构建**；x64 与 universal 包未构建（PyInstaller 不支持交叉编译，需在对应架构上各构建一次）。
 - **未签名、未公证**：当前是未签名目录包，不是可公开发行的安装包。
-- **未做真实模型调用**：AI 整理路径只经 mock endpoint 与确定性本地启发式验证，尚未用真实 DeepSeek/OpenAI 凭据联调。
+- **真实模型联调已通过（当前仅覆盖一个端点）**：AI 整理路径已用**智谱 GLM-4-Flash**（免费模型，OpenAI-compatible）完成真实调用验证 —— 连接测试、真实整理（任务记录 `note=model`，产出摘要与语义标签）、停用模型源后回落本地启发式（`note=local_heuristic`）、无效凭据降级、凭据加密落库，共 **19 项检查通过**；DeepSeek / OpenAI 官方端点尚未单独联调（走同一 `openai` SDK 代码路径）。
 - **人工 GUI 窗口交互回归仍未完成**：数据闭环本身（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）已于 2026-09-14 用打包运行时 + 隔离数据目录自动化验证通过（17 项检查），但**本机沙箱会话无法启动 Electron GUI**（`--user-data-dir` 被 Electron 拒绝、HOME 隔离启动无输出、CDP 调试端口不可达），窗口级点击走查需在真实图形会话中由人工完成。
 
 Repository components:

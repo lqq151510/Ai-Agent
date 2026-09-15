@@ -153,4 +153,4 @@ Agent 流式聊天、会话、Dev Coach、Sentinel、CLI、Computer Use、Kubern
 ### 仍未完成 / 边界
 
 - **未签名、未公证**：当前是未签名目录包，不是可公开发行的安装包。
-- **未做真实模型调用联调**：AI 整理路径只经 mock endpoint 与确定性本地启发式验证。
+- **真实模型调用已完成联调（2026-09-15）**：用智谱 GLM-4-Flash（免费模型，OpenAI-compatible 端点）在隔离环境跑通 **19 项检查**——连接测试、真实整理（ingestion job `note=model`，产出摘要与语义标签）、停用模型源后回落 `local_heuristic`、无效凭据降级（错误信息不含凭据明文）、凭据以 `enc:v1:` 加密落库且日志/数据目录中无密钥明文。DeepSeek / OpenAI 官方端点尚未单独联调（走同一 `openai` SDK 代码路径）。
