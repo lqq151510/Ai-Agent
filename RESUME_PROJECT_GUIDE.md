@@ -7,7 +7,7 @@
 >
 > 目标岗位：Java + AI 复合双修、Java 高并发后端、AI Agent 应用工程。当前后端 387 项自动化测试全绿（373 项通过、14 项跳过、0 失败、0 错误），且通过 JaCoCo 行 ≥65%（实测 77.69%）、分支 ≥60%（实测 64.26%）双重强门禁；该基线绑定已发布的 `v0.1.0-beta.4`（`main@09d3cb0`）。
 
-> **新增的 Python 后端基线**（FastAPI + SQLite + Alembic，`main@1ed2b69`，2026-09-12 本机复跑）：Python 后端 **173 项 pytest 通过**、渲染层 **36 项**、Electron 主进程 **44 项**测试通过，arm64 打包运行时验收 **9 项全部 PASS**。这是**工程完成度**，不是发布结论：未签名/公证、未构建 x64、未完成人工 GUI 窗口交互回归（数据闭环已于 2026-09-14 在隔离环境中验证通过 17 项；真实模型已于 2026-09-15 用智谱 GLM-4-Flash 联调通过 19 项）。
+> **新增的 Python 后端基线**（FastAPI + SQLite + Alembic，`main@1ed2b69`，2026-09-12 本机复跑）：Python 后端 **173 项 pytest 通过**、渲染层 **36 项**、Electron 主进程 **44 项**测试通过，arm64 打包运行时验收 **9 项全部 PASS**。这是**工程完成度**，不是发布结论：ad-hoc 签名（不做公证）、未构建 x64、未完成人工 GUI 窗口交互回归（数据闭环已于 2026-09-14 在隔离环境中验证通过 17 项；真实模型已于 2026-09-15 用智谱 GLM-4-Flash 联调通过 19 项）。
 
 ## 1. 简历可直接使用的版本
 
@@ -99,7 +99,7 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 - 行动：新增 `python-backend/`（FastAPI + SQLAlchemy 2 + Alembic + 本地 SQLite，Python 3.12 / uv 管理依赖），与既有 `backend/` 并排存在、不覆盖 Java 实现；桌面侧新增 `backend-runtime.ts`，按 `KD_BACKEND_RUNTIME`（仅开发期生效）→ `backend-runtime.json`（构建期写入、随包发布）→ 默认 `java` 的优先级解析运行时，并用 PyInstaller `onedir` 把 Python 运行时打进 `extraResources`。
 - 关键取舍：**拒绝隐式回退**。选中基线缺产物时直接失败并列出缺失清单，因为静默切到另一条基线会在 H2 与 SQLite 之间改变数据路径，这比启动失败更难诊断。
 - 验证：Python 后端 173 项 pytest（含 `test_contract.py` 的路由清单与字段命名门禁）、渲染层 36 项、Electron 主进程 44 项；arm64 打包产物 `AI Agent.app` 的运行时验收 9 项全部 PASS（含 readiness HTTP 200、在 dataDir 内创建 SQLite）。另有一处产品细节：渲染层可能先于后端就绪而加载，此时显示降级预览数据，后端进入 `running` 后自动重取快照切到真实数据。
-- 边界：这是本机 arm64 的工程完成度，不是发布结论——未签名/公证、未构建 x64/universal、未完成人工 GUI 窗口交互回归。（数据闭环「导入 → 整理 → 搜索 → 复习 → 重启后仍存在」已于 2026-09-14 在隔离数据目录中用打包运行时跑通 17 项检查；真实模型已于 2026-09-15 用智谱 GLM-4-Flash 完成 19 项联调检查；CI 覆盖已于 2026-09-14 校准：`.github/workflows/ci.yml` 新增 `python-backend-test` job，以 Python 3.12 + uv 执行 `uv run pytest`。）
+- 边界：这是本机 arm64 的工程完成度，不是发布结论——ad-hoc 签名（不做 Developer ID 与公证）、未构建 x64/universal、未完成人工 GUI 窗口交互回归。（数据闭环「导入 → 整理 → 搜索 → 复习 → 重启后仍存在」已于 2026-09-14 在隔离数据目录中用打包运行时跑通 17 项检查；真实模型已于 2026-09-15 用智谱 GLM-4-Flash 完成 19 项联调检查；CI 覆盖已于 2026-09-14 校准：`.github/workflows/ci.yml` 新增 `python-backend-test` job，以 Python 3.12 + uv 执行 `uv run pytest`。）
 
 ## 5. 高频面试问答
 
@@ -165,7 +165,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 
 ### Q16：为什么同时维护两条后端基线（Java 与 Python）？
 
-这不是为了堆技术栈，而是让“后端实现”变成可替换项。前提是契约必须先冻结：两条基线实现同一 `/api/v1` 契约，路径、方法、camelCase 字段、状态码与错误结构一致，因此前端零改动就能切换。收益是我能在不触碰产品界面的前提下重新权衡本地运行时（体积、依赖面、语言栈）；风险相应转移到契约一致性上，所以我用路由清单与字段命名测试做门禁，并把三处与 Electron 主进程的隐式耦合（登录失败文案、邮箱重复包含 `already`、知识条目 id 为 36 位 UUID）固化进测试。边界同样要说清：Python 基线目前是本机 arm64 的工程完成度，未签名、未构建 x64；CI 已于 2026-09-14 覆盖它（`python-backend-test` job，Python 3.12 + `uv run pytest`），真实模型也已用智谱 GLM-4-Flash 联调通过，但窗口级 GUI 走查仍由人工完成；默认与可回退路径仍是 Java 基线。
+这不是为了堆技术栈，而是让“后端实现”变成可替换项。前提是契约必须先冻结：两条基线实现同一 `/api/v1` 契约，路径、方法、camelCase 字段、状态码与错误结构一致，因此前端零改动就能切换。收益是我能在不触碰产品界面的前提下重新权衡本地运行时（体积、依赖面、语言栈）；风险相应转移到契约一致性上，所以我用路由清单与字段命名测试做门禁，并把三处与 Electron 主进程的隐式耦合（登录失败文案、邮箱重复包含 `already`、知识条目 id 为 36 位 UUID）固化进测试。边界同样要说清：Python 基线目前是本机 arm64 的工程完成度，采用 ad-hoc 签名（不做公证）、未构建 x64；CI 已于 2026-09-14 覆盖它（`python-backend-test` job，Python 3.12 + `uv run pytest`），真实模型也已用智谱 GLM-4-Flash 联调通过，但窗口级 GUI 走查仍由人工完成；默认与可回退路径仍是 Java 基线。
 
 ## 6. 深挖追问的回答结构
 
@@ -193,7 +193,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 - 不把早期 Computer Use 说成打包版能力：发布构建明确禁用它。
 - 不把 387 个后端测试（14 skipped）说成全系统测试；历史测试数（225/344/357 等）也不能与当前 387 个相加，更不能在没有对应验证记录时归因给历史 Beta。
 - 不把 Python 基线说成“已经替代 Java 基线”或“已发布”：它是可显式切换的第二条基线，默认与可回退路径仍是 Java（仓库提交的 `backend-runtime.json` 当前值为 `java`）。
-- 不说“已完成签名/公证”或“已支持 x64”：Python 基线已实测的产物是本机 arm64 未签名目录包（`desktop/release/python-arm64/`），x64 与 universal 尚未构建。
+- 不说“已完成签名/公证”或“已支持 x64”：Python 基线已实测的产物是本机 arm64 的 **ad-hoc 签名**目录包（`desktop/release/python-arm64/`），不做 Developer ID 签名与公证（个人演示范围，非未完成项）；x64 与 universal 尚未构建。
 - 不说“已完成完整 GUI 数据流程回归”：数据闭环（导入 → 整理 → 搜索 → 复习 → 重启后仍存在）已在隔离环境验证通过，但**窗口级人工点击走查**未做——不要把“数据闭环已验证”说成“GUI 已验收”。
 - 不把 Python 基线的 173 项 pytest 与 Java 基线的 387 项后端测试相加。CI 覆盖已于 2026-09-14 校准（新增 `python-backend-test` job，Python 3.12 + uv，`uv run pytest --cov=knowledge_desk`），但该 job 默认不在 branch ruleset 的 required checks 中，在被强制之前不要把它说成"合并门禁"。
 
@@ -222,7 +222,7 @@ Electron 提供系统级文件选择、拖拽导入、安装包和本地进程�
 - 准备一个“模型可用”和一个“模型不可用”的演示路径。
 - 能解释 H2 与 PostgreSQL、单体与微服务、Electron 与纯 Web 的取舍。
 - 能讲清双后端基线：契约冻结是前提（`/api/v1` 不变则前端零改动）、拒绝隐式回退的理由（静默切换会改变 H2 ↔ SQLite 数据路径）、以及验证口径（Python 173 / 渲染层 36 / 主进程 44，arm64 打包运行时验收 9 项 PASS）。
-- 记住 Python 基线的边界一句话：本机 arm64、未签名/未公证、未构建 x64、未完成人工 GUI 窗口交互回归。（数据闭环、真实模型联调与 CI 覆盖均已完成。）
+- 记住 Python 基线的边界一句话：本机 arm64、ad-hoc 签名（不做 Developer ID 与公证）、未构建 x64、未完成人工 GUI 窗口交互回归。（数据闭环、真实模型联调与 CI 覆盖均已完成。）
 - 能打开 GitHub Release、manifest 和 SHA256SUMS 作为证据。
 - 不背整段答案；每个故事只记“问题—根因—选择—验证—边界”。
 

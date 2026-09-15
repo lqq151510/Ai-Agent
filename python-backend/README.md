@@ -152,5 +152,5 @@ Agent 流式聊天、会话、Dev Coach、Sentinel、CLI、Computer Use、Kubern
 
 ### 仍未完成 / 边界
 
-- **未签名、未公证**：当前是未签名目录包，不是可公开发行的安装包。
+- **签名范围（范围决策，非未完成项）**：产物为 ad-hoc / linker 签名（`Signature=adhoc`、`TeamIdentifier=not set`），无需 Apple 开发者账号，本机可直接启动演示；**不做** Developer ID 签名与 Apple 公证 —— 属个人简历项目「能演示即可」的范围选择。跨机器分发时接收方需手动在「系统设置 → 隐私与安全性」放行。
 - **真实模型调用已完成联调（2026-09-15）**：用智谱 GLM-4-Flash（免费模型，OpenAI-compatible 端点）在隔离环境跑通 **19 项检查**——连接测试、真实整理（ingestion job `note=model`，产出摘要与语义标签）、停用模型源后回落 `local_heuristic`、无效凭据降级（错误信息不含凭据明文）、凭据以 `enc:v1:` 加密落库且日志/数据目录中无密钥明文。DeepSeek / OpenAI 官方端点尚未单独联调（走同一 `openai` SDK 代码路径）。
