@@ -128,7 +128,7 @@ cd desktop
 npm run build
 ```
 
-结果：TypeScript Main 与 React/Vite Renderer 构建成功。
+结果：TypeScript Main 与 Vue 3/Vite Renderer 构建成功。
 
 说明：本轮本机 Node 为 26.3.0；这是开发诊断验证，不替代 `.nvmrc` 指定的 Node 22 正式发布基线。
 
@@ -152,18 +152,18 @@ npm test
 
 这些模块不是桌面 Beta 的必经运行时，因此该结果只证明 Java 21 编译兼容，不扩大为桌面端到端验证。它们现已归档到 `legacy/` 并脱离根 reactor，统一构建命令为 `mvn -f legacy/pom.xml -DskipTests package`（见 `legacy/README.md`）。
 
-#### React Renderer
+#### Vue 3 Renderer
 
 命令：
 
 ```bash
-cd desktop/src/renderer
+cd desktop/src/renderer-vue
 npm run lint
 npm test
 npm run build
 ```
 
-结果：11 test files、33 tests passed，ESLint 与 TypeScript/Vite build 通过。
+结果：13 个测试文件、39 个测试通过，ESLint 与 TypeScript/Vite build 通过。
 
 本轮同时将 `vitest 4.1.11` 和兼容 Node 22 基线的 `jsdom 26.1.0` 固定到开发依赖与 lockfile，测试不再通过 `npx` 临时下载工具。
 
@@ -199,8 +199,8 @@ JaCoCo 在 Maven `verify` 阶段对 `backend` bundle 执行以下门禁：
 - 桌面入口与后端生命周期：`desktop/src/main/index.ts`、`desktop/src/main/backend-manager.ts`
 - 文件导入可信边界：`desktop/src/main/knowledge-source-manager.ts`
 - IPC 注册：`desktop/src/main/ipc-registry.ts`
-- Renderer 主应用：`desktop/src/renderer/src/knowledge-desk/KnowledgeDeskApp.tsx`
-- Renderer API 契约：`desktop/src/renderer/src/knowledge-desk/knowledgeDeskApi.ts`
+- Renderer 主应用：`desktop/src/renderer-vue/src/knowledge-desk/KnowledgeDeskApp.vue`
+- Renderer API 契约：`desktop/src/renderer-vue/src/knowledge-desk/knowledgeDeskApi.ts`
 - 知识 API：`backend/src/main/java/com/agent/mvp/knowledge/KnowledgeItemController.java`
 - 复习 API/调度：`KnowledgeReviewController.java`、`KnowledgeReviewService.java`、`KnowledgeReviewScheduler.java`
 - 多用户 RAG：`RAGMemoryService.java`、`SemanticCacheService.java`

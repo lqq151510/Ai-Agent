@@ -339,7 +339,7 @@ audit_npm_runtime_dependencies() {
   run_desktop_full_audit_with_policy "${desktop_dir}"
 
   local dirs=(
-    "${ROOT_DIR}/desktop/src/renderer"
+    "${ROOT_DIR}/desktop/src/renderer-vue"
     "${ROOT_DIR}/ts-cli"
     "${ROOT_DIR}/local-service"
   )
@@ -1167,12 +1167,12 @@ fi
 
 if [[ "$(normalize_bool "${SKIP_DESKTOP_BUILD}")" != "true" ]]; then
   check_node_modules "${ROOT_DIR}/desktop"
-  check_node_modules "${ROOT_DIR}/desktop/src/renderer"
+  check_node_modules "${ROOT_DIR}/desktop/src/renderer-vue"
   check_node_modules "${ROOT_DIR}/ts-cli"
   check_node_modules "${ROOT_DIR}/local-service"
-  run_in "${ROOT_DIR}/desktop/src/renderer" npm run lint
-  run_in "${ROOT_DIR}/desktop/src/renderer" npm run test
-  run_in "${ROOT_DIR}/desktop/src/renderer" npm run build
+  run_in "${ROOT_DIR}/desktop/src/renderer-vue" npm run lint
+  run_in "${ROOT_DIR}/desktop/src/renderer-vue" npm run test
+  run_in "${ROOT_DIR}/desktop/src/renderer-vue" npm run build
   run_in "${ROOT_DIR}/desktop" npm run test:main
   run_in "${ROOT_DIR}/ts-cli" npm run typecheck
   run_in "${ROOT_DIR}/ts-cli" npm run build

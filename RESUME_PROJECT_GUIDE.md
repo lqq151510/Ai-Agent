@@ -15,7 +15,7 @@
 
 ### 技术栈
 
-Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、PostgreSQL (pgvector)、Caffeine、MyBatis-Plus、Flyway、Docker、Electron、React、TypeScript、JaCoCo
+Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、PostgreSQL (pgvector)、Caffeine、MyBatis-Plus、Flyway、Docker、Electron、Vue 3、TypeScript、JaCoCo
 
 ### 项目描述
 
@@ -39,13 +39,13 @@ Java 21、Spring Boot 3.5、LangChain4j、Spring AI、Milvus、Kafka、Redis、P
 
 ## 2. 30 秒项目介绍
 
-> Knowledge Desk 是我独立完成的 Local-First 全栈 AI 桌面项目。它不是单纯聊天应用，而是把资料采集、Inbox 整理、标签搜索、每日复习和 AI 问答串成一个知识闭环。前端使用 Electron、React 和 TypeScript，后端使用 Java 21 与 Spring Boot；安装包内置 JRE 和 H2，基础知识管理不依赖 Java、Docker 或外部数据库。项目中我重点解决了本地文件安全边界、多用户 RAG 隔离和桌面独立发布问题。
+> Knowledge Desk 是我独立完成的 Local-First 全栈 AI 桌面项目。它不是单纯聊天应用，而是把资料采集、Inbox 整理、标签搜索、每日复习和 AI 问答串成一个知识闭环。前端使用 Electron、Vue 3 和 TypeScript，后端使用 Java 21 与 Spring Boot；安装包内置 JRE 和 H2，基础知识管理不依赖 Java、Docker 或外部数据库。项目中我重点解决了本地文件安全边界、多用户 RAG 隔离和桌面独立发布问题。
 
 ## 3. 90 秒项目介绍
 
 > 我做这个项目的原因是，普通收藏工具容易“只进不出”，聊天工具又缺少长期知识组织，所以我把产品主流程设计成采集、整理、检索、复习和再利用。
 >
-> 技术上，Renderer 使用 React 和 TypeScript，Electron Main Process 负责文件导入和进程管理，Spring Boot 负责鉴权、知识条目、标签、复习调度、模型源和 Assistant API。桌面 Profile 使用 H2、Caffeine 和带 JSON 快照的本地向量索引，并随安装包带一个 jlink 裁剪的 Java 21 运行时，因此用户不需要另外安装 Java、PostgreSQL 或 Docker。
+> 技术上，Renderer 使用 Vue 3 和 TypeScript，Electron Main Process 负责文件导入和进程管理，Spring Boot 负责鉴权、知识条目、标签、复习调度、模型源和 Assistant API。桌面 Profile 使用 H2、Caffeine 和带 JSON 快照的本地向量索引，并随安装包带一个 jlink 裁剪的 Java 21 运行时，因此用户不需要另外安装 Java、PostgreSQL 或 Docker。
 >
 > 我遇到的三个关键问题，一是 Renderer 不应该拿到用户绝对路径，所以我把预检、路径边界、符号链接和文件稳定性校验放在 Main Process；二是 RAG 不能在检索后才过滤用户数据，我把 userId 条件下推到 EmbeddingSearchRequest，并补了跨用户和无用户上下文测试；三是桌面 PgVector 不应成为启动前置条件，因此我为主知识索引加入本地 JSON 快照、损坏隔离和落盘失败继续内存工作的持久化边界。发布侧我固定了 Beta tag、manifest 与 SHA-256，使安装包可以追溯到提交；当前源码还把 JaCoCo 行/分支门禁接入 Maven `verify` 与 CI。这里要区分：Beta.2/Beta.3 是历史发布资产，`v0.1.0-beta.4`（`main@09d3cb0`）的 387 项后端测试和 77.69%/64.26% 覆盖率是当前发布基线。
 

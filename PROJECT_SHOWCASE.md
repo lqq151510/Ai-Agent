@@ -31,7 +31,7 @@ flowchart TB
 
     subgraph Desktop[macOS 桌面应用]
         direction TB
-        UI[React + TypeScript Renderer<br/>Dashboard / Inbox / Library / Search<br/>Detail / Review / Assistant / Settings]
+        UI[Vue 3 + TypeScript Renderer<br/>Dashboard / Inbox / Library / Search<br/>Detail / Review / Assistant / Settings]
         IPC[Electron Preload + IPC<br/>最小能力暴露与数据脱敏]
         MAIN[Electron Main Process<br/>窗口与生命周期 / 本地文件导入<br/>BackendManager / KnowledgeSourceManager]
     end
@@ -69,7 +69,7 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph Presentation[表现层]
-        R[React / TypeScript]
+        R[Vue 3 / TypeScript]
         UX[加载态 / 空态 / 错误态 / 响应式布局]
     end
 
@@ -125,7 +125,7 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     actor User as 用户
-    participant UI as React Renderer
+    participant UI as Vue Renderer
     participant Main as Electron Main
     participant API as Spring Boot
     participant DB as H2
@@ -252,6 +252,6 @@ sequenceDiagram
 
 ## 9. 面试中的推荐表达
 
-> 我做的不是一个单纯的聊天 UI，而是一套可独立启动的个人知识工作台。它用 Electron 和 React 提供桌面体验，用 Spring Boot 管理知识条目、标签、复习和模型源；桌面包内置 Java 运行时和 H2，所以不需要用户另装 Java、数据库或 Docker。AI 是可选增强能力，通过本机 OpenAI-compatible 服务接入。项目里我重点解决了 Electron 文件边界、多用户 RAG 隔离、桌面独立启动和可验证发布四个工程问题。
+> 我做的不是一个单纯的聊天 UI，而是一套可独立启动的个人知识工作台。它用 Electron、Vue 3 和 TypeScript 提供桌面体验，用 Spring Boot 管理知识条目、标签、复习和模型源；桌面包内置 Java 运行时和 H2，所以不需要用户另装 Java、数据库或 Docker。AI 是可选增强能力，通过本机 OpenAI-compatible 服务接入。项目里我重点解决了 Electron 文件边界、多用户 RAG 隔离、桌面独立启动和可验证发布四个工程问题。
 
 面试话术、追问与演示流程见 [`RESUME_PROJECT_GUIDE.md`](RESUME_PROJECT_GUIDE.md)。

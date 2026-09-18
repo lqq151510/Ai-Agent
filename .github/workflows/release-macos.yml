@@ -129,7 +129,7 @@ jobs:
           cache: npm
           cache-dependency-path: |
             desktop/package-lock.json
-            desktop/src/renderer/package-lock.json
+            desktop/src/renderer-vue/package-lock.json
             ts-cli/package-lock.json
             local-service/package-lock.json
 
@@ -197,8 +197,8 @@ jobs:
         working-directory: ./desktop
         run: npm ci
 
-      - name: Install renderer dependencies
-        working-directory: ./desktop/src/renderer
+      - name: Install Vue renderer dependencies
+        working-directory: ./desktop/src/renderer-vue
         run: npm ci
 
       - name: Install CLI dependencies

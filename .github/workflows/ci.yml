@@ -197,6 +197,10 @@ jobs:
         working-directory: ./desktop
         run: npm ci
 
+      - name: Install Vue renderer dependencies
+        working-directory: ./desktop/src/renderer-vue
+        run: npm ci
+
       - name: Run Desktop Main Process Tests
         working-directory: ./desktop
         run: npm run test:main

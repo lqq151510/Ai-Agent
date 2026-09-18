@@ -206,7 +206,7 @@ else
         (cd "$target_dir" && npm ci --silent --no-audit --no-fund)
     }
 
-    RENDERER_DIR="$DESKTOP_DIR/src/renderer"
+    RENDERER_DIR="$DESKTOP_DIR/src/renderer-vue"
     install_deps_if_needed "$RENDERER_DIR"
     (cd "$RENDERER_DIR" && VITE_API_BASE="${WEB_API_BASE}" npm run build)
 

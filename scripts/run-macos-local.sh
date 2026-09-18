@@ -135,8 +135,8 @@ fi
 
 log_succ "✅ 后端就绪完成！(PID: ${BACKEND_PID})"
 
-# 7. 启动桌面端应用 (Electron + React)
-log_info "正在启动桌面端客户端 (Electron + React)..."
+# 7. 启动桌面端应用 (Electron + Vue 3)
+log_info "正在启动桌面端客户端 (Electron + Vue 3)..."
 cd "${ROOT_DIR}/desktop"
 
 if [[ ! -d "node_modules" ]]; then

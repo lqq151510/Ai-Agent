@@ -1,6 +1,6 @@
 # AI Agent Desktop
 
-AI Agent 桌面客户端，基于 Electron 构建。**桌面主界面是 Knowledge Desk**：收集箱 → 知识库 → 每日回顾 → 全局搜索 → 本机助手，后端为随包内置的 Spring Boot 服务、H2 数据库与 JRE（渲染层唯一入口 `src/renderer/src/App.tsx` → `knowledge-desk/KnowledgeDeskApp.tsx`）。
+AI Agent 桌面客户端，基于 Electron 构建。**桌面主界面是 Knowledge Desk**：收集箱 → 知识库 → 每日回顾 → 全局搜索 → 本机助手，后端为随包内置的 Spring Boot 服务、H2 数据库与 JRE（渲染层唯一入口 `src/renderer-vue/src/App.vue` → `knowledge-desk/KnowledgeDeskApp.vue`）。
 
 > Review / Skills / Computer Use 面板、TS CLI 与本地服务属于**可选模块**（Codex 对齐演进线），当前 Beta 包默认不启用 Computer Use；产品主线与模块边界见 [../docs/arch/000-product-line.md](../docs/arch/000-product-line.md)。
 
@@ -21,7 +21,7 @@ set -a; source ../env/local-desktop.env; set +a
 SPRING_PROFILES_ACTIVE=desktop SERVER_PORT=18080 SERVER_ADDRESS=127.0.0.1 mvn spring-boot:run
 
 # 终端 B：启动 Renderer
-cd ../desktop/src/renderer
+cd ../desktop/src/renderer-vue
 npm install && npm run dev
 
 # 终端 C：启动 Electron 并附着到终端 A
@@ -62,7 +62,7 @@ desktop/
 
 | 依赖 | 版本要求 | 说明 |
 | --- | --- | --- |
-| Node.js | 22（发布/打包基线） | 构建 Electron + React Renderer；开发环境也推荐保持一致 |
+| Node.js | 22（发布/打包基线） | 构建 Electron + Vue 3 Renderer；开发环境也推荐保持一致 |
 | npm | 随 Node.js | 包管理 |
 | JDK | 21 | 编译后端 + jlink 生成 JRE |
 | Maven | 3.8+ | 后端构建 |
@@ -86,7 +86,7 @@ cd ../backend
 mvn spring-boot:run
 
 # 3. 启动 Renderer 开发服务器（独立终端）
-cd ../desktop/src/renderer
+cd ../desktop/src/renderer-vue
 npm install
 npm run dev
 
@@ -319,11 +319,11 @@ npm config set registry https://registry.npmmirror.com
 
 ### 7. Renderer 构建失败
 
-**原因**：`desktop/src/renderer/` 目录未安装依赖。
+**原因**：`desktop/src/renderer-vue/` 目录未安装依赖。
 
 **解决**：
 ```bash
-cd desktop/src/renderer && npm install
+cd desktop/src/renderer-vue && npm install
 ```
 
 ### 8. electron-builder 报错 `cannot find icon`

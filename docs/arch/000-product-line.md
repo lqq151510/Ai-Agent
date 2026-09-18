@@ -15,12 +15,12 @@
 
 | 组成 | 状态 | 入口 |
 | --- | --- | --- |
-| 桌面渲染层（Knowledge Desk） | 已实现，主界面 | `desktop/src/renderer/src/App.tsx` → `desktop/src/renderer/src/knowledge-desk/KnowledgeDeskApp.tsx` |
+| 桌面渲染层（Knowledge Desk） | 已实现，主界面 | `desktop/src/renderer-vue/src/App.vue` → `desktop/src/renderer-vue/src/knowledge-desk/KnowledgeDeskApp.vue` |
 | 知识闭环 API | 已实现 | `backend/src/main/java/com/agent/mvp/`（`/api/v1/knowledge-items`、`/tags`、`/model-sources`、`/ingestion-jobs`、`/knowledge-reviews`、`/dashboard`、`/settings`） |
 | 内置运行时 | 已实现，随包 | `desktop/backend-jre/backend.jar`、`desktop/backend-jre/jre` |
 | 本地数据 | 已实现 | H2（桌面 profile `application-desktop.yml`），无需外部数据库 |
 
-桌面渲染层只有唯一入口 `App.tsx`，它直接挂载 `KnowledgeDeskApp`；仓库中不存在第二个主导航/聊天主界面。
+桌面渲染层只有唯一入口 `App.vue`，它直接挂载 `KnowledgeDeskApp`；仓库中不存在第二个主导航/聊天主界面。
 
 ## 3. 可选模块清单与边界
 
@@ -110,23 +110,23 @@
 
 | # | 声明 | 出处 | 验证命令（仓库根目录） | 实测结果 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| A1 | 主产品渲染层唯一入口是 `App.tsx` → `KnowledgeDeskApp.tsx`，不存在第二个主导航/聊天主界面 | 本文 §2；README「产品主线与模块边界」 | `grep -n KnowledgeDeskApp desktop/src/renderer/src/main.tsx desktop/src/renderer/src/App.tsx` + `ls desktop/src/renderer/src/*.tsx` | `main.tsx:8 <App />`；`App.tsx:2 import KnowledgeDeskApp`、`App.tsx:124 <KnowledgeDeskApp />`；顶层仅 `App.tsx`、`main.tsx` | ✅ |
+| A1 | 主产品渲染层唯一入口是 `App.vue` → `KnowledgeDeskApp.vue`，不存在第二个主导航/聊天主界面 | 本文 §2；README「产品主线与模块边界」 | `rg -n 'KnowledgeDeskApp|<KnowledgeDeskApp' desktop/src/renderer-vue/src/main.ts desktop/src/renderer-vue/src/App.vue` | `main.ts:3 import App`、`App.vue:3 import KnowledgeDeskApp`、`App.vue` 挂载 `<KnowledgeDeskApp />` | ✅ |
 | A2 | 知识闭环 API 已实现：`/api/v1/knowledge-items`、`/tags`、`/dashboard/summary`、`/settings`、`/model-sources`、`/ingestion-jobs`、`/knowledge-reviews` | 本文 §2 | `grep -rn "@RequestMapping(\"/api/v1" backend/src/main/java --include=*.java` + 各控制器路由 grep | `KnowledgeItemController`（`/api/v1`：`/knowledge-items`、`/knowledge-items/search`、`/tags`、`/dashboard/summary`）、`KnowledgeReviewController`（`/api/v1`）、`ModelSourceController`（`/api/v1/model-sources`）、`IngestionJobController`（`/api/v1/ingestion-jobs`）、`SettingsController`（`/api/v1/settings`） | ✅ |
-| A3 | KD 渲染层只使用 `electronAPI.knowledge.*` 与 `localChat` 桥接后端，不调用编码 Agent IPC | 本文 §3.5 | `grep -rn electronAPI desktop/src/renderer/src/knowledge-desk` + 查看 `knowledgeDeskApi.ts` 类型定义 | 仅 1 处命中（`knowledgeDeskApi.ts:502 getElectronApi`），类型仅声明 `knowledge`、`localChat`；无 `workspace`/`git`/`chat`/`cli`/`terminal` 调用 | ✅ |
+| A3 | KD 渲染层只使用 `electronAPI.knowledge.*` 与 `localChat` 桥接后端，不调用编码 Agent IPC | 本文 §3.5 | `rg -n electronAPI desktop/src/renderer-vue/src/knowledge-desk` + 查看 `knowledgeDeskApi.ts` 类型定义 | Vue API 契约仅声明 `knowledge`、`localChat`；无 `workspace`/`git`/`chat`/`cli`/`terminal` 调用 | ✅ |
 | A4 | 桌面包内置后端运行时（`backend.jar` + `jre`） | 本文 §2；README Beta scope | `ls -la desktop/backend-jre` + `grep -A6 extraResources desktop/electron-builder.yml` | `backend.jar`（229,306,231 B）、`jre/`、`local-service/`、`ts-cli/`；`extraResources: from: backend-jre` | ✅ |
 | A5 | 桌面版使用内置 H2，正常使用无需外部数据库 | 本文 §2；README Beta scope | `grep -nE h2 backend/src/main/resources/application-desktop.yml`；`grep -nE ddl-auto backend/src/main/resources/application-desktop.yml` | `jdbc:h2:file:${user.home}/.ai-agent-desktop/db;AUTO_SERVER=TRUE`、`driver-class-name: org.h2.Driver`、`ddl-auto: validate`、`locations: classpath:db/h2` | ✅（注：`validate` + `classpath:db/h2` 是 WS4 统一 Flyway 迁移进行中的状态） |
 | A6 | `ts-cli`、`local-service` 随桌面包发布，但不属于主界面 | 本文 §3.1、§3.6 | `ls desktop/backend-jre` | 含 `ts-cli/`、`local-service/` 子目录 | ✅ |
 | A7 | `python-service` **不**随桌面包发布，仅存在于 Compose 服务端栈 | 本文 §3.3 | `grep -n python desktop/electron-builder.yml`（期望无输出）+ `ls desktop/backend-jre` | electron-builder.yml 无 python；`backend-jre/` 无 python；服务定义仅在 `docker-compose.yml` | ✅ |
-| A8 | Java Dev Coach 后端已实现但桌面无 UI 入口 | 本文 §3.2 | `grep -rni coach desktop/src/renderer/src --include=*.ts --include=*.tsx` | 0 命中（后端 `com.agent.mvp.coach.CoachController` 存在） | ✅ |
-| A9 | Codex 对齐编码 Agent 能力：主进程已实现、渲染层无 UI | 本文 §3.5 | `ls desktop/src/main/*.ts`；`grep -rni -e thread-manager -e worktree -e ptyManager -e skill-manager -e computerUse desktop/src/renderer/src` | 主进程 22 个模块（含 `thread-manager`、`worktree-manager`、`pty-manager`、`pty-pool`、`skill-manager`、`computer-use-manager`、`approval-engine`、`git-manager`、`diff-parse`、`tool-execution-bridge`）；渲染层 0 命中 | ✅ |
+| A8 | Java Dev Coach 后端已实现但桌面无 UI 入口 | 本文 §3.2 | `rg -ni coach desktop/src/renderer-vue/src --glob='*.ts' --glob='*.vue'` | 0 命中（后端 `com.agent.mvp.coach.CoachController` 存在） | ✅ |
+| A9 | Codex 对齐编码 Agent 能力：主进程已实现、渲染层无 UI | 本文 §3.5 | `ls desktop/src/main/*.ts`；`rg -ni -e thread-manager -e worktree -e ptyManager -e skill-manager -e computerUse desktop/src/renderer-vue/src` | 主进程模块含 `thread-manager`、`worktree-manager`、`pty-manager`、`pty-pool`、`skill-manager`、`computer-use-manager`、`approval-engine`、`git-manager`、`diff-parse`、`tool-execution-bridge`；渲染层 0 命中 | ✅ |
 | A10 | 打包 beta 明确排除 Computer Use，即使 `AI_AGENT_ENABLE_LEGACY_DEVTOOLS=1` 也不启用 | 本文 §3.5；README L123 | `grep -n -e isPackaged -e ENABLE_LEGACY_DEVTOOLS desktop/src/main/index.ts` | `index.ts:160 const isLegacyEnabled = !app.isPackaged && process.env.AI_AGENT_ENABLE_LEGACY_DEVTOOLS === '1';` | ✅ |
 | A11 | legacy `agent-*` 不在根 reactor、不参与 CI 与发布产物 | 本文 §3.7 | `sed -n '15,30p' pom.xml`；`ls legacy/`；`grep -n "<module>" legacy/pom.xml` | 根 `<modules>` 仅 `backend`、`bug-sentinel-starter`，无 `legacy` profile；`legacy/pom.xml` 聚合 6 个模块；根目录已无 `agent-*` 目录 | ✅（2026-09-08 15:47 快照，最终路径 `legacy/`） |
-| A12 | 发布组件版本一致（`0.1.0-beta.4`，2026-09-08 由 beta.3 收口） | README「macOS Beta candidate workflow」 | `./scripts/check-release-version.sh` | `[release-version] all release components use 0.1.0-beta.4`；bundle 元数据 `0.1.0` / `bundleVersion 4`；exit 0 | ✅（`desktop/src/renderer/package.json` 的 `0.0.0` 是内部 workspace 包，不在发布组件清单） |
+| A12 | 发布组件版本一致（`0.1.0-beta.4`，2026-09-08 由 beta.3 收口） | README「macOS Beta candidate workflow」 | `./scripts/check-release-version.sh` | `[release-version] all release components use 0.1.0-beta.4`；bundle 元数据 `0.1.0` / `bundleVersion 4`；exit 0 | ✅（`desktop/src/renderer-vue/package.json` 的 `0.0.0` 是内部 workspace 包，不在发布组件清单） |
 | A13 | beta.3 历史问题中的两个搜索测试已修复，HEAD 上全绿 | README L119 | `mvn -pl backend -Dtest=SearchOrchestratorTest,SearchStrategyConfigTest -DfailIfNoTests=false test` | `SearchOrchestratorTest` 3/3 通过；`SearchStrategyConfigTest` 3/3 通过；`Tests run: 6, Failures: 0, Errors: 0`；`BUILD SUCCESS`；mvn exit 0 | ✅ |
-| A14 | Knowledge Desk 渲染层核心链路（导入/列表/搜索/复习/备份/降级/视图模型）可用 | 本文 §2 | `cd desktop/src/renderer && npm test`（vitest） | 12 个测试文件、35 个测试全部通过，exit 0 | ✅ |
+| A14 | Knowledge Desk 渲染层核心链路（导入/列表/搜索/复习/备份/降级/视图模型）可用 | 本文 §2 | `cd desktop/src/renderer-vue && npm test`（vitest） | 13 个测试文件、39 个测试全部通过，exit 0 | ✅ |
 | A15 | API 与 readiness 路径一致性 | README | `./scripts/check-consistency.sh` | `[consistency] API and readiness path checks passed`；exit 0 | ✅ |
-| A16 | 打包产物布局：`app.asar` 含 renderer 与 main、JRE `java` 可执行、renderer 引用相对 Vite 资源 | README 打包门禁 | `node desktop/scripts/verify-packaged-app.cjs`（内部执行 `electron-builder --dir --mac`） | 未执行 | **TODO**：需要完整 electron-builder `--dir` 打包（数分钟 + 临时产物），属发布验证范围，建议由 release-verifier 在 WS6 全量验证中执行 |
-| A17 | macOS 安装包 ad-hoc 签名、未公证边界声明 | README「macOS Beta candidate workflow」 | 需实际构建 DMG/ZIP 后执行 `codesign -dv` / `spctl -a -vv` / Gatekeeper 校验 | 未执行 | **TODO**：依赖真实打包与签名环境，属 WS6 发布验证范围 |
+| A16 | 打包产物布局：`app.asar` 含 renderer 与 main、JRE `java` 可执行、renderer 引用相对 Vite 资源 | README 打包门禁 | `cd desktop && npm run test:packaged`；`DESKTOP_SKIP_NPM_INSTALL=true ./desktop/scripts/build-all.sh --skip-backend --mac` | 2026-09-18：目录包布局测试通过；开发诊断包的 `app.asar` 含 Vue Renderer 资源，内置 JRE 与后端成功启动 | ✅（开发诊断） |
+| A17 | macOS 安装包 ad-hoc 签名、未公证边界声明 | README「macOS Beta candidate workflow」 | 对开发诊断包执行 `codesign -dv --verbose=2 <app>` | 2026-09-18：DMG/ZIP 构建成功，应用为 ad-hoc 签名（无 TeamIdentifier）；未执行 Developer ID 签名、公证或 Gatekeeper 验证 | ⚠️ 正式发行仍需签名/公证凭据 |
 
 ### 附录 A 使用说明
 
