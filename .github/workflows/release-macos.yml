@@ -362,10 +362,16 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
+          for suffix in mac-arm64.dmg mac-arm64.zip win-x64.exe; do
+            source="desktop/release/AI Agent-${version}-${suffix}"
+            target="desktop/release/AI.Agent-${version}-${suffix}"
+            [[ -f "${source}" ]] || { echo "::error::missing downloaded artifact: ${source}"; exit 1; }
+            mv "${source}" "${target}"
+          done
           expected=(
-            "AI Agent-${version}-mac-arm64.dmg"
-            "AI Agent-${version}-mac-arm64.zip"
-            "AI Agent-${version}-win-x64.exe"
+            "AI.Agent-${version}-mac-arm64.dmg"
+            "AI.Agent-${version}-mac-arm64.zip"
+            "AI.Agent-${version}-win-x64.exe"
           )
           for asset in "${expected[@]}"; do
             [[ -s "desktop/release/${asset}" ]] || { echo "::error::missing release asset: ${asset}"; exit 1; }
@@ -430,9 +436,9 @@ jobs:
           const manifest = JSON.parse(fs.readFileSync('desktop/release/release-manifest.json', 'utf8'));
           const version = process.env.RELEASE_TAG.slice(1);
           const expected = [
-            `AI Agent-${version}-mac-arm64.dmg`,
-            `AI Agent-${version}-mac-arm64.zip`,
-            `AI Agent-${version}-win-x64.exe`,
+            `AI.Agent-${version}-mac-arm64.dmg`,
+            `AI.Agent-${version}-mac-arm64.zip`,
+            `AI.Agent-${version}-win-x64.exe`,
           ].sort();
           const actual = manifest.artifacts.map((artifact) => artifact.fileName).sort();
           if (manifest.version !== version) throw new Error(`manifest version mismatch: ${manifest.version}`);
