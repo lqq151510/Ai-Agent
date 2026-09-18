@@ -60,19 +60,19 @@ const searchStatusCopy: Record<SearchStatusFilter, string> = {
   archived: '归档',
 };
 
-export const filterLocalItems = (items: KnowledgeItem[], query: string) => {
+export const filterLocalItems = (items: KnowledgeItem[], query: string, limit = 10) => {
   const tokens = query
     .toLowerCase()
     .split(/\s+/)
     .map((token) => token.trim())
     .filter(Boolean);
-  if (tokens.length === 0) return items.slice(0, 10);
+  if (tokens.length === 0) return items.slice(0, limit);
   return items
     .filter((item) => {
       const haystack = [item.title, item.summary, item.source, ...item.tags].join(' ').toLowerCase();
       return tokens.some((token) => haystack.includes(token));
     })
-    .slice(0, 10);
+    .slice(0, limit);
 };
 
 export const buildSearchCorpus = (...groups: KnowledgeItem[][]) => {
