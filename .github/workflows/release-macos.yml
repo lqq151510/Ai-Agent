@@ -1,4 +1,4 @@
-name: macOS Release Candidate
+name: Desktop Release Candidate
 
 on:
   push:
@@ -7,27 +7,28 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing v* tag to build and attach to a draft release
+        description: Existing v* tag to build and publish
         required: true
         type: string
 
 concurrency:
-  group: release-macos-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: release-desktop-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
   contents: write
   packages: read
 
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
 jobs:
-  compose-release-config:
-    name: Validate server deployment configuration
+  validate-release:
+    name: Validate release provenance
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
       - name: Check out the release tag
@@ -37,7 +38,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Validate release provenance
+      - name: Validate tag, version, ancestry and Compose configuration
         shell: bash
         run: |
           set -euo pipefail
@@ -52,28 +53,28 @@ jobs:
           git rev-parse --verify --quiet "refs/tags/${RELEASE_TAG}^{commit}" >/dev/null
           git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
           if ! git merge-base --is-ancestor "${RELEASE_TAG}^{commit}" origin/main; then
-            echo "::error::release tag ${RELEASE_TAG} does not point to a commit reachable from origin/main"
+            echo "::error::release tag ${RELEASE_TAG} is not reachable from origin/main"
             exit 1
           fi
 
-      - name: Validate server Compose configuration
-        # dev.env is intentionally local/ignored; validate the checked-in
-        # non-secret template on the release runner.
-        run: docker compose --env-file env/dev.env.example -f docker-compose.yml config --quiet
+          package_version="$(node -p "require('./desktop/package.json').version")"
+          if [[ "${RELEASE_TAG}" != "v${package_version}" ]]; then
+            echo "::error::tag ${RELEASE_TAG} must match desktop version v${package_version}"
+            exit 1
+          fi
 
-  release-macos-arm64:
-    name: Build signed macOS arm64 candidate
-    needs: compose-release-config
-    # Personal beta tags use the locally built, explicitly unsigned artifacts
-    # uploaded to the GitHub prerelease. Only non-beta tags enter the Apple
-    # Developer signing and notarization gate below.
-    if: ${{ !contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-beta.') }}
+          ./scripts/check-release-version.sh
+          docker compose --env-file env/dev.env.example -f docker-compose.yml config --quiet
+
+  build-macos-beta:
+    name: Build macOS arm64 beta
+    if: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-beta.') }}
+    needs: validate-release
     runs-on: macos-15
-    # The formal gate notarizes both the app bundle and the final DMG.
     timeout-minutes: 75
-    environment: release
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - name: Check out the release tag
@@ -81,36 +82,6 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
-          # The canonical release gate re-fetches origin/main to reject stale
-          # remote-tracking refs, including when this repository becomes private.
-          persist-credentials: true
-
-      - name: Validate release tag and runner architecture
-        shell: bash
-        run: |
-          set -euo pipefail
-          case "${RELEASE_TAG}" in
-            v*) ;;
-            *)
-              echo "::error::release tag must start with v: ${RELEASE_TAG}"
-              exit 1
-              ;;
-          esac
-
-          git rev-parse --verify --quiet "refs/tags/${RELEASE_TAG}^{commit}" >/dev/null
-
-          # A release tag must describe code that has already reached main;
-          # otherwise an arbitrary branch could create a draft prerelease.
-          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
-          if ! git merge-base --is-ancestor "${RELEASE_TAG}^{commit}" origin/main; then
-            echo "::error::release tag ${RELEASE_TAG} does not point to a commit reachable from origin/main"
-            exit 1
-          fi
-
-          if [[ "$(uname -m)" != "arm64" ]]; then
-            echo "::error::macOS arm64 runner required; found $(uname -m)"
-            exit 1
-          fi
 
       - name: Set up JDK 21
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -133,86 +104,110 @@ jobs:
             ts-cli/package-lock.json
             local-service/package-lock.json
 
-      - name: Validate tag version
-        shell: bash
-        run: |
-          set -euo pipefail
-          package_version="$(node -p "require('./desktop/package.json').version")"
-          if [[ "${RELEASE_TAG}" != "v${package_version}" ]]; then
-            echo "::error::tag ${RELEASE_TAG} must match desktop version v${package_version}"
-            exit 1
-          fi
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: '3.11'
-          cache: pip
-          cache-dependency-path: |
-            python-service/requirements.txt
-            python-service/requirements-test.txt
-
-      - name: Run Python service tests
-        working-directory: ./python-service
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install -r requirements-test.txt
-          # Release runners do not need a persistent pytest cache before the
-          # strict source and release-evidence checks run.
-          python -m pytest -p no:cacheprovider
-
-      - name: Check backend formatting
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mvn --settings .mvn/settings.xml -pl backend com.diffplug.spotless:spotless-maven-plugin:2.43.0:check
-
-      - name: Validate signing and notarization configuration
+      - name: Build embedded backend and desktop
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           set -euo pipefail
-          required_secrets=(
-            CSC_LINK
-            CSC_KEY_PASSWORD
-            APPLE_ID
-            APPLE_APP_SPECIFIC_PASSWORD
-            APPLE_TEAM_ID
+          bash desktop/scripts/build-backend.sh
+          npm ci --prefix desktop/src/renderer-vue --no-audit --no-fund
+          npm ci --prefix desktop --no-audit --no-fund
+          npm run build --prefix desktop
+          (
+            cd desktop
+            npx electron-builder --mac --arm64 \
+              --config electron-builder.yml \
+              --config.mac.notarize=false
           )
 
-          for secret_name in "${required_secrets[@]}"; do
-            if [[ -z "${!secret_name}" ]]; then
-              echo "::error::missing required release secret: ${secret_name}"
-              exit 1
-            fi
+      - name: Verify macOS beta artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          dmg="desktop/release/AI Agent-${version}-mac-arm64.dmg"
+          zip="desktop/release/AI Agent-${version}-mac-arm64.zip"
+          app="desktop/release/mac-arm64/AI Agent.app"
+          for artifact in "${dmg}" "${zip}"; do
+            [[ -s "${artifact}" ]] || { echo "::error::missing artifact: ${artifact}"; exit 1; }
           done
+          required=(
+            "${app}/Contents/Resources/app.asar"
+            "${app}/Contents/Resources/backend-jre/backend.jar"
+            "${app}/Contents/Resources/backend-jre/jre/bin/java"
+            "${app}/Contents/Resources/backend-jre/ts-cli/dist/index.js"
+            "${app}/Contents/Resources/backend-jre/local-service/dist/index.js"
+          )
+          for file in "${required[@]}"; do
+            [[ -f "${file}" ]] || { echo "::error::missing packaged file: ${file}"; exit 1; }
+          done
+          "${app}/Contents/Resources/backend-jre/jre/bin/java" -version
+          hdiutil verify "${dmg}"
+
+      - name: Archive macOS artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-macos-arm64-${{ env.RELEASE_TAG }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            desktop/release/*-mac-arm64.dmg
+            desktop/release/*-mac-arm64.zip
+
+  build-macos-formal:
+    name: Build signed macOS arm64 release
+    if: ${{ !contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-beta.') }}
+    needs: validate-release
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            desktop/package-lock.json
+            desktop/src/renderer-vue/package-lock.json
+            ts-cli/package-lock.json
+            local-service/package-lock.json
 
       - name: Install desktop dependencies
-        working-directory: ./desktop
-        run: npm ci
+        shell: bash
+        run: |
+          npm ci --prefix desktop --no-audit --no-fund
+          npm ci --prefix desktop/src/renderer-vue --no-audit --no-fund
+          npm ci --prefix ts-cli --no-audit --no-fund
+          npm ci --prefix local-service --no-audit --no-fund
 
-      - name: Install Vue renderer dependencies
-        working-directory: ./desktop/src/renderer-vue
-        run: npm ci
-
-      - name: Install CLI dependencies
-        working-directory: ./ts-cli
-        run: npm ci
-
-      - name: Install local-service dependencies
-        working-directory: ./local-service
-        run: npm ci
-
-      - name: Build and verify release candidate
+      - name: Run signed and notarized macOS release gate
+        shell: bash
         env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -229,497 +224,287 @@ jobs:
           RELEASE_CHECK_DESKTOP_DISTRIBUTION_TIMEOUT_SECONDS: '1800'
         run: ./scripts/release-check-macos.sh
 
-      - name: Verify notarization ticket and release evidence
-        id: release-assets
+      - name: Preserve macOS trust evidence for the cross-platform manifest
+        shell: bash
+        run: cp desktop/release/release-manifest.json desktop/release/macos-trust-evidence.json
+
+      - name: Archive signed macOS artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-macos-arm64-${{ env.RELEASE_TAG }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            desktop/release/*-mac-arm64.dmg
+            desktop/release/*-mac-arm64.zip
+            desktop/release/macos-trust-evidence.json
+
+  build-windows:
+    name: Build Windows x64 installer
+    needs: validate-release
+    runs-on: windows-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            desktop/package-lock.json
+            desktop/src/renderer-vue/package-lock.json
+            ts-cli/package-lock.json
+            local-service/package-lock.json
+
+      - name: Build embedded backend and desktop
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          set -euo pipefail
+          bash desktop/scripts/build-backend.sh
+          npm ci --prefix desktop/src/renderer-vue --no-audit --no-fund
+          npm ci --prefix desktop --no-audit --no-fund
+          npm run build --prefix desktop
+          (
+            cd desktop
+            npx electron-builder --win --x64 --config electron-builder.yml
+          )
+
+      - name: Verify Windows installer and embedded runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:RELEASE_TAG.Substring(1)
+          $installer = "desktop/release/AI Agent-$version-win-x64.exe"
+          $resources = 'desktop/release/win-unpacked/resources'
+          $required = @(
+            $installer,
+            "$resources/app.asar",
+            "$resources/backend-jre/backend.jar",
+            "$resources/backend-jre/jre/bin/java.exe",
+            "$resources/backend-jre/ts-cli/dist/index.js",
+            "$resources/backend-jre/local-service/dist/index.js"
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "missing packaged file: $file"
+            }
+          }
+          if ((Get-Item -LiteralPath $installer).Length -le 0) {
+            throw "empty Windows installer: $installer"
+          }
+          & "$resources/backend-jre/jre/bin/java.exe" -version
+          if ($LASTEXITCODE -ne 0) {
+            throw 'embedded Windows JRE failed to start'
+          }
+
+      - name: Archive Windows installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-windows-x64-${{ env.RELEASE_TAG }}
+          if-no-files-found: error
+          retention-days: 14
+          path: desktop/release/*-win-x64.exe
+
+  publish-release:
+    name: Verify and publish desktop prerelease
+    if: >-
+      ${{ always()
+          && needs.validate-release.result == 'success'
+          && needs.build-windows.result == 'success'
+          && (needs.build-macos-beta.result == 'success' || needs.build-macos-formal.result == 'success') }}
+    needs:
+      - validate-release
+      - build-macos-beta
+      - build-macos-formal
+      - build-windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*-${{ env.RELEASE_TAG }}
+          path: desktop/release
+          merge-multiple: true
+
+      - name: Generate and verify release evidence
         shell: bash
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
+          expected=(
+            "AI Agent-${version}-mac-arm64.dmg"
+            "AI Agent-${version}-mac-arm64.zip"
+            "AI Agent-${version}-win-x64.exe"
+          )
+          for asset in "${expected[@]}"; do
+            [[ -s "desktop/release/${asset}" ]] || { echo "::error::missing release asset: ${asset}"; exit 1; }
+          done
 
-          find_exact_artifact() {
-            local extension="$1"
-            local matches=()
-            local candidate
-            while IFS= read -r candidate; do
-              matches+=("${candidate}")
-            done < <(find desktop/release -maxdepth 1 -type f -name "*-${version}-mac-arm64.${extension}" -print)
+          RELEASE_MANIFEST_MACOS_ARCH=arm64 ./scripts/release-manifest.sh desktop/release
+          EXPECTED_COMMIT="$(git rev-parse HEAD)" RELEASE_TAG="${RELEASE_TAG}" node <<'NODE'
+          const fs = require('fs');
+          const manifestPath = 'desktop/release/release-manifest.json';
+          const evidencePath = 'desktop/release/macos-trust-evidence.json';
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          const isBeta = process.env.RELEASE_TAG.includes('-beta.');
 
-            if [[ ${#matches[@]} -ne 1 ]]; then
-              printf '%s\n' "${matches[@]}" >&2
-              echo "::error::expected exactly one macOS arm64 ${extension} for ${version}"
-              exit 1
-            fi
-            printf '%s\n' "${matches[0]}"
+          if (fs.existsSync(evidencePath)) {
+            if (isBeta) throw new Error('beta release must not contain formal macOS trust evidence');
+            const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+            if (evidence.git?.commit !== process.env.EXPECTED_COMMIT || evidence.git?.trackedDirty !== false) {
+              throw new Error('macOS trust evidence does not match the release commit');
+            }
+            if (!Array.isArray(evidence.applications) || evidence.applications.length === 0) {
+              throw new Error('formal macOS trust evidence has no application assessment');
+            }
+            for (const app of evidence.applications) {
+              if (!app.codesign?.ok || !app.gatekeeper?.ok || !app.gatekeeper?.assessmentsEnabled) {
+                throw new Error(`formal macOS trust assessment failed for ${app.path}`);
+              }
+            }
+            manifest.applications = evidence.applications;
+            manifest.platformTrust = {
+              macos: {
+                developerIdSigned: true,
+                notarized: true,
+                gatekeeperValidated: true,
+              },
+              windows: {
+                authenticodeSigned: false,
+              },
+            };
+          } else {
+            if (!isBeta) throw new Error('formal release is missing macOS trust evidence');
+            manifest.platformTrust = {
+              macos: {
+                developerIdSigned: false,
+                notarized: false,
+                gatekeeperValidated: false,
+              },
+              windows: {
+                authenticodeSigned: false,
+              },
+            };
           }
 
-          dmg_path="$(find_exact_artifact dmg)"
-          zip_path="$(find_exact_artifact zip)"
-          app_path="$(find desktop/release/mac-arm64 -maxdepth 1 -type d -name '*.app' -print -quit)"
-          if [[ -z "${app_path}" ]]; then
-            echo "::error::macOS arm64 app bundle was not produced"
-            exit 1
-          fi
-
-          xcrun stapler validate "${app_path}"
-          xcrun stapler validate "${dmg_path}"
-          spctl --assess --type open --verbose=4 "${dmg_path}"
+          fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+          NODE
           (
             cd desktop/release
-            shasum -a 256 -c SHA256SUMS
+            sha256sum -c SHA256SUMS
           )
 
-          expected_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
-          RELEASE_TAG="${RELEASE_TAG}" EXPECTED_COMMIT="${expected_commit}" \
-            EXPECTED_DMG="$(basename "${dmg_path}")" EXPECTED_ZIP="$(basename "${zip_path}")" node <<'NODE'
+          EXPECTED_COMMIT="$(git rev-parse HEAD)" RELEASE_TAG="${RELEASE_TAG}" node <<'NODE'
           const fs = require('fs');
-
           const manifest = JSON.parse(fs.readFileSync('desktop/release/release-manifest.json', 'utf8'));
-          const expectedTag = `v${manifest.version}`;
-          if (process.env.RELEASE_TAG !== expectedTag) {
-            throw new Error(`manifest version ${manifest.version} does not match ${process.env.RELEASE_TAG}`);
-          }
-          if (manifest.git.commit !== process.env.EXPECTED_COMMIT) {
-            throw new Error(`manifest commit ${manifest.git.commit} does not match ${process.env.EXPECTED_COMMIT}`);
-          }
-          if (manifest.git.trackedDirty !== false) {
-            throw new Error('release manifest reports a dirty tracked worktree');
-          }
-          if (!Array.isArray(manifest.applications) || manifest.applications.length === 0) {
-            throw new Error('release manifest has no macOS application trust evidence');
-          }
-          for (const app of manifest.applications) {
-            if (!app.codesign?.ok || !app.gatekeeper?.ok || !app.gatekeeper?.assessmentsEnabled) {
-              throw new Error(`release manifest trust validation failed for ${app.path}`);
-            }
-          }
-
-          if (!Array.isArray(manifest.artifacts)) {
-            throw new Error('release manifest has no distributable artifacts');
-          }
-          const expectedArtifactNames = [process.env.EXPECTED_DMG, process.env.EXPECTED_ZIP].sort();
-          const manifestArtifactNames = manifest.artifacts
-            .map((artifact) => {
-              if (artifact.path !== artifact.fileName) {
-                throw new Error(`manifest artifact path is not a release asset filename: ${artifact.path}`);
-              }
-              return artifact.fileName;
-            })
-            .sort();
-          if (
-            expectedArtifactNames.length !== manifestArtifactNames.length
-            || expectedArtifactNames.some((name, index) => name !== manifestArtifactNames[index])
-          ) {
-            throw new Error(
-              `manifest artifacts do not match GitHub release binary assets: expected ${expectedArtifactNames.join(', ')}, got ${manifestArtifactNames.join(', ')}`,
-            );
+          const version = process.env.RELEASE_TAG.slice(1);
+          const expected = [
+            `AI Agent-${version}-mac-arm64.dmg`,
+            `AI Agent-${version}-mac-arm64.zip`,
+            `AI Agent-${version}-win-x64.exe`,
+          ].sort();
+          const actual = manifest.artifacts.map((artifact) => artifact.fileName).sort();
+          if (manifest.version !== version) throw new Error(`manifest version mismatch: ${manifest.version}`);
+          if (manifest.git.commit !== process.env.EXPECTED_COMMIT) throw new Error('manifest commit does not match release tag');
+          if (manifest.git.trackedDirty !== false) throw new Error('manifest reports tracked changes');
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            throw new Error(`unexpected release assets: ${actual.join(', ')}`);
           }
           NODE
 
-          dmg_sha256="$(shasum -a 256 "${dmg_path}" | awk '{print $1}')"
-          zip_sha256="$(shasum -a 256 "${zip_path}" | awk '{print $1}')"
-          manifest_sha256="$(shasum -a 256 desktop/release/release-manifest.json | awk '{print $1}')"
-          checksums_sha256="$(shasum -a 256 desktop/release/SHA256SUMS | awk '{print $1}')"
-
-          printf 'dmg_path=%s\nzip_path=%s\nexpected_commit=%s\ndmg_sha256=%s\nzip_sha256=%s\nmanifest_sha256=%s\nchecksums_sha256=%s\n' \
-            "${dmg_path}" "${zip_path}" "${expected_commit}" "${dmg_sha256}" "${zip_sha256}" \
-            "${manifest_sha256}" "${checksums_sha256}" >> "${GITHUB_OUTPUT}"
-
-      - name: Archive release candidate
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: macos-arm64-${{ env.RELEASE_TAG }}
-          if-no-files-found: error
-          retention-days: 14
-          path: |
-            ${{ steps.release-assets.outputs.dmg_path }}
-            ${{ steps.release-assets.outputs.zip_path }}
-            desktop/release/release-manifest.json
-            desktop/release/SHA256SUMS
-
-      - name: Create draft GitHub release
+      - name: Create draft, re-download assets and publish prerelease
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          DMG_PATH: ${{ steps.release-assets.outputs.dmg_path }}
-          ZIP_PATH: ${{ steps.release-assets.outputs.zip_path }}
-          EXPECTED_COMMIT: ${{ steps.release-assets.outputs.expected_commit }}
         run: |
           set -euo pipefail
-          if [[ -z "${EXPECTED_COMMIT}" ]]; then
-            echo "::error::missing expected release commit"
+          if release_output="$(gh release view "${RELEASE_TAG}" --json tagName 2>&1)"; then
+            echo "${release_output}" >&2
+            echo "::error::release already exists for ${RELEASE_TAG}; refusing to replace its assets"
+            exit 1
+          elif [[ "${release_output}" != *"release not found"* ]]; then
+            echo "${release_output}" >&2
+            echo "::error::could not determine whether release ${RELEASE_TAG} already exists"
             exit 1
           fi
 
-          if existing_release="$(gh release view "${RELEASE_TAG}" --json isDraft,tagName 2>&1)"; then
-            echo "${existing_release}" >&2
-            echo "::error::a GitHub release already exists for ${RELEASE_TAG}; refuse automatic retry so stale assets or a concurrently published draft cannot be replaced"
-            exit 1
-          elif [[ "${existing_release}" != *"release not found"* ]]; then
-            echo "${existing_release}" >&2
-            echo "::error::could not determine whether a GitHub release already exists for ${RELEASE_TAG}"
-            exit 1
+          notes="${RUNNER_TEMP}/release-notes.md"
+          if [[ "${RELEASE_TAG}" == *-beta.* ]]; then
+            mac_note='macOS arm64 is an unsigned, unnotarized personal Beta; macOS may require explicit confirmation on first launch.'
+          else
+            mac_note='macOS arm64 passed Developer ID signing, notarization and Gatekeeper verification.'
           fi
+          {
+            echo '## Desktop installers'
+            echo
+            echo '- macOS arm64: DMG and ZIP'
+            echo '- Windows x64: NSIS installer'
+            echo
+            echo "> ${mac_note}"
+            echo '> The Windows installer is currently unsigned, so Microsoft Defender SmartScreen may show a warning.'
+            echo
+            echo "Verify downloaded binaries with \`SHA256SUMS\` before installation."
+          } > "${notes}"
 
-          assets=(
-            "${DMG_PATH}"
-            "${ZIP_PATH}"
-            desktop/release/release-manifest.json
-            desktop/release/SHA256SUMS
-          )
-
-          for asset in "${assets[@]}"; do
-            if [[ ! -f "${asset}" ]]; then
-              echo "::error::expected release asset missing: ${asset}"
-              exit 1
-            fi
-          done
-
-          assert_remote_tag_commit() {
-            local remote_tag_ref="refs/tags/${RELEASE_TAG}"
-            local remote_tag_details
-            local remote_tag_commit
-            if ! remote_tag_details="$(git ls-remote origin "${remote_tag_ref}" "${remote_tag_ref}^{}")"; then
-              echo "::error::could not resolve remote release tag ${RELEASE_TAG}"
-              exit 1
-            fi
-            if [[ -z "${remote_tag_details}" ]]; then
-              echo "::error::remote release tag does not exist: ${RELEASE_TAG}"
-              exit 1
-            fi
-
-            # Prefer the peeled commit for an annotated tag; a lightweight tag
-            # resolves directly to its commit object.
-            if ! remote_tag_commit="$(printf '%s\n' "${remote_tag_details}" | awk -v tag_ref="${remote_tag_ref}" '
-              $2 == tag_ref { direct = $1 }
-              $2 == tag_ref "^{}" { peeled = $1 }
-              END {
-                if (peeled != "") {
-                  print peeled
-                } else if (direct != "") {
-                  print direct
-                } else {
-                  exit 1
-                }
-              }
-            ')"; then
-              echo "::error::could not resolve remote release tag commit: ${RELEASE_TAG}"
-              exit 1
-            fi
-            if [[ "${remote_tag_commit}" != "${EXPECTED_COMMIT}" ]]; then
-              echo "::error::remote release tag ${RELEASE_TAG} resolves to ${remote_tag_commit}, expected ${EXPECTED_COMMIT}"
-              exit 1
-            fi
-          }
-
-          assert_draft_release() {
-            local release_json
-            if ! release_json="$(gh release view "${RELEASE_TAG}" --json assets,isDraft,isPrerelease,name,tagName 2>&1)"; then
-              echo "${release_json}" >&2
-              echo "::error::could not load the draft release for ${RELEASE_TAG}"
-              exit 1
-            fi
-            RELEASE_TAG="${RELEASE_TAG}" EXPECTED_COMMIT="${EXPECTED_COMMIT}" \
-              EXPECTED_DMG="$(basename "${DMG_PATH}")" EXPECTED_ZIP="$(basename "${ZIP_PATH}")" \
-              RELEASE_JSON="${release_json}" node <<'NODE'
-          const release = JSON.parse(process.env.RELEASE_JSON);
-          if (!release.isDraft || !release.isPrerelease) {
-            throw new Error(`release ${process.env.RELEASE_TAG} must remain a draft prerelease during verification`);
-          }
-          if (release.tagName !== process.env.RELEASE_TAG) {
-            throw new Error(`release tag ${release.tagName} does not match ${process.env.RELEASE_TAG}`);
-          }
-          if (release.name !== `AI Agent ${process.env.RELEASE_TAG}`) {
-            throw new Error(`release title ${release.name} does not match the candidate tag`);
-          }
-          const expectedAssets = [
-            process.env.EXPECTED_DMG,
-            process.env.EXPECTED_ZIP,
-            'release-manifest.json',
-            'SHA256SUMS',
-          ].sort();
-          const actualAssets = release.assets.map((asset) => asset.name).sort();
-          if (JSON.stringify(actualAssets) !== JSON.stringify(expectedAssets)) {
-            throw new Error(`release assets do not exactly match the candidate: expected ${expectedAssets.join(', ')}, got ${actualAssets.join(', ')}`);
-          }
-          NODE
-          }
-
-          assert_remote_tag_commit
-          gh release create "${RELEASE_TAG}" "${assets[@]}" \
+          assets=(desktop/release/*.dmg desktop/release/*.zip desktop/release/*.exe)
+          gh release create "${RELEASE_TAG}" \
+            "${assets[@]}" \
+            desktop/release/release-manifest.json \
+            desktop/release/SHA256SUMS \
             --verify-tag \
             --draft \
             --prerelease \
             --title "AI Agent ${RELEASE_TAG}" \
-            --generate-notes
-          assert_remote_tag_commit
-          assert_draft_release
+            --notes-file "${notes}"
 
-      - name: Re-download and verify draft release assets
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DMG_PATH: ${{ steps.release-assets.outputs.dmg_path }}
-          ZIP_PATH: ${{ steps.release-assets.outputs.zip_path }}
-          EXPECTED_COMMIT: ${{ steps.release-assets.outputs.expected_commit }}
-          EXPECTED_DMG_SHA256: ${{ steps.release-assets.outputs.dmg_sha256 }}
-          EXPECTED_ZIP_SHA256: ${{ steps.release-assets.outputs.zip_sha256 }}
-          EXPECTED_MANIFEST_SHA256: ${{ steps.release-assets.outputs.manifest_sha256 }}
-          EXPECTED_CHECKSUMS_SHA256: ${{ steps.release-assets.outputs.checksums_sha256 }}
-        run: |
-          set -euo pipefail
-
-          if [[ -z "${EXPECTED_COMMIT}" ]]; then
-            echo "::error::missing expected release commit"
-            exit 1
-          fi
-
-          for hash_name in EXPECTED_DMG_SHA256 EXPECTED_ZIP_SHA256 EXPECTED_MANIFEST_SHA256 EXPECTED_CHECKSUMS_SHA256; do
-            hash_value="${!hash_name:-}"
-            if [[ ! "${hash_value}" =~ ^[a-fA-F0-9]{64}$ ]]; then
-              echo "::error::missing or invalid ${hash_name}"
-              exit 1
-            fi
-          done
-
-          assert_remote_tag_commit() {
-            local remote_tag_ref="refs/tags/${RELEASE_TAG}"
-            local remote_tag_details
-            local remote_tag_commit
-            if ! remote_tag_details="$(git ls-remote origin "${remote_tag_ref}" "${remote_tag_ref}^{}")"; then
-              echo "::error::could not resolve remote release tag ${RELEASE_TAG}"
-              exit 1
-            fi
-            if [[ -z "${remote_tag_details}" ]]; then
-              echo "::error::remote release tag does not exist: ${RELEASE_TAG}"
-              exit 1
-            fi
-            if ! remote_tag_commit="$(printf '%s\n' "${remote_tag_details}" | awk -v tag_ref="${remote_tag_ref}" '
-              $2 == tag_ref { direct = $1 }
-              $2 == tag_ref "^{}" { peeled = $1 }
-              END {
-                if (peeled != "") {
-                  print peeled
-                } else if (direct != "") {
-                  print direct
-                } else {
-                  exit 1
-                }
-              }
-            ')"; then
-              echo "::error::could not resolve remote release tag commit: ${RELEASE_TAG}"
-              exit 1
-            fi
-            if [[ "${remote_tag_commit}" != "${EXPECTED_COMMIT}" ]]; then
-              echo "::error::remote release tag ${RELEASE_TAG} resolves to ${remote_tag_commit}, expected ${EXPECTED_COMMIT}"
-              exit 1
-            fi
-          }
-
-          assert_draft_release() {
-            local release_json
-            if ! release_json="$(gh release view "${RELEASE_TAG}" --json assets,isDraft,isPrerelease,name,tagName 2>&1)"; then
-              echo "${release_json}" >&2
-              echo "::error::could not load the draft release for ${RELEASE_TAG}"
-              exit 1
-            fi
-            RELEASE_TAG="${RELEASE_TAG}" EXPECTED_COMMIT="${EXPECTED_COMMIT}" \
-              EXPECTED_DMG="$(basename "${DMG_PATH}")" EXPECTED_ZIP="$(basename "${ZIP_PATH}")" \
-              RELEASE_JSON="${release_json}" node <<'NODE'
-          const release = JSON.parse(process.env.RELEASE_JSON);
-          if (!release.isDraft || !release.isPrerelease) {
-            throw new Error(`release ${process.env.RELEASE_TAG} must remain a draft prerelease during verification`);
-          }
-          if (release.tagName !== process.env.RELEASE_TAG) {
-            throw new Error(`release tag ${release.tagName} does not match ${process.env.RELEASE_TAG}`);
-          }
-          if (release.name !== `AI Agent ${process.env.RELEASE_TAG}`) {
-            throw new Error(`release title ${release.name} does not match the candidate tag`);
-          }
-          const expectedAssets = [
-            process.env.EXPECTED_DMG,
-            process.env.EXPECTED_ZIP,
-            'release-manifest.json',
-            'SHA256SUMS',
-          ].sort();
-          const actualAssets = release.assets.map((asset) => asset.name).sort();
-          if (JSON.stringify(actualAssets) !== JSON.stringify(expectedAssets)) {
-            throw new Error(`release assets do not exactly match the candidate: expected ${expectedAssets.join(', ')}, got ${actualAssets.join(', ')}`);
-          }
-          NODE
-          }
-
-          assert_remote_tag_commit
-          assert_draft_release
-
-          dmg_name="$(basename "${DMG_PATH}")"
-          zip_name="$(basename "${ZIP_PATH}")"
-          release_download_dir="$(mktemp -d "${RUNNER_TEMP}/release-download.XXXXXX")"
-          dmg_mount_dir=""
-          mounted_dmg=0
-
-          cleanup() {
-            local status="$?"
-            trap - EXIT
-
-            if [[ "${mounted_dmg}" -eq 1 ]]; then
-              if ! hdiutil detach "${dmg_mount_dir}" >/dev/null 2>&1; then
-                echo "::warning::could not detach downloaded DMG at ${dmg_mount_dir}; attempting forced detach" >&2
-                if ! hdiutil detach -force "${dmg_mount_dir}" >/dev/null 2>&1; then
-                  echo "::error::could not detach downloaded DMG at ${dmg_mount_dir}" >&2
-                  status=1
-                fi
-              fi
-            fi
-
-            rm -rf -- "${release_download_dir}"
-            if [[ -n "${dmg_mount_dir}" ]]; then
-              rm -rf -- "${dmg_mount_dir}"
-            fi
-            exit "${status}"
-          }
-          trap cleanup EXIT
-
-          dmg_mount_dir="$(mktemp -d "${RUNNER_TEMP}/release-dmg.XXXXXX")"
-          assets=(
-            "${dmg_name}"
-            "${zip_name}"
-            release-manifest.json
-            SHA256SUMS
-          )
-
-          download_command=(
-            gh release download "${RELEASE_TAG}"
-            --dir "${release_download_dir}"
-            --clobber
-          )
-          for asset in "${assets[@]}"; do
-            download_command+=(--pattern "${asset}")
-          done
-          "${download_command[@]}"
-          for asset in "${assets[@]}"; do
-            if [[ ! -f "${release_download_dir}/${asset}" ]]; then
-              echo "::error::draft release download is missing expected asset: ${asset}"
-              exit 1
-            fi
-          done
-
-          assert_downloaded_hash() {
-            local asset_name="$1"
-            local expected_hash="$2"
-            local actual_hash
-            actual_hash="$(shasum -a 256 "${release_download_dir}/${asset_name}" | awk '{print $1}')"
-            if [[ "${actual_hash}" != "${expected_hash}" ]]; then
-              echo "::error::downloaded ${asset_name} SHA-256 does not match the locally verified candidate"
-              exit 1
-            fi
-          }
-          assert_downloaded_hash "${dmg_name}" "${EXPECTED_DMG_SHA256}"
-          assert_downloaded_hash "${zip_name}" "${EXPECTED_ZIP_SHA256}"
-          assert_downloaded_hash release-manifest.json "${EXPECTED_MANIFEST_SHA256}"
-          assert_downloaded_hash SHA256SUMS "${EXPECTED_CHECKSUMS_SHA256}"
-
+          download_dir="$(mktemp -d)"
+          gh release download "${RELEASE_TAG}" --dir "${download_dir}"
           (
-            cd "${release_download_dir}"
-            shasum -a 256 -c SHA256SUMS
+            cd "${download_dir}"
+            sha256sum -c SHA256SUMS
           )
-
-          RELEASE_TAG="${RELEASE_TAG}" EXPECTED_COMMIT="${EXPECTED_COMMIT}" \
-            DOWNLOAD_DIR="${release_download_dir}" EXPECTED_DMG="${dmg_name}" EXPECTED_ZIP="${zip_name}" node <<'NODE'
+          RELEASE_TAG="${RELEASE_TAG}" DOWNLOAD_DIR="${download_dir}" node <<'NODE'
           const crypto = require('crypto');
           const fs = require('fs');
           const path = require('path');
-
-          const downloadDir = process.env.DOWNLOAD_DIR;
-          const expectedArtifactNames = [process.env.EXPECTED_DMG, process.env.EXPECTED_ZIP].sort();
-          const manifest = JSON.parse(fs.readFileSync(path.join(downloadDir, 'release-manifest.json'), 'utf8'));
-          const expectedTag = `v${manifest.version}`;
-          if (process.env.RELEASE_TAG !== expectedTag) {
-            throw new Error(`downloaded manifest version ${manifest.version} does not match ${process.env.RELEASE_TAG}`);
-          }
-          if (manifest.git?.commit !== process.env.EXPECTED_COMMIT) {
-            throw new Error(`downloaded manifest commit ${manifest.git?.commit} does not match ${process.env.EXPECTED_COMMIT}`);
-          }
-          if (manifest.git?.trackedDirty !== false) {
-            throw new Error('downloaded manifest reports a dirty tracked worktree');
-          }
-          if (!Array.isArray(manifest.artifacts)) {
-            throw new Error('downloaded manifest has no distributable artifacts');
-          }
-
-          const manifestArtifacts = manifest.artifacts
-            .map((artifact) => {
-              if (
-                artifact.path !== artifact.fileName
-                || artifact.fileName !== path.basename(artifact.fileName)
-                || !/^[a-f0-9]{64}$/i.test(artifact.sha256 ?? '')
-              ) {
-                throw new Error(`downloaded manifest artifact is invalid: ${JSON.stringify(artifact)}`);
-              }
-              return artifact;
-            })
-            .sort((left, right) => left.fileName.localeCompare(right.fileName));
-          const manifestArtifactNames = manifestArtifacts.map((artifact) => artifact.fileName);
-          if (
-            expectedArtifactNames.length !== manifestArtifactNames.length
-            || expectedArtifactNames.some((name, index) => name !== manifestArtifactNames[index])
-          ) {
-            throw new Error(
-              `downloaded manifest artifacts do not match release assets: expected ${expectedArtifactNames.join(', ')}, got ${manifestArtifactNames.join(', ')}`,
-            );
-          }
-
-          for (const artifact of manifestArtifacts) {
-            const artifactPath = path.join(downloadDir, artifact.fileName);
-            const actualSha256 = crypto.createHash('sha256').update(fs.readFileSync(artifactPath)).digest('hex');
-            if (actualSha256 !== artifact.sha256) {
-              throw new Error(`downloaded ${artifact.fileName} SHA-256 does not match release manifest`);
-            }
+          const dir = process.env.DOWNLOAD_DIR;
+          const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'release-manifest.json'), 'utf8'));
+          if (`v${manifest.version}` !== process.env.RELEASE_TAG) throw new Error('downloaded manifest version mismatch');
+          for (const artifact of manifest.artifacts) {
+            const bytes = fs.readFileSync(path.join(dir, artifact.fileName));
+            const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+            if (digest !== artifact.sha256) throw new Error(`downloaded hash mismatch: ${artifact.fileName}`);
           }
           NODE
-
-          downloaded_dmg="${release_download_dir}/${dmg_name}"
-          if ! gatekeeper_status="$(spctl --status 2>&1)"; then
-            echo "${gatekeeper_status}" >&2
-            echo "::error::could not determine whether Gatekeeper assessments are enabled"
-            exit 1
-          fi
-          if grep -qi "disabled" <<<"${gatekeeper_status}"; then
-            echo "::error::Gatekeeper assessments are disabled; downloaded-asset assessment is not release evidence"
-            exit 1
-          fi
-          xcrun stapler validate "${downloaded_dmg}"
-          spctl --assess --type open --verbose=4 "${downloaded_dmg}"
-          hdiutil verify "${downloaded_dmg}"
-          hdiutil attach "${downloaded_dmg}" -readonly -nobrowse -mountpoint "${dmg_mount_dir}" >/dev/null
-          mounted_dmg=1
-
-          mounted_apps=()
-          while IFS= read -r mounted_app; do
-            mounted_apps+=("${mounted_app}")
-          done < <(find "${dmg_mount_dir}" -maxdepth 1 -type d -name '*.app' -print)
-          if [[ ${#mounted_apps[@]} -ne 1 ]]; then
-            printf '%s\n' "${mounted_apps[@]}" >&2
-            echo "::error::downloaded DMG must contain exactly one app bundle"
-            exit 1
-          fi
-          mounted_app="${mounted_apps[0]}"
-
-          codesign --verify --deep --strict --verbose=2 "${mounted_app}"
-          spctl --assess --type execute --verbose=4 "${mounted_app}"
-          xcrun stapler validate "${mounted_app}"
-
-          embedded_java="${mounted_app}/Contents/Resources/backend-jre/jre/bin/java"
-          if [[ ! -x "${embedded_java}" ]]; then
-            echo "::error::downloaded app is missing executable embedded JRE: ${embedded_java}"
-            exit 1
-          fi
-          "${embedded_java}" -version
-
-          if ! hdiutil detach "${dmg_mount_dir}" >/dev/null; then
-            echo "::error::could not safely detach downloaded DMG at ${dmg_mount_dir}"
-            exit 1
-          fi
-          mounted_dmg=0
-          assert_remote_tag_commit
-          assert_draft_release
-          echo "::notice::Downloaded-asset verification does not replace a clean-device GUI smoke test."
+          gh release edit "${RELEASE_TAG}" --draft=false --prerelease

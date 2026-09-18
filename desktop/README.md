@@ -4,7 +4,7 @@ AI Agent 桌面客户端，基于 Electron 构建。**桌面主界面是 Knowled
 
 > Review / Skills / Computer Use 面板、TS CLI 与本地服务属于**可选模块**（Codex 对齐演进线），当前 Beta 包默认不启用 Computer Use；产品主线与模块边界见 [../docs/arch/000-product-line.md](../docs/arch/000-product-line.md)。
 
-> 当前按单机 macOS 使用维护；签名、安装包和部署说明不是日常使用前提。
+> 当前按单机桌面应用维护，发布流水线覆盖 macOS arm64 与 Windows x64；签名、安装包和部署说明不是日常开发使用前提。
 
 ## 本机源代码启动
 
@@ -192,12 +192,23 @@ cd ..
 
 > 缺少任一签名/公证变量时，正式门禁会失败；`build-all.sh --mac` 只生成开发诊断产物。`build-all.sh --release --mac` 是正式门禁的兼容入口。
 
+## 双平台自动发行
+
+推送与组件版本一致的 `v*` tag 后，GitHub Actions 的 `Desktop Release Candidate` 会分别使用 macOS 和 Windows 原生 runner：
+
+- macOS arm64：生成 DMG 与 ZIP；beta 明确标记为未 Developer-ID 签名、未公证，非 beta 强制走正式签名门禁。
+- Windows x64：生成 NSIS EXE，并验证 `app.asar`、后端 JAR、Windows JRE、TS CLI 与 Local Service 均已入包。
+- 汇总阶段：生成统一 `release-manifest.json` 和 `SHA256SUMS`，draft 上传后重新下载复算，通过才发布 prerelease。
+
+Windows 安装包当前没有 Authenticode 代码签名，因此 SmartScreen 可能提示未知发布者；这不会被描述成正式签名发行。
+
 ## 构建产物路径
 
 ```
 desktop/release/                       # 发布或个人 Beta 打包输出；正式候选必须通过 release gate
 ├── AI Agent-<version>-mac-<arch>.dmg
 ├── AI Agent-<version>-mac-<arch>.zip
+├── AI Agent-<version>-win-x64.exe
 ├── release-manifest.json
 └── SHA256SUMS
 

@@ -1,6 +1,6 @@
 # AI Agent Knowledge Desk — 产品与技术架构说明
 
-> 面向简历、项目答辩和技术面试的事实版项目说明。主产品是可独立启动的 macOS Knowledge Desk 桌面应用；仓库中的 CLI、Dev Coach 与云端部署栈属于扩展能力。
+> 面向简历、项目答辩和技术面试的事实版项目说明。主产品是可独立启动的 macOS / Windows Knowledge Desk 桌面应用；仓库中的 CLI、Dev Coach 与云端部署栈属于扩展能力。
 
 ## 1. 一句话定位
 
@@ -29,7 +29,7 @@ flowchart LR
 flowchart TB
     U[用户]
 
-    subgraph Desktop[macOS 桌面应用]
+    subgraph Desktop[macOS / Windows 桌面应用]
         direction TB
         UI[Vue 3 + TypeScript Renderer<br/>Dashboard / Inbox / Library / Search<br/>Detail / Review / Assistant / Settings]
         IPC[Electron Preload + IPC<br/>最小能力暴露与数据脱敏]
@@ -218,7 +218,7 @@ sequenceDiagram
 - 本机模型源配置、连接测试和 Knowledge Assistant
 - 主知识向量索引的本地持久化、重启恢复与损坏快照隔离
 - 非敏感知识库备份与合并恢复
-- 独立 macOS arm64 打包与在线 Beta 发布
+- macOS arm64 DMG/ZIP 与 Windows x64 NSIS 的原生双平台自动打包、校验和在线 Beta 发布
 
 ### 明确边界
 
@@ -236,7 +236,7 @@ sequenceDiagram
 - 发布版本：`v0.1.0-beta.2`
 - 发布提交：`fd5f26d31f961fcf0e2b79022ff9e5438c6f20b1`
 - GitHub Release：<https://github.com/lqq151510/Ai-Agent/releases/tag/v0.1.0-beta.2>
-- 发布资产：macOS arm64 DMG、ZIP、manifest 与 SHA-256 校验清单
+- 发布资产：macOS arm64 DMG、ZIP、manifest 与 SHA-256 校验清单（该历史版本尚无 Windows 资产）
 
 该 tag 和资产只证明发布来源、平台与签名边界；没有对应的不可变测试归档时，不把任何当前测试或覆盖率数字归因给它。
 

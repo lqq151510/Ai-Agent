@@ -4,7 +4,7 @@ AI Agent Knowledge Desk is a local-first desktop knowledge application and a ful
 
 ## 产品主线与模块边界
 
-- 主产品：**AI Agent Knowledge Desk** —— local-first 个人知识工作台，macOS Electron 桌面应用，随包内置 Spring Boot 后端、H2 数据库与 JRE；核心闭环是「收集 → Inbox 整理 → AI 元数据增强 → Library 浏览/搜索 → Detail 回看」。
+- 主产品：**AI Agent Knowledge Desk** —— local-first 个人知识工作台，支持 macOS 与 Windows 的 Electron 桌面应用，随包内置 Spring Boot 后端、H2 数据库与对应平台 JRE；核心闭环是「收集 → Inbox 整理 → AI 元数据增强 → Library 浏览/搜索 → Detail 回看」。
 - 默认交付面只有 Knowledge Desk 桌面闭环：渲染层唯一入口 `desktop/src/renderer-vue/src/App.vue` → `desktop/src/renderer-vue/src/knowledge-desk/KnowledgeDeskApp.vue`。
 - 以下均为**可选模块**，不属于主产品默认交付范围：`ts-cli`、Java Dev Coach、`python-service`、`docker-compose`/`k8s` 服务端栈、Codex 对齐的编码 Agent 能力（Thread/Worktree/PTY/Skills/Computer Use）、`local-service`、legacy `agent-*` 微服务。
 - 各可选模块的状态、是否随桌面包发布、入口文件与风险，以及「文档冲突处置规则」，见 [产品主线与模块边界](docs/arch/000-product-line.md)。
@@ -12,7 +12,7 @@ AI Agent Knowledge Desk is a local-first desktop knowledge application and a ful
 
 ## Personal desktop Beta scope
 
-- The macOS installer bundles the backend JAR and a Java runtime, and starts a local H2 database automatically. Normal desktop use does not require a separate Java, PostgreSQL, or Docker installation.
+- The macOS and Windows installers bundle the backend JAR and a platform-native Java runtime, and start a local H2 database automatically. Normal desktop use does not require a separate Java, PostgreSQL, or Docker installation.
 - Knowledge capture, import, search, tagging, review, backup, and restore work without a model provider.
 - AI 知识整理可使用用户主动配置并通过连接测试的 DeepSeek 官方 API、OpenAI 官方 API 或 OpenAI-compatible 端点；未配置或模型不可用时，基础知识管理保持可用并降级到本地整理能力。
 - API Key 使用加密的模型来源持久化；演示、日志和备份均不得暴露真实密钥。当前桌面设置页聚焦知识整理，不把尚未完成的检索问答或完整多云路由包装为已交付能力。
@@ -112,17 +112,17 @@ APPLE_TEAM_ID=<team-id> \
 ./scripts/release-check-macos.sh
 ```
 
-### macOS Beta candidate workflow
+### Desktop Beta candidate workflow
 
-Personal `-beta.` tags use a locally built, ad-hoc-signed (not Developer-ID-signed or notarized) DMG/ZIP and a manually reviewed GitHub prerelease. The tag must still match `desktop/package.json`, point to a commit reachable from `origin/main`, and be created only after the local release gate and main-branch CI pass.
+推送与 `desktop/package.json` 版本一致、且可从 `origin/main` 到达的 `v*` tag 后，`Desktop Release Candidate` 工作流会在两个原生 runner 上并行构建：macOS arm64 生成 DMG/ZIP，Windows x64 生成 NSIS EXE。两个平台的产物汇总后统一生成 `release-manifest.json` 与 `SHA256SUMS`，先创建 draft，重新下载并复算哈希，全部通过后才发布 prerelease。
 
-`v0.1.0-beta.3` 是已经发布的历史 personal prerelease，但其主 CI 未收口：**tag 时组件版本不一致，且 backend-quality 有两个搜索测试失败**。不要移动该 tag 或替换资产；后续候选必须重新满足版本一致性和 CI 门禁。版本不一致已在后续提交（`9686f46`）对齐，并在 2026-09-08 完成 beta.4 收口：当前 HEAD 上 `pom.xml` / `desktop` / `ts-cli` / `local-service` 均为 `0.1.0-beta.4`（`./scripts/check-release-version.sh` 通过，`desktop/electron-builder.yml` 的 `mac.bundleVersion` 同步为 `4`）；两个搜索测试已在 beta.3 之后的 RAG 提交（`0348f72`，Milvus/Kafka 集成与 RAG 套件，改动 `EmbeddingStoreProvider`）中修复，HEAD 上 `SearchOrchestratorTest` / `SearchStrategyConfigTest` 全绿（captain 已验证）。注：`desktop/src/renderer-vue/package.json` 仍为 `0.0.0`，它是内部 workspace 包、不在发布组件清单内，但属发布收口待确认项（t5）。
+当前候选版本为 `0.1.0-beta.5`，所有发布组件已统一版本，macOS `bundleVersion` 同步为 `5`。历史 `v0.1.0-beta.4` tag 与资产保持不可变；新的双平台安装包使用新 tag 发布，不覆盖旧版。
 
-Non-beta tags enter the `macOS Release Candidate` GitHub Actions job. That formal path requires the GitHub `release` Environment, Developer ID signing credentials, notarization, Gatekeeper validation, checksums, and release-manifest verification before it creates a draft release. Personal Beta convenience does not weaken the formal release gate.
+个人 `-beta.` 的 macOS 包未使用 Developer ID 签名与 Apple 公证；Windows 安装包当前也未做代码签名，首次运行可能出现 Gatekeeper 或 Microsoft Defender SmartScreen 提示。非 beta tag 仍进入 GitHub `release` Environment，并强制执行 Developer ID 签名、公证、Gatekeeper、stapler 与干净源码门禁；Windows 签名是后续独立凭据项，不以普通打包替代。
 
 The packaged beta deliberately excludes legacy developer tooling, including Computer Use, even if `AI_AGENT_ENABLE_LEGACY_DEVTOOLS=1` is supplied at runtime. That capability remains source-checkout-only until its approval, window allowlist, and screenshot privacy controls are production-ready.
 
-See [the macOS beta release checklist](docs/release/macos-beta.md) for local Beta packaging, formal signed-release requirements, tag provenance, review, and rollback steps.
+See [the macOS beta release checklist](docs/release/macos-beta.md) for local Beta packaging, formal signed-release requirements, tag provenance, review, and rollback steps. Windows x64 产物由同一 tag 的 Windows runner 原生构建，不使用 macOS 交叉打包。
 
 To regenerate evidence for existing artifacts without rebuilding:
 

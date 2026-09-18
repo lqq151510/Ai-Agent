@@ -11,7 +11,7 @@
 
     <groupId>com.agent</groupId>
     <artifactId>backend</artifactId>
-        <version>0.1.0-beta.4</version>
+        <version>0.1.0-beta.5</version>
     <name>ai-agent-backend</name>
 
     <properties>
@@ -339,7 +339,7 @@
         <dependency>
             <groupId>com.agent</groupId>
             <artifactId>bug-sentinel-starter</artifactId>
-            <version>0.1.0-beta.4</version>
+            <version>0.1.0-beta.5</version>
         </dependency>
 
     </dependencies>
