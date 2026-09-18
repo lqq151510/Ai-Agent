@@ -244,6 +244,7 @@ export function toSafeLocalKnowledgeImportReason(error: unknown): string {
 
 export class IpcRegistry {
   private desktopAuthTokens: { accessToken: string; refreshToken?: string } | null = null;
+  private desktopAuthInFlight: Promise<string> | null = null;
   private isLegacyEnabled: boolean;
   private readonly localKnowledgeImportBatches = new Map<string, LocalKnowledgeImportBatch>();
 
@@ -1851,43 +1852,58 @@ export class IpcRegistry {
       return this.desktopAuthTokens.accessToken;
     }
 
-    const credentials = this.loadDesktopCredentials();
-    const login = async () => {
-      const response = await fetch(localBackendRequestUrl(this.getBackendBaseUrl(), '/api/v1/auth/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-      });
-      if (!response.ok) {
-        throw new Error(await this.toErrorMessage(response));
-      }
-      const tokens = await response.json() as { accessToken: string; refreshToken?: string };
-      this.desktopAuthTokens = tokens;
-      return tokens.accessToken;
-    };
+    // 并发请求在启动时会同时进入此方法；in-flight 锁确保同一时刻只有一个
+    // login/register 流程，避免多个并发 register 触发后端唯一约束竞态。
+    if (this.desktopAuthInFlight) {
+      return this.desktopAuthInFlight;
+    }
 
-    try {
-      return await login();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes('Invalid credentials')
-        && !message.includes('Invalid email or password')
-        && !message.includes('Request failed (401)')) {
-        throw error;
-      }
-
-      const registerResponse = await fetch(localBackendRequestUrl(this.getBackendBaseUrl(), '/api/v1/auth/register'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-      });
-      if (!registerResponse.ok) {
-        const registerMessage = await this.toErrorMessage(registerResponse);
-        if (!registerMessage.includes('already')) {
-          throw new Error(registerMessage);
+    const credentialAcquire = (async () => {
+      const credentials = this.loadDesktopCredentials();
+      const login = async () => {
+        const response = await fetch(localBackendRequestUrl(this.getBackendBaseUrl(), '/api/v1/auth/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentials),
+        });
+        if (!response.ok) {
+          throw new Error(await this.toErrorMessage(response));
         }
+        const tokens = await response.json() as { accessToken: string; refreshToken?: string };
+        this.desktopAuthTokens = tokens;
+        return tokens.accessToken;
+      };
+
+      try {
+        return await login();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes('Invalid credentials')
+          && !message.includes('Invalid email or password')
+          && !message.includes('Request failed (401)')) {
+          throw error;
+        }
+
+        const registerResponse = await fetch(localBackendRequestUrl(this.getBackendBaseUrl(), '/api/v1/auth/register'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentials),
+        });
+        if (!registerResponse.ok) {
+          const registerMessage = await this.toErrorMessage(registerResponse);
+          if (!registerMessage.includes('already')) {
+            throw new Error(registerMessage);
+          }
+        }
+        return login();
       }
-      return login();
+    })();
+
+    this.desktopAuthInFlight = credentialAcquire;
+    try {
+      return await credentialAcquire;
+    } finally {
+      this.desktopAuthInFlight = null;
     }
   }
 

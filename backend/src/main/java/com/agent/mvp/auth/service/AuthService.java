@@ -15,6 +15,7 @@ import java.util.Date;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -70,9 +71,20 @@ public class AuthService {
         User user = new User();
         user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(password));
-        User saved = userService.createUser(user);
-
-        return toProfileResponse(saved);
+        try {
+            User saved = userService.createUser(user);
+            return toProfileResponse(saved);
+        } catch (DuplicateKeyException e) {
+            // TOCTOU 竞态：并发注册同时通过 existsByEmail 检查，
+            // 其中一个成功插入后其余会触发唯一约束冲突。
+            // 返回已存在用户的 profile，使 register 对并发调用保持幂等。
+            User existing = userService.getUserByEmail(normalizedEmail);
+            if (existing != null) {
+                log.debug("Concurrent register detected for {}; returning existing user", normalizedEmail);
+                return toProfileResponse(existing);
+            }
+            throw e;
+        }
     }
 
     public TokenResponse login(LoginRequest request) {

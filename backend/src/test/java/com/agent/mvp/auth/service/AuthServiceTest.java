@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @ExtendWith(MockitoExtension.class)
@@ -120,6 +121,31 @@ class AuthServiceTest {
 
         assertThat(response.email()).isEqualTo(email);
         assertThat(response.id()).isEqualTo(savedUser.getId());
+    }
+
+    @Test
+    void testRegisterConcurrentInsertReturnsExistingUser() {
+        // TOCTOU 竞态：existsByEmail 返回 false 后，并发请求已插入同一 email，
+        // createUser 抛出 DuplicateKeyException。应回查并返回已有用户的 profile。
+        String email = "race@example.com";
+        String password = "password";
+        String hashedPassword = "hashed-password";
+        User existingUser = new User();
+        existingUser.setId(UUID.randomUUID());
+        existingUser.setEmail(email);
+        existingUser.setPasswordHash(hashedPassword);
+        existingUser.setCreatedAt(Instant.now());
+
+        when(userService.existsByEmail(email)).thenReturn(false);
+        when(passwordEncoder.encode(password)).thenReturn(hashedPassword);
+        when(userService.createUser(any(User.class)))
+                .thenThrow(new DuplicateKeyException("Unique index violation: USERS(EMAIL)"));
+        when(userService.getUserByEmail(email)).thenReturn(existingUser);
+
+        UserProfileResponse response = authService.register(email, password);
+
+        assertThat(response.email()).isEqualTo(email);
+        assertThat(response.id()).isEqualTo(existingUser.getId());
     }
 
     @Test
