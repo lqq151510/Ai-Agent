@@ -1,0 +1,475 @@
+:root {
+  /* ============================================================
+     Global Design Tokens
+     Modern Indigo/Sky & Slate/Zinc design system for desktop app.
+     Tailwind 4 / Vite compatible: reference these via var(--*)
+     or register them in tailwind.config / @theme.
+     ============================================================ */
+
+  /* Layout */
+  --layout-sidebar-w: 256px;
+  --layout-sidebar-collapsed-w: 64px;
+  --layout-context-w: 290px;
+
+  /* Fonts - Apple Human Interface Design System & Modern Chinese Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
+
+  /* Surfaces (backgrounds) - Slate / Zinc Subtle Hierarchy */
+  --surface-page: #f8fafc;
+  --surface-card: #ffffff;
+  --surface-page-alpha-40: rgba(248, 250, 252, 0.4);
+  --surface-page-alpha-78: rgba(248, 250, 252, 0.78);
+  --surface-page-alpha-85: rgba(248, 250, 252, 0.85);
+  --surface-card-alpha-8: rgba(255, 255, 255, 0.08);
+  --surface-card-alpha-90: rgba(255, 255, 255, 0.9);
+  --surface-sidebar-glass: rgba(248, 250, 252, 0.8);
+  --surface-topbar-glass: rgba(255, 255, 255, 0.82);
+  --surface-modal-glass: rgba(255, 255, 255, 0.9);
+  --surface-secondary: #f1f5f9;
+  --surface-tertiary: #e2e8f0;
+  --surface-accent-subtle: rgba(79, 70, 229, 0.04);
+  --surface-hover: rgba(15, 23, 42, 0.04);
+  --surface-active: rgba(15, 23, 42, 0.07);
+  --surface-disabled: #e2e8f0;
+  --surface-backdrop: rgba(248, 250, 252, 0.8);
+  --surface-overlay: rgba(15, 23, 42, 0.4);
+  --surface-inverse: #0f172a;
+  --surface-code: #0f172a;
+  --surface-terminal: #090d16;
+  --surface-terminal-header: #111726;
+
+  /* Text - High contrast, relaxed typography */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  --text-disabled: #cbd5e1;
+  --text-heading: #020617;
+  --text-inverse: #ffffff;
+  --text-on-dark: #f1f5f9;
+  --text-terminal: #94a3b8;
+
+  /* Borders / dividers - Delicate translucent highlights */
+  --border-default: rgba(15, 23, 42, 0.08);
+  --border-strong: rgba(15, 23, 42, 0.14);
+  --border-hover: rgba(79, 70, 229, 0.35);
+  --border-accent: rgba(79, 70, 229, 0.18);
+  --border-error: rgba(239, 68, 68, 0.2);
+  --border-warning: rgba(245, 158, 11, 0.2);
+  --border-success: rgba(16, 185, 129, 0.2);
+  --border-terminal: #1e293b;
+
+  /* Accent (Indigo / Sky Tech Glow) */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-light: #6366f1;
+  --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+
+  --accent-alpha-4: rgba(79, 70, 229, 0.04);
+  --accent-alpha-5: rgba(79, 70, 229, 0.05);
+  --accent-alpha-6: rgba(79, 70, 229, 0.06);
+  --accent-alpha-8: rgba(79, 70, 229, 0.08);
+  --accent-alpha-10: rgba(79, 70, 229, 0.10);
+  --accent-alpha-12: rgba(79, 70, 229, 0.12);
+  --accent-alpha-15: rgba(79, 70, 229, 0.15);
+  --accent-alpha-20: rgba(79, 70, 229, 0.20);
+  --accent-alpha-25: rgba(79, 70, 229, 0.25);
+  --accent-alpha-30: rgba(79, 70, 229, 0.30);
+  --accent-alpha-35: rgba(79, 70, 229, 0.35);
+  --accent-alpha-40: rgba(79, 70, 229, 0.40);
+  --accent-glow: 0 0 16px rgba(99, 102, 241, 0.15);
+
+  /* Status colors - Modern translucent capsule palette */
+  --success: #10b981;
+  --success-alpha-3: rgba(16, 185, 129, 0.03);
+  --success-alpha-8: rgba(16, 185, 129, 0.08);
+  --success-alpha-15: rgba(16, 185, 129, 0.15);
+  --success-alpha-20: rgba(16, 185, 129, 0.20);
+  --success-alpha-40: rgba(16, 185, 129, 0.40);
+
+  --warning: #f59e0b;
+  --warning-alpha-5: rgba(245, 158, 11, 0.05);
+  --warning-alpha-8: rgba(245, 158, 11, 0.08);
+  --warning-alpha-15: rgba(245, 158, 11, 0.15);
+  --warning-alpha-40: rgba(245, 158, 11, 0.40);
+
+  --error: #ef4444;
+  --error-alpha-3: rgba(239, 68, 68, 0.03);
+  --error-alpha-8: rgba(239, 68, 68, 0.08);
+  --error-alpha-15: rgba(239, 68, 68, 0.15);
+  --error-alpha-20: rgba(239, 68, 68, 0.20);
+
+  --info: #4f46e5; /* alias to modern accent */
+
+  /* Misc status (renamed files / skills) */
+  --status-renamed: #a855f7;
+  --status-renamed-alpha-10: rgba(168, 85, 247, 0.10);
+  --status-renamed-alpha-20: rgba(168, 85, 247, 0.20);
+
+  /* Window traffic lights (macOS) */
+  --traffic-close: #ff5f56;
+  --traffic-minimize: #ffbd2e;
+  --traffic-maximize: #27c93f;
+
+  /* Border radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* Modern Ambient Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.04), 0 1px 1px -1px rgba(15, 23, 42, 0.02);
+  --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 32px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+  --shadow-xl: 0 20px 48px -8px rgba(15, 23, 42, 0.16);
+
+  --shadow-accent-sm: 0 2px 8px rgba(79, 70, 229, 0.18);
+  --shadow-accent-md: 0 4px 14px rgba(79, 70, 229, 0.22);
+  --shadow-accent-lg: 0 8px 24px rgba(79, 70, 229, 0.28);
+  --shadow-accent-xl: 0 12px 32px rgba(79, 70, 229, 0.35);
+
+  /* Neutral alpha scale (subtle overlays, hover states) */
+  --black-alpha-015: rgba(0, 0, 0, 0.015);
+  --black-alpha-02: rgba(0, 0, 0, 0.02);
+  --black-alpha-025: rgba(0, 0, 0, 0.025);
+  --black-alpha-03: rgba(0, 0, 0, 0.03);
+  --black-alpha-035: rgba(0, 0, 0, 0.035);
+  --black-alpha-04: rgba(0, 0, 0, 0.04);
+  --black-alpha-045: rgba(0, 0, 0, 0.045);
+  --black-alpha-05: rgba(0, 0, 0, 0.05);
+  --black-alpha-055: rgba(0, 0, 0, 0.055);
+  --black-alpha-065: rgba(0, 0, 0, 0.065);
+  --black-alpha-08: rgba(0, 0, 0, 0.08);
+  --black-alpha-12: rgba(0, 0, 0, 0.12);
+  --black-alpha-15: rgba(0, 0, 0, 0.15);
+  --black-alpha-25: rgba(0, 0, 0, 0.25);
+
+  /* Spacing scale (matches Tailwind default 4px base) */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Typography scale */
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13.5px;
+  --text-md: 14.5px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+
+  /* Legacy aliases (kept for backwards compatibility in existing components) */
+  --color-bg: var(--surface-page);
+  --color-bg-secondary: var(--surface-card);
+  --color-bg-hover: var(--surface-hover);
+  --color-bg-active: var(--surface-active);
+  --color-border: var(--border-default);
+  --color-border-hover: var(--border-hover);
+  --color-text: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
+  --color-text-dim: var(--text-tertiary);
+  --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-hover);
+  --color-accent-gradient: var(--accent-gradient);
+  --color-accent-glow: var(--accent-glow);
+  --color-error: var(--error);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-chip-bg: var(--surface-tertiary);
+
+  /* Z-index scale for overlays */
+  --z-dropdown: 6000;
+  --z-tooltip: 7000;
+  --z-dialog: 8000;
+  --z-toast: 9000;
+}
+
+body {
+  background-color: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* ============================================================
+   Dark Mode Tokens
+   - Follows system `prefers-color-scheme` by default.
+   - Manual override via `html.dark` or `body.dark` class.
+   ============================================================ */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Surfaces - Deep Cool Tech Dark */
+    --surface-page: #090d16;
+    --surface-card: #111726;
+    --surface-page-alpha-40: rgba(9, 13, 22, 0.4);
+    --surface-page-alpha-78: rgba(9, 13, 22, 0.78);
+    --surface-page-alpha-85: rgba(9, 13, 22, 0.85);
+    --surface-card-alpha-8: rgba(17, 23, 38, 0.08);
+    --surface-card-alpha-90: rgba(17, 23, 38, 0.9);
+    --surface-sidebar-glass: rgba(9, 13, 22, 0.82);
+    --surface-topbar-glass: rgba(17, 23, 38, 0.85);
+    --surface-modal-glass: rgba(17, 23, 38, 0.92);
+    --surface-secondary: #0d1322;
+    --surface-tertiary: #182035;
+    --surface-accent-subtle: rgba(99, 102, 241, 0.08);
+    --surface-hover: rgba(255, 255, 255, 0.04);
+    --surface-active: rgba(255, 255, 255, 0.07);
+    --surface-disabled: #222d42;
+    --surface-backdrop: rgba(9, 13, 22, 0.8);
+    --surface-overlay: rgba(0, 0, 0, 0.7);
+    --surface-inverse: #f8fafc;
+    --surface-code: #0b0f19;
+    --surface-terminal: #05070d;
+    --surface-terminal-header: #0d1322;
+
+    /* Text */
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-tertiary: #64748b;
+    --text-disabled: #475569;
+    --text-heading: #ffffff;
+    --text-inverse: #090d16;
+    --text-on-dark: #f1f5f9;
+    --text-terminal: #94a3b8;
+
+    /* Borders */
+    --border-default: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --border-hover: rgba(99, 102, 241, 0.5);
+    --border-accent: rgba(99, 102, 241, 0.22);
+    --border-error: rgba(248, 113, 113, 0.25);
+    --border-warning: rgba(251, 191, 36, 0.25);
+    --border-success: rgba(52, 211, 153, 0.25);
+    --border-terminal: #1e293b;
+
+    /* Accent (Indigo & Sky Neon Glow) */
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --accent-light: #818cf8;
+    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+
+    --accent-alpha-4: rgba(99, 102, 241, 0.04);
+    --accent-alpha-5: rgba(99, 102, 241, 0.05);
+    --accent-alpha-6: rgba(99, 102, 241, 0.06);
+    --accent-alpha-8: rgba(99, 102, 241, 0.08);
+    --accent-alpha-10: rgba(99, 102, 241, 0.10);
+    --accent-alpha-12: rgba(99, 102, 241, 0.12);
+    --accent-alpha-15: rgba(99, 102, 241, 0.15);
+    --accent-alpha-20: rgba(99, 102, 241, 0.20);
+    --accent-alpha-25: rgba(99, 102, 241, 0.25);
+    --accent-alpha-30: rgba(99, 102, 241, 0.30);
+    --accent-alpha-35: rgba(99, 102, 241, 0.35);
+    --accent-alpha-40: rgba(99, 102, 241, 0.40);
+    --accent-glow: 0 0 16px rgba(99, 102, 241, 0.25);
+
+    /* Status */
+    --success: #34d399;
+    --success-alpha-3: rgba(52, 211, 153, 0.03);
+    --success-alpha-8: rgba(52, 211, 153, 0.08);
+    --success-alpha-15: rgba(52, 211, 153, 0.15);
+    --success-alpha-20: rgba(52, 211, 153, 0.20);
+    --success-alpha-40: rgba(52, 211, 153, 0.40);
+
+    --warning: #fbbf24;
+    --warning-alpha-5: rgba(251, 191, 36, 0.05);
+    --warning-alpha-8: rgba(251, 191, 36, 0.08);
+    --warning-alpha-15: rgba(251, 191, 36, 0.15);
+    --warning-alpha-40: rgba(251, 191, 36, 0.40);
+
+    --error: #f87171;
+    --error-alpha-3: rgba(248, 113, 113, 0.03);
+    --error-alpha-8: rgba(248, 113, 113, 0.08);
+    --error-alpha-15: rgba(248, 113, 113, 0.15);
+    --error-alpha-20: rgba(248, 113, 113, 0.20);
+
+    --info: #818cf8;
+
+    /* Misc status */
+    --status-renamed: #c084fc;
+    --status-renamed-alpha-10: rgba(192, 132, 252, 0.10);
+    --status-renamed-alpha-20: rgba(192, 132, 252, 0.20);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.65);
+    --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.8);
+
+    --shadow-accent-sm: 0 2px 10px rgba(99, 102, 241, 0.25);
+    --shadow-accent-md: 0 4px 18px rgba(99, 102, 241, 0.32);
+    --shadow-accent-lg: 0 8px 28px rgba(99, 102, 241, 0.42);
+    --shadow-accent-xl: 0 12px 36px rgba(99, 102, 241, 0.50);
+
+    /* Neutral alpha scale inverted for dark surfaces */
+    --black-alpha-015: rgba(255, 255, 255, 0.015);
+    --black-alpha-02: rgba(255, 255, 255, 0.02);
+    --black-alpha-025: rgba(255, 255, 255, 0.025);
+    --black-alpha-03: rgba(255, 255, 255, 0.03);
+    --black-alpha-035: rgba(255, 255, 255, 0.035);
+    --black-alpha-04: rgba(255, 255, 255, 0.04);
+    --black-alpha-045: rgba(255, 255, 255, 0.045);
+    --black-alpha-05: rgba(255, 255, 255, 0.05);
+    --black-alpha-055: rgba(255, 255, 255, 0.055);
+    --black-alpha-065: rgba(255, 255, 255, 0.065);
+    --black-alpha-08: rgba(255, 255, 255, 0.08);
+    --black-alpha-12: rgba(255, 255, 255, 0.12);
+    --black-alpha-15: rgba(255, 255, 255, 0.15);
+    --black-alpha-25: rgba(255, 255, 255, 0.25);
+  }
+}
+
+html.dark,
+body.dark {
+  /* Surfaces - Deep Cool Tech Dark */
+  --surface-page: #090d16;
+  --surface-card: #111726;
+  --surface-page-alpha-40: rgba(9, 13, 22, 0.4);
+  --surface-page-alpha-78: rgba(9, 13, 22, 0.78);
+  --surface-page-alpha-85: rgba(9, 13, 22, 0.85);
+  --surface-card-alpha-8: rgba(17, 23, 38, 0.08);
+  --surface-card-alpha-90: rgba(17, 23, 38, 0.9);
+  --surface-sidebar-glass: rgba(9, 13, 22, 0.82);
+  --surface-topbar-glass: rgba(17, 23, 38, 0.85);
+  --surface-modal-glass: rgba(17, 23, 38, 0.92);
+  --surface-secondary: #0d1322;
+  --surface-tertiary: #182035;
+  --surface-accent-subtle: rgba(99, 102, 241, 0.08);
+  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-active: rgba(255, 255, 255, 0.07);
+  --surface-disabled: #222d42;
+  --surface-backdrop: rgba(9, 13, 22, 0.8);
+  --surface-overlay: rgba(0, 0, 0, 0.7);
+  --surface-inverse: #f8fafc;
+  --surface-code: #0b0f19;
+  --surface-terminal: #05070d;
+  --surface-terminal-header: #0d1322;
+
+  /* Text */
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-disabled: #475569;
+  --text-heading: #ffffff;
+  --text-inverse: #090d16;
+  --text-on-dark: #f1f5f9;
+  --text-terminal: #94a3b8;
+
+  /* Borders */
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-hover: rgba(99, 102, 241, 0.5);
+  --border-accent: rgba(99, 102, 241, 0.22);
+  --border-error: rgba(248, 113, 113, 0.25);
+  --border-warning: rgba(251, 191, 36, 0.25);
+  --border-success: rgba(52, 211, 153, 0.25);
+  --border-terminal: #1e293b;
+
+  /* Accent (Indigo & Sky Neon Glow) */
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-light: #818cf8;
+  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+
+  --accent-alpha-4: rgba(99, 102, 241, 0.04);
+  --accent-alpha-5: rgba(99, 102, 241, 0.05);
+  --accent-alpha-6: rgba(99, 102, 241, 0.06);
+  --accent-alpha-8: rgba(99, 102, 241, 0.08);
+  --accent-alpha-10: rgba(99, 102, 241, 0.10);
+  --accent-alpha-12: rgba(99, 102, 241, 0.12);
+  --accent-alpha-15: rgba(99, 102, 241, 0.15);
+  --accent-alpha-20: rgba(99, 102, 241, 0.20);
+  --accent-alpha-25: rgba(99, 102, 241, 0.25);
+  --accent-alpha-30: rgba(99, 102, 241, 0.30);
+  --accent-alpha-35: rgba(99, 102, 241, 0.35);
+  --accent-alpha-40: rgba(99, 102, 241, 0.40);
+  --accent-glow: 0 0 16px rgba(99, 102, 241, 0.25);
+
+  /* Status */
+  --success: #34d399;
+  --success-alpha-3: rgba(52, 211, 153, 0.03);
+  --success-alpha-8: rgba(52, 211, 153, 0.08);
+  --success-alpha-15: rgba(52, 211, 153, 0.15);
+  --success-alpha-20: rgba(52, 211, 153, 0.20);
+  --success-alpha-40: rgba(52, 211, 153, 0.40);
+
+  --warning: #fbbf24;
+  --warning-alpha-5: rgba(251, 191, 36, 0.05);
+  --warning-alpha-15: rgba(251, 191, 36, 0.15);
+  --warning-alpha-40: rgba(251, 191, 36, 0.40);
+
+  --error: #f87171;
+  --error-alpha-3: rgba(248, 113, 113, 0.03);
+  --error-alpha-8: rgba(248, 113, 113, 0.08);
+  --error-alpha-15: rgba(248, 113, 113, 0.15);
+  --error-alpha-20: rgba(248, 113, 113, 0.20);
+
+  --info: #818cf8;
+
+  /* Misc status */
+  --status-renamed: #c084fc;
+  --status-renamed-alpha-10: rgba(192, 132, 252, 0.10);
+  --status-renamed-alpha-20: rgba(192, 132, 252, 0.20);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.65);
+  --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.8);
+
+  --shadow-accent-sm: 0 2px 10px rgba(99, 102, 241, 0.25);
+  --shadow-accent-md: 0 4px 18px rgba(99, 102, 241, 0.32);
+  --shadow-accent-lg: 0 8px 28px rgba(99, 102, 241, 0.42);
+  --shadow-accent-xl: 0 12px 36px rgba(99, 102, 241, 0.50);
+
+  /* Neutral alpha scale inverted for dark surfaces */
+  --black-alpha-015: rgba(255, 255, 255, 0.015);
+  --black-alpha-02: rgba(255, 255, 255, 0.02);
+  --black-alpha-025: rgba(255, 255, 255, 0.025);
+  --black-alpha-03: rgba(255, 255, 255, 0.03);
+  --black-alpha-035: rgba(255, 255, 255, 0.035);
+  --black-alpha-04: rgba(255, 255, 255, 0.04);
+  --black-alpha-045: rgba(255, 255, 255, 0.045);
+  --black-alpha-05: rgba(255, 255, 255, 0.05);
+  --black-alpha-055: rgba(255, 255, 255, 0.055);
+  --black-alpha-065: rgba(255, 255, 255, 0.065);
+  --black-alpha-08: rgba(255, 255, 255, 0.08);
+  --black-alpha-12: rgba(255, 255, 255, 0.12);
+  --black-alpha-15: rgba(255, 255, 255, 0.15);
+  --black-alpha-25: rgba(255, 255, 255, 0.25);
+}
+
+/* ============================================================
+   UI Micro Animations
+   ============================================================ */
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ui-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
