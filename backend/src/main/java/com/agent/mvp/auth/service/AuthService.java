@@ -80,7 +80,9 @@ public class AuthService {
             // 返回已存在用户的 profile，使 register 对并发调用保持幂等。
             User existing = userService.getUserByEmail(normalizedEmail);
             if (existing != null) {
-                log.debug("Concurrent register detected for {}; returning existing user", normalizedEmail);
+                log.debug(
+                        "Concurrent register detected for {}; returning existing user",
+                        normalizedEmail);
                 return toProfileResponse(existing);
             }
             throw e;
