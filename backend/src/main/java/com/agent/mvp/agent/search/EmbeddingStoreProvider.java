@@ -51,26 +51,35 @@ public class EmbeddingStoreProvider {
                         .maximumSize(512)
                         .expireAfterWrite(Duration.ofMinutes(15))
                         .build();
-        this.embeddingModel =
-                dev.langchain4j.model.openai.OpenAiEmbeddingModel.builder()
-                        .apiKey(
-                                appProperties.getOpenai().getApiKey() != null
-                                                && !appProperties.getOpenai().getApiKey().isBlank()
-                                        ? appProperties.getOpenai().getApiKey()
-                                        : "demo")
-                        .baseUrl(appProperties.getOpenai().getBaseUrl())
-                        .modelName("text-embedding-3-small")
-                        .dimensions(384)
-                        .timeout(
-                                Duration.ofMillis(
-                                        Math.max(
-                                                1_000,
-                                                appProperties
-                                                        .getModelRuntime()
-                                                        .getReadTimeoutMs())))
-                        .maxRetries(
-                                Math.max(0, appProperties.getModelRuntime().getIdempotentRetries()))
-                        .build();
+        String apiKey = appProperties.getOpenai().getApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            this.embeddingModel =
+                    segments -> {
+                        throw new IllegalStateException(
+                                "Cloud embedding API key is not configured");
+                    };
+        } else {
+            this.embeddingModel =
+                    dev.langchain4j.model.openai.OpenAiEmbeddingModel.builder()
+                            .apiKey(apiKey)
+                            .baseUrl(appProperties.getOpenai().getBaseUrl())
+                            .modelName("text-embedding-3-small")
+                            .dimensions(384)
+                            .timeout(
+                                    Duration.ofMillis(
+                                            Math.max(
+                                                    1_000,
+                                                    appProperties
+                                                            .getModelRuntime()
+                                                            .getReadTimeoutMs())))
+                            .maxRetries(
+                                    Math.max(
+                                            0,
+                                            appProperties
+                                                    .getModelRuntime()
+                                                    .getIdempotentRetries()))
+                            .build();
+        }
     }
 
     @PostConstruct

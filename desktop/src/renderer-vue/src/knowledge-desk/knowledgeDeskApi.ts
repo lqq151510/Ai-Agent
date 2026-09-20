@@ -583,7 +583,7 @@ export const canExportLocalAssistantSession = () => Boolean(
 const requireLocalAssistantBridge = () => {
   const localChat = getElectronApi()?.localChat;
   if (!localChat || !canUseLocalAssistant()) {
-    throw new Error('本机助手只能在桌面端使用。');
+    throw new Error('云端助手只能在桌面端使用。');
   }
   return localChat;
 };
@@ -647,14 +647,14 @@ export const listLocalAssistantSessions = async (
 ): Promise<LocalAssistantSessionPage> => {
   const response = await requireLocalAssistantBridge().listSessions(page);
   if (!isPlainRecord(response) || !Array.isArray(response.sessions)) {
-    throw new Error('本机助手会话列表返回了无效数据。');
+    throw new Error('云端助手会话列表返回了无效数据。');
   }
   const nextPage = response.nextPage;
   if (
     nextPage !== null
     && (typeof nextPage !== 'number' || !Number.isSafeInteger(nextPage) || nextPage < 0)
   ) {
-    throw new Error('本机助手会话列表返回了无效分页信息。');
+    throw new Error('云端助手会话列表返回了无效分页信息。');
   }
   return {
     sessions: response.sessions
@@ -667,7 +667,7 @@ export const listLocalAssistantSessions = async (
 export const listLocalAssistantMessages = async (sessionId: string): Promise<LocalAssistantMessage[]> => {
   const response = await requireLocalAssistantBridge().listMessages(sessionId);
   if (!Array.isArray(response)) {
-    throw new Error('本机助手消息记录返回了无效数据。');
+    throw new Error('云端助手消息记录返回了无效数据。');
   }
   return response
     .map(mapLocalAssistantMessage)
@@ -683,11 +683,11 @@ export const exportLocalAssistantSession = async (
 ): Promise<{ canceled: boolean }> => {
   const bridge = requireLocalAssistantBridge();
   if (!bridge.exportSession) {
-    throw new Error('当前桌面端暂不支持导出本机助手对话。');
+    throw new Error('当前桌面端暂不支持导出云端助手对话。');
   }
   const response = await bridge.exportSession(sessionId);
   if (!isPlainRecord(response) || typeof response.canceled !== 'boolean') {
-    throw new Error('本机助手导出没有返回有效结果。');
+    throw new Error('云端助手导出没有返回有效结果。');
   }
   return { canceled: response.canceled };
 };
@@ -700,12 +700,12 @@ export const sendLocalAssistantMessage = async (payload: {
 }): Promise<SendLocalAssistantMessageResult> => {
   const response = await requireLocalAssistantBridge().send(payload);
   if (!isPlainRecord(response)) {
-    throw new Error('本机助手没有确认消息请求。');
+    throw new Error('云端助手没有确认消息请求。');
   }
   const requestId = localAssistantText(response.requestId, 64);
   const sessionId = localAssistantText(response.sessionId, 64);
   if (!requestId || !sessionId || response.ok !== true) {
-    throw new Error('本机助手没有确认消息请求。');
+    throw new Error('云端助手没有确认消息请求。');
   }
   return {
     requestId,

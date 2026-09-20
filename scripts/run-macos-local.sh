@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AI Agent Knowledge Desk - macOS 极速全栈一键启动脚本 (纯本地零模型依赖模式)
+# AI Agent Knowledge Desk - macOS 极速全栈一键启动脚本 (云端模型模式)
 # 适用平台: macOS (Apple Silicon M 系列 / Intel x86_64)
 # 功能: 智能环境自检 -> 端口释放 -> 后端拉起 (H2+Caffeine) -> 桌面端联动 -> 优雅退出
 # ==============================================================================
@@ -26,7 +26,7 @@ log_err()  { echo -e "${RED}[macOS 闭环]${NC} $1" >&2; }
 
 echo ""
 echo -e "${PURPLE}================================================================${NC}"
-echo -e "${PURPLE}   🤖 AI Agent Knowledge Desk - macOS Local-First 启动器       ${NC}"
+echo -e "${PURPLE}   🤖 AI Agent Knowledge Desk - macOS Cloud-Model 启动器       ${NC}"
 echo -e "${PURPLE}================================================================${NC}"
 echo ""
 
@@ -51,7 +51,7 @@ fi
 NODE_VER=$(node -v)
 log_succ "Node.js 运行时: ${NODE_VER}"
 
-log_succ "已取消本地模型强制依赖，采用纯本地知识引擎 (启发式整理 + 本地持久化索引)！"
+log_succ "仅启用云端模型；未配置有效云端 API Key 时，AI 整理会明确失败，不生成规则标签。"
 
 # 3. 端口检查与释放
 release_port() {
@@ -69,7 +69,7 @@ release_port "${BACKEND_PORT}"
 # 4. 初始化本地数据目录
 mkdir -p "${DATA_DIR}/db" "${DATA_DIR}/logs" "${DATA_DIR}/workspace"
 
-# 5. 配置环境变量 (纯本地桌面 Profile，优先从 .env 读取配置)
+# 5. 配置环境变量 (云端模型桌面 Profile，优先从 .env 读取配置)
 if [[ -f "${ROOT_DIR}/.env" ]]; then
     set -a
     source "${ROOT_DIR}/.env"
@@ -78,9 +78,10 @@ fi
 
 export SPRING_PROFILES_ACTIVE="desktop"
 export SERVER_PORT="${BACKEND_PORT}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.agnes-ai.cn/v1}"
-export OPENAI_MODEL="${OPENAI_MODEL:-agnes-2.5-flash}"
-export OPENAI_API_KEY="${OPENAI_API_KEY:-sk-local-mac-desktop}"
+export AI_REQUIRE_CLOUD_MODEL="${AI_REQUIRE_CLOUD_MODEL:-true}"
+export OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+export OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}"
+export OPENAI_API_KEY="${OPENAI_API_KEY:-}"
 export JWT_SECRET="${JWT_SECRET:-local-desktop-jwt-secret-key-32chars-min-auto}"
 export SECURITY_DB_ENCRYPTION_KEY="${SECURITY_DB_ENCRYPTION_KEY:-local-desktop-db-encryption-key-32chars}"
 
@@ -120,7 +121,7 @@ trap cleanup EXIT
 trap 'cleanup; exit 0' SIGINT SIGTERM
 
 # 6. 确保本地 Starter 模块就绪并启动 Spring Boot 后端
-log_info "正在启动 Spring Boot Desktop 后端 (嵌入式 H2 + 本地向量索引)..."
+log_info "正在启动 Spring Boot Desktop 后端 (嵌入式 H2 + 云端 Embedding + 本地向量索引)..."
 cd "${ROOT_DIR}"
 mvn -pl bug-sentinel-starter install -DskipTests -q
 mvn -pl backend spring-boot:run -Dspring-boot.run.profiles=desktop > "${DATA_DIR}/logs/backend-console.log" 2>&1 &
@@ -198,7 +199,7 @@ echo -e "${GREEN}  🎉 AI Agent Knowledge Desk 已在 macOS 上成功启动！ 
 echo -e "${GREEN}  🌐 后端地址: http://127.0.0.1:${BACKEND_PORT}                      ${NC}"
 echo -e "${GREEN}  🖥️  Vue 3 地址: http://127.0.0.1:${RENDERER_PORT}                       ${NC}"
 echo -e "${GREEN}  💾 本地存储: ${DATA_DIR}                                     ${NC}"
-echo -e "${GREEN}  ✨ 模式: 零外部大模型依赖 (纯本地启发式整理 + 本地索引)        ${NC}"
+echo -e "${GREEN}  ✨ 模式: 仅真实云端模型 (云端整理/Embedding + 本地索引)       ${NC}"
 echo -e "${GREEN}  ⌨️  随时在终端按 Ctrl+C 可一键停止全部服务                     ${NC}"
 echo -e "${GREEN}================================================================${NC}"
 echo ""

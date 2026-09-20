@@ -421,7 +421,7 @@ export function ReplApp({ baseUrl }: ReplAppProps) {
         const provider = args[0] as 'OPENAI' | undefined;
         const model = args[1];
         if (!provider || !model) {
-          pushMessage('error', 'Usage: /model <provider> <modelName>\nExample: /model OPENAI qwen/qwen3.5-9b');
+          pushMessage('error', 'Usage: /model <provider> <modelName>\nExample: /model OPENAI gpt-4o-mini');
           return;
         }
         setAuthState(current => ({ ...current, defaultProvider: provider, defaultModel: model }));

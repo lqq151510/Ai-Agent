@@ -14,7 +14,7 @@ AI Agent Knowledge Desk is a local-first desktop knowledge application and a ful
 
 - The macOS and Windows installers bundle the backend JAR and a platform-native Java runtime, and start a local H2 database automatically. Normal desktop use does not require a separate Java, PostgreSQL, or Docker installation.
 - Knowledge capture, import, search, tagging, review, backup, and restore work without a model provider.
-- AI 知识整理可使用用户主动配置并通过连接测试的 DeepSeek 官方 API、OpenAI 官方 API 或 OpenAI-compatible 端点；未配置或模型不可用时，基础知识管理保持可用并降级到本地整理能力。
+- AI 知识整理只使用用户主动配置并通过连接测试的云端 DeepSeek、OpenAI 或其他公网 OpenAI-compatible 端点；桌面运行模式未配置可用云端模型时，整理会明确失败，不会用规则标签伪装成模型结果。基础知识管理仍可使用，但不宣称 AI 整理已完成。
 - API Key 使用加密的模型来源持久化；演示、日志和备份均不得暴露真实密钥。当前桌面设置页聚焦知识整理，不把尚未完成的检索问答或完整多云路由包装为已交付能力。
 
 Repository components:
@@ -248,7 +248,7 @@ npm run build
 node dist/index.js login --email you@example.com --password your_password --base-url http://localhost:8080
 
 # create session
-node dist/index.js create-session --provider OPENAI --model qwen/qwen3.5-9b
+node dist/index.js create-session --provider OPENAI --model gpt-4o-mini
 
 # sync chat
 node dist/index.js chat --message "总结当前项目结构"

@@ -52,6 +52,9 @@ app:
   workspace-root: ${user.dir}
   default-provider: OPENAI
   default-openai-model: mock-model
+  ai:
+    # Offline tests intentionally use mock model endpoints or explicit heuristic fallback.
+    require-cloud-model: false
   cors:
     allowed-origins: http://localhost:5173
   model-runtime:

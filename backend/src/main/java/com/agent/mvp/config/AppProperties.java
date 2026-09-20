@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AppProperties {
 
     private ModelProviderType defaultProvider = ModelProviderType.OPENAI;
-    private String defaultOpenaiModel = "qwen/qwen3.5-9b";
+    private String defaultOpenaiModel = "gpt-4o-mini";
     private String workspaceRoot = ".";
     private final Openai openai = new Openai();
     private final Cors cors = new Cors();

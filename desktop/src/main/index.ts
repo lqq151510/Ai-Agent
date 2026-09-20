@@ -222,7 +222,6 @@ if (!gotTheLock) {
       ipcRegistry.setupIpc();
       windowManager.createMainWindow();
       trayManager.createTray();
-      windowManager.loadContent();
 
       backendManager.onStatusChange((status) => {
         const win = windowManager.mainWindow;
@@ -249,12 +248,16 @@ if (!gotTheLock) {
         });
       }
 
-      await backendManager.start();
-      await knowledgeSourceManager.initialize();
-
+      // The renderer mounts the Knowledge Desk assistant immediately and
+      // loads its session list on mount. Start/connect the backend before
+      // loading the page so the first IPC request cannot race a closed port.
       windowManager.mainWindow?.webContents.on('did-finish-load', () => {
         windowManager.mainWindow?.webContents.send('backend:status-changed', backendManager.getStatus());
       });
+
+      await backendManager.start();
+      await knowledgeSourceManager.initialize();
+      windowManager.loadContent();
 
     } catch (err) {
       console.error('[desktop] Critical error during app initialization:', err);

@@ -20,7 +20,7 @@
 
 - 主产品：个人使用的 Local-First Knowledge Desk 桌面应用。
 - 主运行时：Electron + React + Spring Boot + H2 + bundled Java 21。
-- AI 接入：用户可配置 DeepSeek 官方 API、OpenAI 官方 API 或 OpenAI-compatible 端点；未配置或不可连接模型时，普通知识管理仍可通过本地降级能力运行。
+- AI 接入：用户可配置并测试 DeepSeek 官方 API、OpenAI 官方 API 或其他公网 OpenAI-compatible 端点；桌面整理不再把本地规则降级伪装成 AI 结果。
 - 发布状态：`v0.1.0-beta.3` GitHub prerelease，macOS arm64；Release 说明声明为 ad-hoc signed，未公证。当前提交的主 CI 未通过，详见 `EVIDENCE.md`。
 - 证据边界：Release 只证明 tag 与公开资产；Release 存在不等于 CI、完整 GUI 回归、下载校验或 Apple 公证已通过。测试和覆盖率必须带执行日期、命令和源码边界；历史 `main@344b740` 质量快照不得归因给 Beta.3。
 - 产品边界：个人作品集 Beta，不宣称已完成企业生产验证。

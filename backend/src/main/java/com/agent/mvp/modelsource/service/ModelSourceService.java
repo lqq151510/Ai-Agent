@@ -1,6 +1,7 @@
 package com.agent.mvp.modelsource.service;
 
 import com.agent.mvp.common.exception.BadGatewayException;
+import com.agent.mvp.common.exception.BadRequestException;
 import com.agent.mvp.common.exception.ConflictException;
 import com.agent.mvp.common.exception.ForbiddenException;
 import com.agent.mvp.common.exception.NotFoundException;
@@ -15,10 +16,13 @@ import com.agent.mvp.modelsource.repo.ModelSourceRepository;
 import com.agent.mvp.settings.entity.UserProfile;
 import com.agent.mvp.settings.service.UserProfileService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +32,9 @@ public class ModelSourceService {
     private final ModelSourceRepository modelSourceRepository;
     private final ModelSourceProbeService probeService;
     private final UserProfileService userProfileService;
+
+    @Value("${app.ai.require-cloud-model:false}")
+    private boolean requireCloudModel;
 
     public ModelSourceService(
             ModelSourceRepository modelSourceRepository,
@@ -55,7 +62,8 @@ public class ModelSourceService {
     public ModelSourceResponse create(UUID userId, CreateModelSourceRequest request) {
         userProfileService.requireUser(userId);
         ensureNameAvailable(userId, request.name(), null);
-        ModelSourceProviderType.from(request.providerType());
+        ModelSourceProviderType providerType = ModelSourceProviderType.from(request.providerType());
+        rejectLocalSourceWhenCloudOnly(providerType);
 
         ModelSource source =
                 ModelSource.builder()
@@ -68,6 +76,7 @@ public class ModelSourceService {
                         .enabled(request.enabled() == null ? true : request.enabled())
                         .isDefault(request.isDefault() == null ? false : request.isDefault())
                         .build();
+        validateCloudSource(source);
         source.onCreate();
 
         if (Boolean.TRUE.equals(source.getIsDefault())) {
@@ -91,7 +100,9 @@ public class ModelSourceService {
             source.setName(request.name().trim());
         }
         if (request.providerType() != null) {
-            source.setProviderType(ModelSourceProviderType.from(request.providerType()).value());
+            ModelSourceProviderType providerType = ModelSourceProviderType.from(request.providerType());
+            rejectLocalSourceWhenCloudOnly(providerType);
+            source.setProviderType(providerType.value());
         }
         if (request.baseUrl() != null) {
             source.setBaseUrl(request.baseUrl().trim());
@@ -105,6 +116,7 @@ public class ModelSourceService {
         if (request.enabled() != null) {
             source.setEnabled(request.enabled());
         }
+        validateCloudSource(source);
         if (Boolean.TRUE.equals(request.isDefault())) {
             clearDefault(userId);
             source.setIsDefault(true);
@@ -186,6 +198,33 @@ public class ModelSourceService {
 
     private void clearDefault(UUID userId) {
         modelSourceRepository.clearDefaultByUserId(userId, Instant.now());
+    }
+
+    private void rejectLocalSourceWhenCloudOnly(ModelSourceProviderType providerType) {
+        if (requireCloudModel && providerType == ModelSourceProviderType.LOCAL_COMPATIBLE) {
+            throw new BadRequestException(
+                    "Desktop cloud-only mode does not accept local model sources");
+        }
+    }
+
+    private void validateCloudSource(ModelSource source) {
+        if (!requireCloudModel) {
+            return;
+        }
+        ModelSourceProviderType providerType =
+                ModelSourceProviderType.from(source.getProviderType());
+        rejectLocalSourceWhenCloudOnly(providerType);
+        try {
+            URI uri = new URI(source.getBaseUrl());
+            if (!"https".equalsIgnoreCase(uri.getScheme())) {
+                throw new BadRequestException("Cloud model URL must use HTTPS");
+            }
+            probeService.validateForUse(source);
+        } catch (URISyntaxException ex) {
+            throw new BadRequestException("Cloud model URL is invalid");
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException(ex.getMessage());
+        }
     }
 
     private void ensureNameAvailable(UUID userId, String name, UUID currentId) {

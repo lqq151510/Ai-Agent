@@ -2179,7 +2179,7 @@ select:focus-visible {
   padding: 15px;
 }
 
-.kd-local-model-form {
+.kd-cloud-model-form {
   display: grid;
   gap: 12px;
   align-content: start;

@@ -36,6 +36,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class ModelSourceServiceTest {
@@ -190,6 +191,50 @@ class ModelSourceServiceTest {
                 assertThrows(BadRequestException.class, () -> service.create(userId, request));
 
         assertEquals("Unsupported providerType: unsupported", exception.getMessage());
+        verify(repository, never()).insert(any(ModelSource.class));
+    }
+
+    @Test
+    void createShouldRejectLocalProviderWhenCloudOnlyModeIsEnabled() {
+        ReflectionTestUtils.setField(service, "requireCloudModel", true);
+        when(repository.selectList(any())).thenReturn(List.of());
+        CreateModelSourceRequest request =
+                new CreateModelSourceRequest(
+                        "local_compatible",
+                        "Local Ollama",
+                        "http://127.0.0.1:11434/v1",
+                        "local-key",
+                        "qwen2.5",
+                        true,
+                        false);
+
+        BadRequestException exception =
+                assertThrows(BadRequestException.class, () -> service.create(userId, request));
+
+        assertEquals(
+                "Desktop cloud-only mode does not accept local model sources",
+                exception.getMessage());
+        verify(repository, never()).insert(any(ModelSource.class));
+    }
+
+    @Test
+    void createShouldRejectNonHttpsCloudUrlWhenCloudOnlyModeIsEnabled() {
+        ReflectionTestUtils.setField(service, "requireCloudModel", true);
+        when(repository.selectList(any())).thenReturn(List.of());
+        CreateModelSourceRequest request =
+                new CreateModelSourceRequest(
+                        "openai",
+                        "HTTP provider",
+                        "http://api.example.test/v1",
+                        "cloud-key",
+                        "gpt-test",
+                        true,
+                        false);
+
+        BadRequestException exception =
+                assertThrows(BadRequestException.class, () -> service.create(userId, request));
+
+        assertEquals("Cloud model URL must use HTTPS", exception.getMessage());
         verify(repository, never()).insert(any(ModelSource.class));
     }
 

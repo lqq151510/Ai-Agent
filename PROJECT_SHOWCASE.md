@@ -4,7 +4,7 @@
 
 ## 1. 一句话定位
 
-AI Agent Knowledge Desk 是一款 Local-First 的个人知识工作台：用户可以导入网页、文件和文本片段，在 Inbox 中整理内容，通过标签、搜索和每日复习重新利用知识；AI 整理与助手能力通过用户自己配置的本机 OpenAI-compatible 模型提供。
+AI Agent Knowledge Desk 是一款 Local-First 的个人知识工作台：用户可以导入网页、文件和文本片段，在 Inbox 中整理内容，通过标签、搜索和每日复习重新利用知识；AI 整理与助手能力只通过用户主动配置并测试通过的云端 OpenAI-compatible 模型提供。
 
 ## 2. 产品闭环
 
@@ -43,8 +43,8 @@ flowchart TB
         JRE[jlink Java 21 Runtime]
     end
 
-    subgraph OptionalAI[用户可选的本机 AI 服务]
-        MODEL[OpenAI-compatible Endpoint<br/>默认 localhost:1234/v1]
+    subgraph CloudAI[用户配置的云端 AI 服务]
+        MODEL[DeepSeek / OpenAI / OpenAI-compatible Endpoint<br/>HTTPS 公网地址]
     end
 
     U --> UI
@@ -62,7 +62,7 @@ flowchart TB
 - Electron Main Process 负责本地文件选择、路径校验、导入桥接和后端进程生命周期，缩小前端被注入时的影响范围。
 - Spring Boot 保持业务规则、鉴权、数据一致性和 API 协议的单一来源。
 - 桌面包内置 JRE 与后端 JAR，普通知识管理不要求用户安装 Java、PostgreSQL 或 Docker。
-- AI 服务保持可替换，模型不可用时不阻塞知识库的基础读写和检索流程。
+- AI 服务保持可替换；云端模型不可用时，知识库基础读写仍可用，但整理任务明确进入失败状态，不生成伪造的 AI 摘要或标签。
 
 ## 4. 分层技术架构
 
@@ -215,14 +215,14 @@ sequenceDiagram
 - Library 浏览、标签、筛选、归档与恢复
 - 全局搜索、详情页、来源信息与摘要
 - 每日复习队列与反馈调度
-- 本机模型源配置、连接测试和 Knowledge Assistant
+- 云端模型源配置、连接测试和 Knowledge Assistant
 - 主知识向量索引的本地持久化、重启恢复与损坏快照隔离
 - 非敏感知识库备份与合并恢复
 - macOS arm64 DMG/ZIP 与 Windows x64 NSIS 的原生双平台自动打包、校验和在线 Beta 发布
 
 ### 明确边界
 
-- AI 功能需要用户自己运行本机 OpenAI-compatible 模型；没有模型时基础知识管理仍可用。
+- AI 功能需要用户配置并通过测试的云端 OpenAI-compatible 模型；没有可用云端模型时基础知识管理仍可用，但整理任务会明确失败，不生成规则标签冒充 AI 结果。
 - 当前 Beta 是个人作品集版本，不宣称已经过企业生产流量验证。
 - Beta.2 为 ad-hoc 签名，不等于 Apple Developer ID 签名或公证。
 - 桌面主路径不依赖 Docker；云端 Compose/Kubernetes 是可选部署形态。
@@ -252,6 +252,6 @@ sequenceDiagram
 
 ## 9. 面试中的推荐表达
 
-> 我做的不是一个单纯的聊天 UI，而是一套可独立启动的个人知识工作台。它用 Electron、Vue 3 和 TypeScript 提供桌面体验，用 Spring Boot 管理知识条目、标签、复习和模型源；桌面包内置 Java 运行时和 H2，所以不需要用户另装 Java、数据库或 Docker。AI 是可选增强能力，通过本机 OpenAI-compatible 服务接入。项目里我重点解决了 Electron 文件边界、多用户 RAG 隔离、桌面独立启动和可验证发布四个工程问题。
+> 我做的不是一个单纯的聊天 UI，而是一套可独立启动的个人知识工作台。它用 Electron、Vue 3 和 TypeScript 提供桌面体验，用 Spring Boot 管理知识条目、标签、复习和模型源；桌面包内置 Java 运行时和 H2，所以不需要用户另装 Java、数据库或 Docker。AI 是可选增强能力，通过用户配置并测试通过的云端 OpenAI-compatible 服务接入。项目里我重点解决了 Electron 文件边界、多用户 RAG 隔离、桌面独立启动和可验证发布四个工程问题。
 
 面试话术、追问与演示流程见 [`RESUME_PROJECT_GUIDE.md`](RESUME_PROJECT_GUIDE.md)。

@@ -61,8 +61,8 @@ const props = withDefaults(defineProps<LocalAssistantPageProps>(), {
 const bridgeAvailable = canUseLocalAssistant()
 const exportAvailable = canExportLocalAssistantSession()
 
-const isUsableLocalModel = (provider: ModelProvider) => (
-  provider.providerType === 'local_compatible'
+const isUsableCloudModel = (provider: ModelProvider) => (
+  provider.providerType !== 'local_compatible'
   && provider.enabled
   && provider.lastCheckStatus === 'ok'
   && provider.model.trim().length > 0
@@ -114,7 +114,7 @@ const pendingMessageIdsRef = ref<Pick<ActiveStream, 'userMessageId' | 'assistant
 const messageLoadRequestRef = ref(0)
 const appliedDraftSeedRef = ref<number | null>(null)
 
-const availableModels = computed(() => props.modelProviders.filter(isUsableLocalModel))
+const availableModels = computed(() => props.modelProviders.filter(isUsableCloudModel))
 const resolvedModelSourceId = computed(() => (
   availableModels.value.some((provider) => provider.id === selectedModelSourceId.value)
     ? selectedModelSourceId.value
@@ -242,7 +242,7 @@ const sendMessage = async () => {
   if (!message || isSending.value) return
   const model = selectedModel.value
   if (!model) {
-    error.value = '请先在个人中心测试并选择一个本机模型。'
+    error.value = '请先在个人中心测试并选择一个云端模型。'
     return
   }
 
@@ -354,7 +354,7 @@ const handleStreamEvent = (event: LocalAssistantStreamEvent) => {
       message.id === activeStream.assistantMessageId
         ? {
           ...message,
-          content: event.reply || message.content || '本机模型没有返回文本。',
+          content: event.reply || message.content || '云端模型没有返回文本。',
           pending: false,
         }
         : message
@@ -368,7 +368,7 @@ const handleStreamEvent = (event: LocalAssistantStreamEvent) => {
   }
 
   // error case (event.type === 'error')
-  error.value = event.message || '本机模型暂时无法响应。'
+  error.value = event.message || '云端模型暂时无法响应。'
   messages.value = messages.value.filter((message) => (
     message.id !== activeStream.assistantMessageId || message.content.trim().length > 0
   ))
@@ -443,30 +443,30 @@ onUnmounted(() => {
   <div class="kd-assistant-page">
     <EmptyBlock
       v-if="!bridgeAvailable"
-      title="本机助手仅在桌面端可用"
-      description="浏览器预览不会连接模型或伪造本机对话。请从桌面端启动知识工作台。"
+      title="云端助手仅在桌面端可用"
+      description="浏览器预览不会连接模型或伪造云端对话。请从桌面端启动知识工作台。"
       :icon="MessageCircle"
       :action="{ label: '打开个人中心', onClick: onOpenModelSettings }"
     />
     <EmptyBlock
       v-else-if="availableModels.length === 0"
-      title="还没有可用的本机模型"
-      description="先在个人中心添加并测试本机兼容模型。助手只会使用已保存且测试通过的模型配置。"
+      title="还没有可用的云端模型"
+      description="先在个人中心添加并测试云端模型。助手只会使用已保存且测试通过的模型配置。"
       :icon="Settings2"
-      :action="{ label: '配置本机模型', onClick: onOpenModelSettings }"
+      :action="{ label: '配置云端模型', onClick: onOpenModelSettings }"
     />
     <template v-else>
       <header class="kd-assistant-hero">
         <div>
-          <p>FOCUS ROOM / LOCAL MODEL</p>
+          <p>FOCUS ROOM / CLOUD MODEL</p>
           <h2>让当前的线索，在不中断思考的地方继续。</h2>
-          <span><ShieldCheck :size="14" /> 仅使用已保存的本机模型；不读取文件、不执行命令。</span>
+          <span><ShieldCheck :size="14" /> 仅使用已保存且通过测试的云端模型；不读取文件、不执行命令。</span>
         </div>
         <div class="kd-assistant-hero-actions">
           <label class="kd-assistant-model-select">
             <span>当前模型</span>
             <select
-              aria-label="选择本机模型"
+              aria-label="选择云端模型"
               :value="resolvedModelSourceId"
               @change="onSelectModel"
             >
@@ -480,7 +480,7 @@ onUnmounted(() => {
       </header>
 
       <div class="kd-assistant-layout">
-        <aside class="kd-assistant-sessions" aria-label="本机助手对话列表">
+        <aside class="kd-assistant-sessions" aria-label="云端助手对话列表">
           <div class="kd-assistant-sessions-header">
             <div>
               <span>对话记录</span>
@@ -496,7 +496,7 @@ onUnmounted(() => {
           <div class="kd-assistant-session-list">
             <div v-if="isLoadingSessions" class="kd-assistant-loading"><Loader2 class="kd-spin" :size="17" /> 正在读取…</div>
             <p v-else-if="!isLoadingSessions && sessions.length === 0" class="kd-assistant-empty-list">
-              {{ nextSessionPage === null ? '第一条消息会自动保存成新对话。' : '最近记录中还没有本机助手对话，可继续加载更早记录。' }}
+              {{ nextSessionPage === null ? '第一条消息会自动保存成新对话。' : '最近记录中还没有云端助手对话，可继续加载更早记录。' }}
             </p>
             <div
               v-for="session in sessions"
@@ -531,7 +531,7 @@ onUnmounted(() => {
           </div>
         </aside>
 
-        <section class="kd-assistant-conversation" aria-label="本机助手对话">
+        <section class="kd-assistant-conversation" aria-label="云端助手对话">
           <header class="kd-assistant-conversation-header">
             <div>
               <Bot :size="18" />
@@ -586,7 +586,7 @@ onUnmounted(() => {
                   </template>
                   <template v-else>
                     <Bot :size="12" />
-                    <span>本机助手</span>
+                    <span>云端助手</span>
                   </template>
                 </span>
               </div>
@@ -619,7 +619,7 @@ onUnmounted(() => {
             <div class="kd-assistant-composer-box">
               <textarea
                 v-model="draft"
-                aria-label="向本机助手发送消息"
+                aria-label="向云端助手发送消息"
                 :disabled="isSending"
                 maxlength="8000"
                 placeholder="写下一个问题、想法，或需要整理的内容…"

@@ -105,7 +105,7 @@ import './knowledge-desk.css'
 
 const pages: PageNavItem[] = [
   { id: 'dashboard', label: '工作台', icon: LayoutDashboard },
-  { id: 'assistant', label: '本机助手', icon: MessageCircle },
+  { id: 'assistant', label: '云端助手', icon: MessageCircle },
   { id: 'inbox', label: '收集箱', icon: Inbox },
   { id: 'library', label: '知识库', icon: BookOpen },
   { id: 'review', label: '每日回顾', icon: Clock3 },
@@ -513,14 +513,14 @@ async function handleItemUpdate(item: KnowledgeItem, draft: UpdateKnowledgeItemD
   showNotice('知识条目已更新。')
 }
 
-async function handleCreateLocalModel(
+async function handleCreateCloudModel(
   draft: Pick<ImportModelSourceDraft, 'name' | 'baseUrl' | 'defaultModel' | 'apiKey'>,
 ) {
   try {
     const source = await createModelSource({
       ...draft,
       providerType: inferModelSourceProviderType(draft.baseUrl),
-      apiKey: draft.apiKey.trim() || 'local',
+      apiKey: draft.apiKey.trim(),
       enabled: true,
       isDefault: false,
     })
@@ -543,7 +543,7 @@ async function handleTestModel(provider: ModelProvider) {
   try {
     const result = await testModelSource(provider.id)
     await refreshSnapshot()
-    const message = result.message || `${provider.provider} 可以用于本机整理。`
+    const message = result.message || `${provider.provider} 可以用于云端整理。`
     showNotice(message)
     return message
   } catch (error) {
@@ -568,6 +568,11 @@ async function handleDeleteModel(provider: ModelProvider) {
 }
 
 async function handleUseForOrganization(provider: ModelProvider) {
+  if (provider.providerType === 'local_compatible') {
+    const error = new Error('当前版本只支持云端模型，不能选择本机模型。')
+    showNotice(error.message, 'error')
+    throw error
+  }
   if (provider.lastCheckStatus !== 'ok') {
     const error = new Error('请先通过模型连通性测试，再将它用于知识整理。')
     showNotice(error.message, 'error')
@@ -964,7 +969,7 @@ onUnmounted(() => {
         :managed-source-folders="managedSourceFolders"
         :snapshot="snapshot"
         :on-add-managed-source-folder="handleAddManagedSourceFolder"
-        :on-create-local-model="handleCreateLocalModel"
+        :on-create-cloud-model="handleCreateCloudModel"
         :on-delete-model="handleDeleteModel"
         :on-export-backup="handleExportBackup"
         :on-import-backup="handleImportBackup"
@@ -1009,7 +1014,7 @@ onUnmounted(() => {
 
           <PageErrorBoundary
             v-if="activePage === 'assistant'"
-            label="本机助手"
+            label="云端助手"
             :on-reset="() => goToPage('assistant')"
           >
             <LocalAssistantPage

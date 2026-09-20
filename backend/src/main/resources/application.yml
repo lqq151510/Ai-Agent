@@ -58,7 +58,7 @@ security:
 app:
   workspace-root: ${WORKSPACE_ROOT:.}
   default-provider: ${MODEL_PROVIDER:VERTEXAI}
-  default-openai-model: ${OPENAI_MODEL:deepseek/deepseek-chat}
+  default-openai-model: ${OPENAI_MODEL:gpt-4o-mini}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   model-runtime:
@@ -78,8 +78,8 @@ app:
     model-probe-timeout-ms: ${MODEL_PROBE_TIMEOUT_MS:3000}
     model-probe-retries: ${MODEL_PROBE_RETRIES:1}
   openai:
-    base-url: ${OPENAI_BASE_URL:http://localhost:1234/v1}
-    api-key: ${OPENAI_API_KEY:sk-placeholder}
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    api-key: ${OPENAI_API_KEY:}
   vertexai:
     project-id: ${VERTEX_AI_PROJECT_ID:}
     location: ${VERTEX_AI_LOCATION:us-central1}

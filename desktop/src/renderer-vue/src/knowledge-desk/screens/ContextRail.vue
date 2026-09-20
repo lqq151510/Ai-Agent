@@ -9,9 +9,9 @@ import { ContextBlock } from '../shared'
 const props = defineProps<{ activePage: MainPage; selectedItem?: KnowledgeItem; snapshot: KnowledgeDeskSnapshot }>()
 const storagePercent = computed(() => toPercent(props.snapshot.storage.readyItems, Math.max(props.snapshot.storage.totalItems, 1)))
 const activeModel = computed(() => props.snapshot.modelProviders.find((provider) => provider.isDefault && provider.enabled)
-  ?? props.snapshot.modelProviders.find((provider) => provider.state === 'connected' || provider.state === 'local')
-  ?? props.snapshot.modelProviders[0])
-const modelOnline = computed(() => Boolean(activeModel.value && ['connected', 'local'].includes(activeModel.value.state)))
+  ?? props.snapshot.modelProviders.find((provider) => provider.providerType !== 'local_compatible' && provider.state === 'connected')
+  ?? props.snapshot.modelProviders.find((provider) => provider.providerType !== 'local_compatible'))
+const modelOnline = computed(() => Boolean(activeModel.value && activeModel.value.providerType !== 'local_compatible' && activeModel.value.state === 'connected'))
 </script>
 
 <template>
@@ -37,9 +37,9 @@ const modelOnline = computed(() => Boolean(activeModel.value && ['connected', 'l
         <div class="kd-asset-meter"><span :style="{ width: `${storagePercent}%` }" /></div>
         <p>{{ formatCount(snapshot.storage.readyItems) }} / {{ formatCount(snapshot.storage.totalItems) }} 条已进入可检索索引。</p>
       </ContextBlock>
-      <ContextBlock title="本机推理与索引状态" :icon="Cpu">
+      <ContextBlock title="云端模型与索引状态" :icon="Cpu">
         <div class="kd-engine-status-list">
-          <div class="kd-engine-status-item"><span :class="['kd-engine-status-indicator', modelOnline ? 'kd-engine-status-indicator--active' : 'kd-engine-status-indicator--idle']" /><div class="kd-engine-status-info"><span class="kd-engine-status-label">本地推理引擎</span><span class="kd-engine-status-value">{{ activeModel?.model || activeModel?.provider || '本地模型未配置' }} · {{ modelOnline ? '在线' : '离线待连' }}</span></div></div>
+          <div class="kd-engine-status-item"><span :class="['kd-engine-status-indicator', modelOnline ? 'kd-engine-status-indicator--active' : 'kd-engine-status-indicator--idle']" /><div class="kd-engine-status-info"><span class="kd-engine-status-label">云端推理模型</span><span class="kd-engine-status-value">{{ activeModel?.model || activeModel?.provider || '云端模型未配置' }} · {{ modelOnline ? '在线' : '待连接' }}</span></div></div>
           <div class="kd-engine-status-item"><span class="kd-engine-status-indicator kd-engine-status-indicator--active" /><div class="kd-engine-status-info"><span class="kd-engine-status-label">向量检索索引</span><span class="kd-engine-status-value">{{ formatCount(snapshot.storage.readyItems) }} 条嵌入向量就绪</span></div></div>
         </div>
       </ContextBlock>

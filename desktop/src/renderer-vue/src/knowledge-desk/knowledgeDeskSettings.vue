@@ -3,7 +3,7 @@ import type { Component } from 'vue'
 import type { KnowledgeDeskBackup, KnowledgeDeskSnapshot, ManagedSourceFolder, ModelProvider } from './knowledgeDeskApi'
 import type { SettingsTab } from './knowledgeDeskTypes'
 
-export type LocalModelDraft = {
+export type CloudModelDraft = {
   name: string
   baseUrl: string
   defaultModel: string
@@ -17,7 +17,7 @@ export interface SettingsPageProps {
   managedSourceFolders: ManagedSourceFolder[]
   onTabChange: (tab: SettingsTab) => void
   snapshot: KnowledgeDeskSnapshot
-  onCreateLocalModel: (draft: LocalModelDraft) => Promise<void>
+  onCreateCloudModel: (draft: CloudModelDraft) => Promise<void>
   onDeleteModel: (provider: ModelProvider) => Promise<void>
   onExportBackup: () => Promise<boolean>
   onImportBackup: (backup: KnowledgeDeskBackup) => Promise<void>
@@ -31,10 +31,10 @@ export interface SettingsPageProps {
   onSetManagedSourceFolderEnabled: (folderId: string, enabled: boolean) => Promise<void>
 }
 
-const initialLocalModelDraft: LocalModelDraft = {
-  name: '本机聊天模型',
-  baseUrl: 'http://127.0.0.1:11434/v1',
-  defaultModel: '',
+const initialCloudModelDraft: CloudModelDraft = {
+  name: '云端模型',
+  baseUrl: 'https://api.deepseek.com/v1',
+  defaultModel: 'deepseek-flash',
   apiKey: '',
 }
 </script>
@@ -69,7 +69,7 @@ import { parseKnowledgeDeskBackup } from './knowledgeDeskApi'
 const props = defineProps<SettingsPageProps>()
 
 const snapshot = computed(() => props.snapshot)
-const providers = computed(() => props.snapshot.modelProviders)
+const providers = computed(() => props.snapshot.modelProviders.filter((provider) => provider.providerType !== 'local_compatible'))
 const profile = computed(() => props.snapshot.profile)
 const folders = computed(() => props.managedSourceFolders)
 
@@ -86,7 +86,7 @@ const backupAction = ref<'export' | 'import' | null>(null)
 const backupMessage = ref<string | null>(null)
 const backupError = ref<string | null>(null)
 
-const draft = ref<LocalModelDraft>({ ...initialLocalModelDraft })
+const draft = ref<CloudModelDraft>({ ...initialCloudModelDraft })
 const modelBusyAction = ref<string | null>(null)
 const formError = ref<string | null>(null)
 const modelActionMessage = ref<string | null>(null)
@@ -110,7 +110,7 @@ const defaultModel = computed(() => {
     ?? verified[0]
   return organization
     ? `${organization.provider} / ${organization.model}`
-    : '未配置模型 (使用本地启发式整理)'
+    : '未配置云端模型 (无法进行 AI 整理)'
 })
 
 function isVerifiedProvider(provider: ModelProvider) {
@@ -141,8 +141,8 @@ function isFolderBusy(folder: ManagedSourceFolder) {
   return integrationBusyAction.value?.startsWith(`folder:${folder.id}`) ?? false
 }
 
-function applyDraftPreset(preset: Partial<LocalModelDraft>) {
-  draft.value = { ...initialLocalModelDraft, ...preset }
+function applyDraftPreset(preset: Partial<CloudModelDraft>) {
+  draft.value = { ...initialCloudModelDraft, ...preset }
 }
 
 async function exportBackup() {
@@ -201,9 +201,20 @@ async function importBrowserBackup(event: Event) {
   }
 }
 
-async function submitLocalModel() {
-  if (!draft.value.name.trim() || !draft.value.baseUrl.trim() || !draft.value.defaultModel.trim()) {
-    formError.value = '请填写名称、回环接口地址和聊天模型名。'
+async function submitCloudModel() {
+  if (!draft.value.name.trim() || !draft.value.baseUrl.trim() || !draft.value.defaultModel.trim() || !draft.value.apiKey.trim()) {
+    formError.value = '请填写云端模型名称、HTTPS Base URL、模型名和 API Key。'
+    return
+  }
+  try {
+    const url = new URL(draft.value.baseUrl.trim())
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+    if (url.protocol !== 'https:' || host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+      formError.value = '云端模型必须使用 HTTPS 公网地址，不能填写本机回环地址。'
+      return
+    }
+  } catch {
+    formError.value = '请输入有效的云端 HTTPS Base URL。'
     return
   }
 
@@ -211,8 +222,8 @@ async function submitLocalModel() {
   formError.value = null
   modelActionMessage.value = null
   try {
-    await props.onCreateLocalModel(draft.value)
-    draft.value = { ...draft.value, defaultModel: '', apiKey: '' }
+    await props.onCreateCloudModel(draft.value)
+    draft.value = { ...initialCloudModelDraft, name: draft.value.name, baseUrl: draft.value.baseUrl, defaultModel: draft.value.defaultModel, apiKey: '' }
     modelActionMessage.value = '模型已通过测试，并已设为知识整理模型。'
   } catch (error) {
     formError.value = error instanceof Error ? error.message : String(error)
@@ -327,7 +338,7 @@ function sourceFolderLastScan(value?: string | null) {
         <section class="kd-backup-card" aria-labelledby="knowledge-desk-backup-title">
           <div>
             <h3 id="knowledge-desk-backup-title">本机数据备份</h3>
-            <p>导出只包含知识条目、标签和非敏感偏好；不会导出 API Key、登录信息或模型源。导入只合并新增资料，不删除或覆盖现有内容，目标机器需要重新配置本机模型。</p>
+            <p>导出只包含知识条目、标签和非敏感偏好；不会导出 API Key、登录信息或模型源。导入只合并新增资料，不删除或覆盖现有内容，目标机器需要重新配置云端模型。</p>
           </div>
           <div class="kd-settings-actions kd-backup-actions">
             <button :disabled="backupAction !== null" type="button" @click="exportBackup">
@@ -348,7 +359,7 @@ function sourceFolderLastScan(value?: string | null) {
       </section>
 
       <section v-if="activeTab === 'models'" class="kd-stack">
-        <SettingsHeader title="模型 API 配置" description="支持接入云端大模型（DeepSeek、OpenAI）及本机大模型，API Key 将加密安全存储。" />
+        <SettingsHeader title="云端模型 API 配置" description="仅支持接入云端大模型（DeepSeek、OpenAI），API Key 将加密安全存储。" />
         <div class="kd-model-grid">
           <article v-for="provider in providers" :key="provider.id" class="kd-model-card">
             <div class="kd-model-card-head">
@@ -390,20 +401,17 @@ function sourceFolderLastScan(value?: string | null) {
               </button>
             </div>
           </article>
-          <form class="kd-model-card kd-local-model-form" @submit.prevent="submitLocalModel">
+          <form class="kd-model-card kd-cloud-model-form" @submit.prevent="submitCloudModel">
             <div class="kd-model-card-head">
               <strong>接入大模型 API</strong>
               <Plus :size="17" />
             </div>
             <div style="display: flex; gap: 6px; margin-bottom: 8px">
-              <button type="button" class="kd-btn-subtle" style="font-size: 11px; padding: 2px 8px" @click="applyDraftPreset({ name: 'DeepSeek-V3 官方', baseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat' })">
+              <button type="button" class="kd-btn-subtle" style="font-size: 11px; padding: 2px 8px" @click="applyDraftPreset({ name: 'DeepSeek 官方', baseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-flash' })">
                 DeepSeek
               </button>
               <button type="button" class="kd-btn-subtle" style="font-size: 11px; padding: 2px 8px" @click="applyDraftPreset({ name: 'OpenAI 官方', baseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4o-mini' })">
                 OpenAI
-              </button>
-              <button type="button" class="kd-btn-subtle" style="font-size: 11px; padding: 2px 8px" @click="applyDraftPreset({ name: '本机 Ollama', baseUrl: 'http://127.0.0.1:11434/v1', defaultModel: 'qwen2.5:latest' })">
-                本机 Ollama
               </button>
             </div>
             <label class="kd-field">
@@ -411,15 +419,15 @@ function sourceFolderLastScan(value?: string | null) {
               <input v-model="draft.name" />
             </label>
             <label class="kd-field">
-              <span>API 接口地址 (Base URL)</span>
+              <span>云端 API 接口地址 (Base URL)</span>
               <input v-model="draft.baseUrl" placeholder="例如 https://api.deepseek.com/v1" />
             </label>
             <label class="kd-field">
               <span>模型名称 (Model Name)</span>
-              <input v-model="draft.defaultModel" placeholder="例如 deepseek-chat 或 gpt-4o-mini" />
+              <input v-model="draft.defaultModel" placeholder="例如 deepseek-flash 或 gpt-4o-mini" />
             </label>
             <label class="kd-field">
-              <span>API Key (密钥将安全加密入库)</span>
+              <span>云端 API Key (密钥将安全加密入库)</span>
               <input v-model="draft.apiKey" type="password" placeholder="sk-••••••••••••••••" />
             </label>
             <div v-if="formError" class="kd-form-error">{{ formError }}</div>
@@ -435,18 +443,18 @@ function sourceFolderLastScan(value?: string | null) {
             v-if="providers.length === 0"
             :icon="KeyRound"
             title="尚未配置大模型 API"
-            description="填写云端 DeepSeek / OpenAI 或本机 OpenAI-compatible 服务后，即可用于知识库智能整理与问答。"
+            description="填写并测试云端 DeepSeek / OpenAI 配置后，才能进行真实的知识整理与问答。"
           />
         </div>
         <p v-if="modelActionMessage" class="kd-text-muted">{{ modelActionMessage }}</p>
       </section>
 
       <section v-if="activeTab === 'ai'" class="kd-stack">
-        <SettingsHeader title="AI 整理偏好" description="摘要和标签由已配置的云端 (DeepSeek / OpenAI) 或本机大模型生成；未配置时使用本地启发式引擎。" />
+        <SettingsHeader title="AI 整理偏好" description="摘要和标签只由已通过连通性测试的云端 DeepSeek / OpenAI 模型生成。" />
         <section class="kd-preference-list">
           <PreferenceRow label="知识整理模型" :value="defaultModel" />
           <PreferenceRow label="摘要和标签" value="大模型一次请求生成" />
-          <PreferenceRow label="模型失败回退" value="本地规则整理" />
+          <PreferenceRow label="模型失败处理" value="标记整理失败，不生成规则标签" />
         </section>
         <section class="kd-settings-split">
           <Panel title="响应偏好" :icon="Sparkles">
@@ -464,7 +472,7 @@ function sourceFolderLastScan(value?: string | null) {
         <section class="kd-preference-list">
           <PreferenceRow label="当前偏好" :value="profile.privacyMode === 'cloud_first' ? '云端优先' : '本地优先'" />
           <PreferenceRow label="模型调用边界" value="仅向用户主动配置并测试通过的 API 发起请求" />
-          <PreferenceRow label="模型失败处理" value="不上传正文，回退本地规则" />
+          <PreferenceRow label="模型失败处理" value="标记整理失败，不生成规则标签" />
         </section>
         <section class="kd-danger-zone">
           <AlertTriangle :size="18" />

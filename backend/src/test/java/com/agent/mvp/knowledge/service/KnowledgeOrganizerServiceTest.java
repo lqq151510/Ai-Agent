@@ -2,6 +2,7 @@ package com.agent.mvp.knowledge.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class KnowledgeOrganizerServiceTest {
 
@@ -47,6 +49,27 @@ class KnowledgeOrganizerServiceTest {
         assertTrue(result.summary().contains("Spring AI"));
         assertTrue(result.tags().contains("snippet"));
         assertFalse(result.tags().isEmpty());
+    }
+
+    @Test
+    void strictCloudModeRejectsHeuristicOrganizationWhenNoCloudSourceIsConfigured() {
+        KnowledgeOrganizerService service = new KnowledgeOrganizerService();
+        ReflectionTestUtils.setField(service, "requireCloudModel", true);
+
+        IllegalStateException error =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                service.organize(
+                                        KnowledgeItem.builder()
+                                                .sourceType("snippet")
+                                                .title("Cloud-only note")
+                                                .rawContent("This must not be tagged by local rules.")
+                                                .build()));
+
+        assertEquals(
+                "A verified cloud model source is required before organizing knowledge",
+                error.getMessage());
     }
 
     @Test

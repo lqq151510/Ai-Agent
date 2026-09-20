@@ -24,6 +24,7 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -47,8 +48,15 @@ public class KnowledgeOrganizerService {
     private final ObjectMapper objectMapper;
 
     /**
+     * Desktop runtime is cloud-only. Test profiles keep this disabled so deterministic offline
+     * tests can still exercise the explicit heuristic fallback contract.
+     */
+    @Value("${app.ai.require-cloud-model:false}")
+    private boolean requireCloudModel;
+
+    /**
      * Kept for existing lightweight unit tests. Production uses the explicitly autowired
-     * constructor below and never falls through to a cloud model.
+     * constructor below; the desktop profile enforces a verified cloud model at runtime.
      */
     public KnowledgeOrganizerService() {
         this(null, null, null, null, new ObjectMapper());
@@ -89,8 +97,15 @@ public class KnowledgeOrganizerService {
                         countWords(cleaned),
                         strategy);
             }
+            if (requireCloudModel) {
+                throw new IllegalStateException(
+                        "A verified cloud model source is required before organizing knowledge");
+            }
             return organizeHeuristically(item, cleaned, "heuristic");
         } catch (RuntimeException ex) {
+            if (requireCloudModel) {
+                throw ex;
+            }
             return organizeHeuristically(item, cleaned, "heuristic_fallback");
         }
     }
@@ -128,6 +143,9 @@ public class KnowledgeOrganizerService {
         if (source == null
                 || !userId.equals(source.getUserId())
                 || !Boolean.TRUE.equals(source.getEnabled())
+                || (requireCloudModel
+                        && ModelSourceProviderType.LOCAL_COMPATIBLE.value()
+                                .equalsIgnoreCase(source.getProviderType()))
                 || !ModelSourceCheckStatus.OK.value().equalsIgnoreCase(source.getLastCheckStatus())
                 || source.getDefaultModel() == null
                 || source.getDefaultModel().isBlank()) {
