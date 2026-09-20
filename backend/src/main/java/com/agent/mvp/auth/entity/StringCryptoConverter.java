@@ -61,10 +61,10 @@ public class StringCryptoConverter {
 
         if (isEncrypted(dbData)) {
             String payload = dbData.substring(CIPHERTEXT_PREFIX.length());
-            String currentResult = tryDecrypt(payload, key);
+            String currentResult = decryptPossiblyNested(payload, key);
             if (currentResult != null) return currentResult;
             if (legacyKey != null) {
-                String legacyResult = tryDecrypt(payload, legacyKey);
+                String legacyResult = decryptPossiblyNested(payload, legacyKey);
                 if (legacyResult != null) return legacyResult;
             }
             log.error(
@@ -87,6 +87,23 @@ public class StringCryptoConverter {
 
         // Genuine plaintext (from before encryption was introduced) — return as-is.
         return dbData;
+    }
+
+    /**
+     * Reads one accidental extra encryption layer produced by older MyBatis-Plus result maps
+     * that returned the literal {@code ENC:...} value and then wrote it back on update.
+     *
+     * <p>The normal path still decrypts exactly once. The nested branch is intentionally bounded
+     * to one additional layer so malformed or user-supplied values cannot trigger unbounded work.
+     */
+    private String decryptPossiblyNested(String payload, byte[] keyBytes) {
+        String result = tryDecrypt(payload, keyBytes);
+        if (result == null || !isEncrypted(result)) {
+            return result;
+        }
+        String nestedPayload = result.substring(CIPHERTEXT_PREFIX.length());
+        String nestedResult = tryDecrypt(nestedPayload, keyBytes);
+        return nestedResult != null ? nestedResult : result;
     }
 
     /**

@@ -18,6 +18,7 @@ export interface SettingsPageProps {
   onTabChange: (tab: SettingsTab) => void
   snapshot: KnowledgeDeskSnapshot
   onCreateLocalModel: (draft: LocalModelDraft) => Promise<void>
+  onDeleteModel: (provider: ModelProvider) => Promise<void>
   onExportBackup: () => Promise<boolean>
   onImportBackup: (backup: KnowledgeDeskBackup) => Promise<void>
   onPickDesktopBackup: () => Promise<boolean>
@@ -124,6 +125,14 @@ function isOrganizationModel(provider: ModelProvider) {
   )
 }
 
+function isReferencedModel(provider: ModelProvider) {
+  return [
+    profile.value.defaultModelSourceId,
+    profile.value.summaryModelSourceId,
+    profile.value.taggingModelSourceId,
+  ].includes(provider.id)
+}
+
 function isModelBusy(provider: ModelProvider) {
   return modelBusyAction.value?.endsWith(`:${provider.id}`) ?? false
 }
@@ -204,7 +213,7 @@ async function submitLocalModel() {
   try {
     await props.onCreateLocalModel(draft.value)
     draft.value = { ...draft.value, defaultModel: '', apiKey: '' }
-    modelActionMessage.value = '本机模型已通过测试，并已设为知识整理模型。'
+    modelActionMessage.value = '模型已通过测试，并已设为知识整理模型。'
   } catch (error) {
     formError.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -212,12 +221,17 @@ async function submitLocalModel() {
   }
 }
 
-async function runProviderAction(provider: ModelProvider, action: 'test' | 'organize') {
+async function runProviderAction(provider: ModelProvider, action: 'test' | 'organize' | 'delete') {
   modelBusyAction.value = `${action}:${provider.id}`
   modelActionMessage.value = null
   try {
     let message: string
-    if (action === 'test') {
+    if (action === 'delete') {
+      const confirmed = window.confirm(`确定删除模型“${provider.provider}”吗？删除后需要重新配置 API Key 才能恢复。`)
+      if (!confirmed) return
+      await props.onDeleteModel(provider)
+      message = `${provider.provider} 已删除。`
+    } else if (action === 'test') {
       message = await props.onTestModel(provider)
     } else {
       await props.onUseForOrganization(provider)
@@ -362,6 +376,17 @@ function sourceFolderLastScan(value?: string | null) {
                 @click="runProviderAction(provider, 'organize')"
               >
                 {{ isOrganizationModel(provider) ? '当前整理模型' : '设为整理模型' }}
+              </button>
+              <button
+                class="danger"
+                :disabled="isModelBusy(provider) || isReferencedModel(provider)"
+                :title="isReferencedModel(provider) ? '请先切换整理模型后再删除' : '删除模型配置'"
+                type="button"
+                @click="runProviderAction(provider, 'delete')"
+              >
+                <Loader2 v-if="modelBusyAction === `delete:${provider.id}`" :size="15" />
+                <Trash2 v-else :size="15" />
+                {{ isReferencedModel(provider) ? '当前使用中' : '删除' }}
               </button>
             </div>
           </article>

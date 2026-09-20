@@ -86,6 +86,19 @@ export SECURITY_DB_ENCRYPTION_KEY="${SECURITY_DB_ENCRYPTION_KEY:-local-desktop-d
 
 BACKEND_PID=""
 FRONTEND_PID=""
+RENDERER_PID=""
+
+find_renderer_port() {
+    local port="${DESKTOP_RENDERER_PORT:-5173}"
+    if [[ -n "${DESKTOP_RENDERER_PORT:-}" ]]; then
+        echo "${port}"
+        return
+    fi
+    while lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; do
+        port=$((port + 1))
+    done
+    echo "${port}"
+}
 
 cleanup() {
     echo ""
@@ -95,6 +108,9 @@ cleanup() {
     fi
     if [[ -n "${FRONTEND_PID}" ]] && kill -0 "${FRONTEND_PID}" 2>/dev/null; then
         kill -TERM "${FRONTEND_PID}" 2>/dev/null || true
+    fi
+    if [[ -n "${RENDERER_PID}" ]] && kill -0 "${RENDERER_PID}" 2>/dev/null; then
+        kill -TERM "${RENDERER_PID}" 2>/dev/null || true
     fi
     sleep 1
     log_succ "macOS 本地服务已安全退出。"
@@ -144,14 +160,43 @@ if [[ ! -d "node_modules" ]]; then
     npm ci --no-audit --no-fund
 fi
 
-# 启动 Electron
-DESKTOP_BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}" npm run dev &
+# 开发模式下同时启动 Vue 3 Vite 服务；如果默认端口被其他应用占用则顺延到空闲端口。
+RENDERER_PORT="$(find_renderer_port)"
+log_info "正在启动 Vue 3 渲染器 (http://127.0.0.1:${RENDERER_PORT})..."
+npm --prefix "${ROOT_DIR}/desktop/src/renderer-vue" run dev -- --host 127.0.0.1 --port "${RENDERER_PORT}" \
+    > "${DATA_DIR}/logs/renderer-console.log" 2>&1 &
+RENDERER_PID=$!
+
+RENDERER_READY=false
+ELAPSED=0
+while (( ELAPSED < 30 )); do
+    if curl -fsS "http://127.0.0.1:${RENDERER_PORT}/" >/dev/null 2>&1; then
+        RENDERER_READY=true
+        break
+    fi
+    if ! kill -0 "${RENDERER_PID}" 2>/dev/null; then
+        log_err "Vue 3 渲染器启动异常，请查看日志: ${DATA_DIR}/logs/renderer-console.log"
+        exit 1
+    fi
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+done
+
+if [[ "${RENDERER_READY}" != "true" ]]; then
+    log_err "Vue 3 渲染器启动超时 (30s)"
+    exit 1
+fi
+
+# 启动 Electron，并显式绑定本次自动选择的 Vue 3 端口。
+DESKTOP_BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}" \
+DESKTOP_RENDERER_URL="http://127.0.0.1:${RENDERER_PORT}" npm run dev &
 FRONTEND_PID=$!
 
 echo ""
 echo -e "${GREEN}================================================================${NC}"
 echo -e "${GREEN}  🎉 AI Agent Knowledge Desk 已在 macOS 上成功启动！           ${NC}"
 echo -e "${GREEN}  🌐 后端地址: http://127.0.0.1:${BACKEND_PORT}                      ${NC}"
+echo -e "${GREEN}  🖥️  Vue 3 地址: http://127.0.0.1:${RENDERER_PORT}                       ${NC}"
 echo -e "${GREEN}  💾 本地存储: ${DATA_DIR}                                     ${NC}"
 echo -e "${GREEN}  ✨ 模式: 零外部大模型依赖 (纯本地启发式整理 + 本地索引)        ${NC}"
 echo -e "${GREEN}  ⌨️  随时在终端按 Ctrl+C 可一键停止全部服务                     ${NC}"

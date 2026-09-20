@@ -38,12 +38,14 @@ import {
   canUseManagedSourceFolders,
   commitLocalKnowledgeFileBatch,
   createModelSource,
+  deleteModelSource,
   exportKnowledgeDeskBackup,
   fallbackSnapshot,
   importBrowserKnowledgeFile,
   importKnowledgeDeskBackup,
   importKnowledgeItem,
   importLocalKnowledgeFile,
+  inferModelSourceProviderType,
   listIngestionJobs,
   listKnowledgeItems,
   listManagedSourceFolders,
@@ -517,7 +519,7 @@ async function handleCreateLocalModel(
   try {
     const source = await createModelSource({
       ...draft,
-      providerType: 'local_compatible',
+      providerType: inferModelSourceProviderType(draft.baseUrl),
       apiKey: draft.apiKey.trim() || 'local',
       enabled: true,
       isDefault: false,
@@ -528,7 +530,7 @@ async function handleCreateLocalModel(
       summaryModelSourceId: source.id,
     })
     await refreshSnapshot()
-    showNotice(`${source.provider} 已通过测试，并设为本机知识整理模型。`)
+    showNotice(`${source.provider} 已通过测试，并设为知识整理模型。`)
   } catch (error) {
     await refreshSnapshot().catch(() => undefined)
     const message = error instanceof Error ? error.message : String(error)
@@ -552,9 +554,22 @@ async function handleTestModel(provider: ModelProvider) {
   }
 }
 
+async function handleDeleteModel(provider: ModelProvider) {
+  try {
+    await deleteModelSource(provider.id)
+    await refreshSnapshot()
+    showNotice(`${provider.provider} 已删除。`, 'info')
+  } catch (error) {
+    await refreshSnapshot().catch(() => undefined)
+    const message = error instanceof Error ? error.message : String(error)
+    showNotice(message, 'error')
+    throw error
+  }
+}
+
 async function handleUseForOrganization(provider: ModelProvider) {
-  if (provider.providerType !== 'local_compatible' || provider.lastCheckStatus !== 'ok') {
-    const error = new Error('请先通过本机聊天模型测试，再将它用于知识整理。')
+  if (provider.lastCheckStatus !== 'ok') {
+    const error = new Error('请先通过模型连通性测试，再将它用于知识整理。')
     showNotice(error.message, 'error')
     throw error
   }
@@ -950,6 +965,7 @@ onUnmounted(() => {
         :snapshot="snapshot"
         :on-add-managed-source-folder="handleAddManagedSourceFolder"
         :on-create-local-model="handleCreateLocalModel"
+        :on-delete-model="handleDeleteModel"
         :on-export-backup="handleExportBackup"
         :on-import-backup="handleImportBackup"
         :on-organize-mode-change="handleOrganizeModeChange"

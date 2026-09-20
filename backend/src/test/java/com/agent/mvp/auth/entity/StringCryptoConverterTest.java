@@ -47,6 +47,16 @@ class StringCryptoConverterTest {
     }
 
     @Test
+    void decryptsOneAccidentalNestedEncryptionLayer() {
+        StringCryptoConverter converter = new StringCryptoConverter(CURRENT_KEY, "");
+
+        String original = converter.convertToDatabaseColumn("sk-current");
+        String nested = converter.convertToDatabaseColumn(original);
+
+        assertEquals("sk-current", converter.convertToEntityAttribute(nested));
+    }
+
+    @Test
     void keepsGenuinePlaintextAndRejectsDamagedPrefixedCiphertext() {
         StringCryptoConverter converter = new StringCryptoConverter(CURRENT_KEY, "");
 

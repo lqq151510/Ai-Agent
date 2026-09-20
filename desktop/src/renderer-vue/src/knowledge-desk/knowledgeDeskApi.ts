@@ -405,6 +405,38 @@ export type ImportModelSourceDraft = {
   isDefault?: boolean;
 };
 
+/**
+ * Select the backend provider type from the endpoint the user entered.
+ *
+ * `local_compatible` is deliberately reserved for loopback endpoints because
+ * the backend applies a stricter SSRF policy to that provider. Cloud presets
+ * must use their cloud provider type instead of being treated as local URLs.
+ */
+export const inferModelSourceProviderType = (baseUrl: string): string => {
+  try {
+    const hostname = new URL(baseUrl.trim()).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+      return 'local_compatible';
+    }
+    if (hostname === 'api.deepseek.com' || hostname.endsWith('.deepseek.com')) {
+      return 'deepseek';
+    }
+    if (hostname === 'api.openai.com' || hostname.endsWith('.openai.com')) {
+      return 'openai';
+    }
+    if (hostname === 'openrouter.ai' || hostname.endsWith('.openrouter.ai')) {
+      return 'openrouter';
+    }
+    if (hostname === 'api.anthropic.com' || hostname.endsWith('.anthropic.com')) {
+      return 'anthropic';
+    }
+  } catch {
+    // Let the backend return the precise URL validation error.
+  }
+  // Unknown remote endpoints are treated as OpenAI-compatible cloud sources.
+  return 'openai';
+};
+
 export type UpdateSettingsProfileDraft = {
   organizeMode?: 'manual' | 'auto';
   privacyMode?: 'local_first' | 'cloud_first';

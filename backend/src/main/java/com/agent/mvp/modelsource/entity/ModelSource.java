@@ -11,7 +11,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@TableName("model_sources")
+@TableName(value = "model_sources", autoResultMap = true)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
